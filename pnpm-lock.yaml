@@ -1,0 +1,38 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      '@openzeppelin/contracts':
+        specifier: ^5.3.0
+        version: 5.4.0
+      '@uniswap/v4-core':
+        specifier: ^1.0.1
+        version: 1.0.2
+      '@uniswap/v4-periphery':
+        specifier: ^1.0.1
+        version: 1.0.3
+
+packages:
+
+  '@openzeppelin/contracts@5.4.0':
+    resolution: {integrity: sha512-eCYgWnLg6WO+X52I16TZt8uEjbtdkgLC0SUX/xnAksjjrQI4Xfn4iBRoI5j55dmlOhDv1Y7BoR3cU7e3WWhC6A==}
+
+  '@uniswap/v4-core@1.0.2':
+    resolution: {integrity: sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg==}
+
+  '@uniswap/v4-periphery@1.0.3':
+    resolution: {integrity: sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg==}
+
+snapshots:
+
+  '@openzeppelin/contracts@5.4.0': {}
+
+  '@uniswap/v4-core@1.0.2': {}
+
+  '@uniswap/v4-periphery@1.0.3': {}
