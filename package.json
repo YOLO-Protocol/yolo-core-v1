@@ -1,0 +1,41 @@
+{
+  "name": "@yolo/core-v1",
+  "version": "1.0.0",
+  "description": "YOLO Protocol V1 - Yield-Optimized Leverage Onchain (YOLO) Modular DeFi Infrastructure built as a Uniswap V4 Hook",
+  "main": "index.js",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "test:verbose": "forge test -vvv",
+    "test:gas": "forge test --gas-report",
+    "coverage": "forge coverage",
+    "lint": "forge fmt --check",
+    "lint:fix": "forge fmt",
+    "clean": "forge clean",
+    "deploy:local": "forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast",
+    "verify": "forge verify-contract"
+  },
+  "keywords": [
+    "defi",
+    "uniswap-v4",
+    "hook",
+    "stablecoin",
+    "synthetic-assets",
+    "leveraged-yield-farming",
+    "smart-contracts",
+    "foundry"
+  ],
+  "author": "alvin@yolo.wtf",
+  "license": "MIT",
+  "packageManager": "pnpm@10.6.2",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yolo-protocol/yolo-core-v1.git"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}
