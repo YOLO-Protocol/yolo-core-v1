@@ -615,27 +615,28 @@ contract TestContract01_ACLManager is Test {
     }
 
     /**
-     * @dev Test role hierarchy with circular dependency prevention
+     * @dev Test prevention of circular role hierarchies
      */
     function test_Contract01_Case24_preventCircularRoleHierarchy() public {
         bytes32 roleA = aclManager.createRole("ROLE_A", bytes32(0));
         bytes32 roleB = aclManager.createRole("ROLE_B", roleA);
+        bytes32 roleC = aclManager.createRole("ROLE_C", roleB);
         
-        // Try to set roleA's admin to roleB (would create circular dependency)
-        // This should succeed in our current implementation but create a circular hierarchy
-        // The test documents this behavior
+        // Try to set roleA's admin to roleC (would create circular dependency A->C->B->A)
+        vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
+        aclManager.setRoleAdmin(roleA, roleC);
+        
+        // Try to set roleB's admin to roleC (would create circular dependency B->C->B)
+        vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
+        aclManager.setRoleAdmin(roleB, roleC);
+        
+        // Try to set roleA's admin to roleB (would create circular dependency A->B->A)
+        vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
         aclManager.setRoleAdmin(roleA, roleB);
         
-        // Now roleB admins roleA and roleA admins roleB
-        assertEq(aclManager.getRoleAdmin(roleA), roleB);
-        assertEq(aclManager.getRoleAdmin(roleB), roleA);
-        
-        // Neither role can be removed due to admin dependencies
-        vm.expectRevert(ACLManager.ACL__RoleIsAdminOfOtherRoles.selector);
-        aclManager.removeRole(roleA);
-        
-        vm.expectRevert(ACLManager.ACL__RoleIsAdminOfOtherRoles.selector);
-        aclManager.removeRole(roleB);
+        // Setting to DEFAULT_ADMIN_ROLE should always work
+        aclManager.setRoleAdmin(roleA, aclManager.DEFAULT_ADMIN_ROLE());
+        assertEq(aclManager.getRoleAdmin(roleA), aclManager.DEFAULT_ADMIN_ROLE());
     }
 
     /**
@@ -656,5 +657,46 @@ contract TestContract01_ACLManager is Test {
         // Cannot be removed
         vm.expectRevert(ACLManager.ACL__CannotRemoveDefaultAdmin.selector);
         aclManager.removeRole(defaultAdmin);
+    }
+
+    /**
+     * @dev Test empty role name validation
+     */
+    function test_Contract01_Case26_emptyRoleNameReverts() public {
+        vm.expectRevert(ACLManager.ACL__EmptyRoleName.selector);
+        aclManager.createRole("", bytes32(0));
+    }
+
+    /**
+     * @dev Test deeper circular dependency prevention
+     */
+    function test_Contract01_Case27_deeperCircularDependencyPrevention() public {
+        // Create a chain of roles
+        bytes32 roleA = aclManager.createRole("ROLE_A", bytes32(0));
+        bytes32 roleB = aclManager.createRole("ROLE_B", bytes32(0));
+        bytes32 roleC = aclManager.createRole("ROLE_C", bytes32(0));
+        bytes32 roleD = aclManager.createRole("ROLE_D", bytes32(0));
+        
+        // Set up a chain: A -> B -> C -> D
+        aclManager.setRoleAdmin(roleB, roleA);
+        aclManager.setRoleAdmin(roleC, roleB);
+        aclManager.setRoleAdmin(roleD, roleC);
+        
+        // Trying to make D admin of A should fail (would create circular dependency)
+        vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
+        aclManager.setRoleAdmin(roleA, roleD);
+        
+        // Trying to make C admin of A should also fail
+        vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
+        aclManager.setRoleAdmin(roleA, roleC);
+        
+        // Trying to make B admin of C should fail (C is already under B)
+        vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
+        aclManager.setRoleAdmin(roleB, roleC);
+        
+        // But making a new role E with D as admin should work
+        bytes32 roleE = aclManager.createRole("ROLE_E", bytes32(0));
+        aclManager.setRoleAdmin(roleE, roleD);
+        assertEq(aclManager.getRoleAdmin(roleE), roleD, "Role E should have D as admin");
     }
 }
