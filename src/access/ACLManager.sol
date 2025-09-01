@@ -39,7 +39,6 @@ contract ACLManager is AccessControl {
     event RoleCreated(bytes32 indexed role, string name);
     event RoleRemoved(bytes32 indexed role);
     event DefaultAdminTransferred(address indexed previousAdmin, address indexed newAdmin);
-    event RoleAdminChanged(bytes32 indexed role, bytes32 indexed previousAdminRole, bytes32 indexed newAdminRole);
     event DefaultAdminProposed(address indexed currentAdmin, address indexed proposedAdmin);
     event DefaultAdminProposalCanceled(address indexed canceledAdmin);
 
@@ -105,9 +104,7 @@ contract ACLManager is AccessControl {
         if (!_allRoles.contains(role)) revert ACL__RoleDoesNotExist();
         if (!_allRoles.contains(adminRole)) revert ACL__RoleDoesNotExist();
         
-        bytes32 previousAdminRole = getRoleAdmin(role);
         _setRoleAdmin(role, adminRole);
-        emit RoleAdminChanged(role, previousAdminRole, adminRole);
     }
 
     /**
