@@ -26,13 +26,13 @@ contract ACLManager is AccessControl {
     error ACL__NoPendingAdmin();
 
     address public immutable YOLO_HOOK;
-    
+
     /// @notice Address proposed to become the new DEFAULT_ADMIN_ROLE holder
     address public pendingDefaultAdmin;
-    
+
     /// @notice Set of all created roles for efficient enumeration
     EnumerableSet.Bytes32Set private _allRoles;
-    
+
     /// @notice Mapping of role to its members for efficient enumeration
     mapping(bytes32 => EnumerableSet.AddressSet) private _roleMembers;
 
@@ -49,10 +49,10 @@ contract ACLManager is AccessControl {
     constructor(address yoloHook) {
         if (yoloHook == address(0)) revert ACL__ZeroAddress();
         YOLO_HOOK = yoloHook;
-        
+
         // Track DEFAULT_ADMIN_ROLE and grant it to deployer
         _allRoles.add(DEFAULT_ADMIN_ROLE);
-        super.grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _roleMembers[DEFAULT_ADMIN_ROLE].add(msg.sender);
     }
 
@@ -62,22 +62,26 @@ contract ACLManager is AccessControl {
      * @param adminRole The role that will administer this new role (0x00 for DEFAULT_ADMIN_ROLE)
      * @return role The bytes32 role identifier
      */
-    function createRole(string calldata name, bytes32 adminRole) external onlyRole(DEFAULT_ADMIN_ROLE) returns (bytes32) {
+    function createRole(string calldata name, bytes32 adminRole)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        returns (bytes32)
+    {
         bytes32 role = keccak256(abi.encodePacked(name));
         if (_allRoles.contains(role)) revert ACL__RoleAlreadyExists();
-        
+
         // If adminRole is provided, verify it exists
         if (adminRole != bytes32(0) && !_allRoles.contains(adminRole)) {
             revert ACL__RoleDoesNotExist();
         }
-        
+
         _allRoles.add(role);
-        
+
         // Set the admin role if specified
         if (adminRole != bytes32(0)) {
             _setRoleAdmin(role, adminRole);
         }
-        
+
         emit RoleCreated(role, name);
         return role;
     }
@@ -90,7 +94,7 @@ contract ACLManager is AccessControl {
         if (!_allRoles.contains(role)) revert ACL__RoleDoesNotExist();
         if (role == DEFAULT_ADMIN_ROLE) revert ACL__RoleDoesNotExist(); // Can't remove DEFAULT_ADMIN_ROLE
         if (_roleMembers[role].length() > 0) revert ACL__RoleHasMembers();
-        
+
         _allRoles.remove(role);
         emit RoleRemoved(role);
     }
@@ -103,7 +107,7 @@ contract ACLManager is AccessControl {
     function setRoleAdmin(bytes32 role, bytes32 adminRole) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (!_allRoles.contains(role)) revert ACL__RoleDoesNotExist();
         if (!_allRoles.contains(adminRole)) revert ACL__RoleDoesNotExist();
-        
+
         _setRoleAdmin(role, adminRole);
     }
 
@@ -114,7 +118,7 @@ contract ACLManager is AccessControl {
      */
     function grantRole(bytes32 role, address account) public override onlyRole(getRoleAdmin(role)) {
         if (!_allRoles.contains(role) && role != DEFAULT_ADMIN_ROLE) revert ACL__RoleDoesNotExist();
-        
+
         // Only process if account doesn't already have the role
         if (!hasRole(role, account)) {
             super.grantRole(role, account);
@@ -129,7 +133,7 @@ contract ACLManager is AccessControl {
      */
     function revokeRole(bytes32 role, address account) public override onlyRole(getRoleAdmin(role)) {
         if (!_allRoles.contains(role) && role != DEFAULT_ADMIN_ROLE) revert ACL__RoleDoesNotExist();
-        
+
         // Only process if account has the role
         if (hasRole(role, account)) {
             super.revokeRole(role, account);
@@ -145,7 +149,7 @@ contract ACLManager is AccessControl {
     function renounceRole(bytes32 role, address account) public override {
         if (account != msg.sender) revert ACL__CannotRenounceForOthers();
         if (!hasRole(role, account)) revert ACL__DoesNotHaveRole();
-        
+
         super.renounceRole(role, account);
         _roleMembers[role].remove(account);
     }
@@ -158,7 +162,7 @@ contract ACLManager is AccessControl {
     function proposeDefaultAdmin(address newAdmin) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newAdmin == address(0)) revert ACL__ZeroAddress();
         if (newAdmin == msg.sender) revert ACL__CannotTransferToSelf();
-        
+
         pendingDefaultAdmin = newAdmin;
         emit DefaultAdminProposed(msg.sender, newAdmin);
     }
@@ -169,7 +173,7 @@ contract ACLManager is AccessControl {
      */
     function cancelDefaultAdminProposal() external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (pendingDefaultAdmin == address(0)) revert ACL__NoPendingAdmin();
-        
+
         address canceledAdmin = pendingDefaultAdmin;
         pendingDefaultAdmin = address(0);
         emit DefaultAdminProposalCanceled(canceledAdmin);
@@ -182,25 +186,25 @@ contract ACLManager is AccessControl {
     function acceptDefaultAdmin() external {
         if (msg.sender != pendingDefaultAdmin) revert ACL__NotPendingAdmin();
         if (pendingDefaultAdmin == address(0)) revert ACL__NoPendingAdmin();
-        
+
         // Get current admin(s) - there should only be one
         uint256 adminCount = _roleMembers[DEFAULT_ADMIN_ROLE].length();
         address previousAdmin;
-        
+
         // Remove all current DEFAULT_ADMIN_ROLE holders
         for (uint256 i = 0; i < adminCount; i++) {
             previousAdmin = _roleMembers[DEFAULT_ADMIN_ROLE].at(0);
             super.revokeRole(DEFAULT_ADMIN_ROLE, previousAdmin);
             _roleMembers[DEFAULT_ADMIN_ROLE].remove(previousAdmin);
         }
-        
+
         // Grant role to new admin
         super.grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _roleMembers[DEFAULT_ADMIN_ROLE].add(msg.sender);
-        
+
         // Clear pending admin
         pendingDefaultAdmin = address(0);
-        
+
         emit DefaultAdminTransferred(previousAdmin, msg.sender);
     }
 
@@ -275,7 +279,7 @@ contract ACLManager is AccessControl {
      */
     function grantRoleBatch(bytes32 role, address[] calldata accounts) external onlyRole(getRoleAdmin(role)) {
         if (!_allRoles.contains(role) && role != DEFAULT_ADMIN_ROLE) revert ACL__RoleDoesNotExist();
-        
+
         for (uint256 i = 0; i < accounts.length; i++) {
             if (!hasRole(role, accounts[i])) {
                 super.grantRole(role, accounts[i]);
@@ -291,7 +295,7 @@ contract ACLManager is AccessControl {
      */
     function revokeRoleBatch(bytes32 role, address[] calldata accounts) external onlyRole(getRoleAdmin(role)) {
         if (!_allRoles.contains(role) && role != DEFAULT_ADMIN_ROLE) revert ACL__RoleDoesNotExist();
-        
+
         for (uint256 i = 0; i < accounts.length; i++) {
             if (hasRole(role, accounts[i])) {
                 super.revokeRole(role, accounts[i]);
