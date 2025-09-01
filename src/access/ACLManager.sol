@@ -24,6 +24,7 @@ contract ACLManager is AccessControl {
     error ACL__CannotRenounceForOthers();
     error ACL__NotPendingAdmin();
     error ACL__NoPendingAdmin();
+    error ACL__CannotRemoveDefaultAdmin();
 
     address public immutable YOLO_HOOK;
 
@@ -92,7 +93,7 @@ contract ACLManager is AccessControl {
      */
     function removeRole(bytes32 role) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (!_allRoles.contains(role)) revert ACL__RoleDoesNotExist();
-        if (role == DEFAULT_ADMIN_ROLE) revert ACL__RoleDoesNotExist(); // Can't remove DEFAULT_ADMIN_ROLE
+        if (role == DEFAULT_ADMIN_ROLE) revert ACL__CannotRemoveDefaultAdmin(); // Can't remove DEFAULT_ADMIN_ROLE
         if (_roleMembers[role].length() > 0) revert ACL__RoleHasMembers();
 
         _allRoles.remove(role);
@@ -194,12 +195,12 @@ contract ACLManager is AccessControl {
         // Remove all current DEFAULT_ADMIN_ROLE holders
         for (uint256 i = 0; i < adminCount; i++) {
             previousAdmin = _roleMembers[DEFAULT_ADMIN_ROLE].at(0);
-            super.revokeRole(DEFAULT_ADMIN_ROLE, previousAdmin);
+            _revokeRole(DEFAULT_ADMIN_ROLE, previousAdmin);
             _roleMembers[DEFAULT_ADMIN_ROLE].remove(previousAdmin);
         }
 
         // Grant role to new admin
-        super.grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _roleMembers[DEFAULT_ADMIN_ROLE].add(msg.sender);
 
         // Clear pending admin
