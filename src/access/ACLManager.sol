@@ -27,6 +27,8 @@ contract ACLManager is AccessControl {
     error ACL__CannotRemoveDefaultAdmin();
     error ACL__RoleIsAdminOfOtherRoles();
     error ACL__CannotRenounceLastAdmin();
+    error ACL__WouldCreateCircularDependency();
+    error ACL__EmptyRoleName();
 
     address public immutable YOLO_HOOK;
 
@@ -76,6 +78,25 @@ contract ACLManager is AccessControl {
     }
 
     /**
+     * @dev Checks if setting newAdmin as admin of role would create a circular dependency
+     * @param role The role to check
+     * @param newAdmin The proposed admin role
+     * @return True if it would create a circular dependency
+     */
+    function _wouldCreateCircularDependency(bytes32 role, bytes32 newAdmin) internal view returns (bool) {
+        bytes32 current = newAdmin;
+        uint256 iterations = 0;
+        uint256 maxIterations = _allRoles.length(); // Prevent infinite loops
+        
+        while (current != bytes32(0) && current != DEFAULT_ADMIN_ROLE && iterations < maxIterations) {
+            if (current == role) return true;
+            current = getRoleAdmin(current);
+            iterations++;
+        }
+        return false;
+    }
+
+    /**
      * @notice Creates a new role with optional admin role
      * @param name The string name for the role (will be hashed to bytes32)
      * @param adminRole The role that will administer this new role (0x00 for DEFAULT_ADMIN_ROLE)
@@ -86,6 +107,7 @@ contract ACLManager is AccessControl {
         onlyRole(DEFAULT_ADMIN_ROLE)
         returns (bytes32)
     {
+        if (bytes(name).length == 0) revert ACL__EmptyRoleName();
         bytes32 role = keccak256(abi.encodePacked(name));
         if (_allRoles.contains(role)) revert ACL__RoleAlreadyExists();
 
@@ -129,6 +151,11 @@ contract ACLManager is AccessControl {
     function setRoleAdmin(bytes32 role, bytes32 adminRole) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (!_allRoles.contains(role)) revert ACL__RoleDoesNotExist();
         if (!_allRoles.contains(adminRole)) revert ACL__RoleDoesNotExist();
+        
+        // Prevent circular dependencies
+        if (_wouldCreateCircularDependency(role, adminRole)) {
+            revert ACL__WouldCreateCircularDependency();
+        }
 
         _setRoleAdmin(role, adminRole);
     }
