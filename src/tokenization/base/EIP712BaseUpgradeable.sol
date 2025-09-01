@@ -2,16 +2,13 @@
 pragma solidity ^0.8.26;
 
 /**
- * @title EIP712Base
+ * @title EIP712BaseUpgradeable
  * @author alvin@yolo.wtf
- * @notice Base contract implementation of EIP712 for meta-transactions and gasless approvals
+ * @notice Upgradeable version of EIP712Base for use with proxy patterns
  * @dev Provides domain separator computation, nonce management, and signature verification
- * 
- * WARNING: This contract uses immutable variables and constructor initialization,
- * making it incompatible with proxy patterns. For upgradeable contracts or proxies,
- * use EIP712BaseUpgradeable instead.
+ *      Uses storage variables instead of immutables to support proxy deployment
  */
-abstract contract EIP712Base {
+abstract contract EIP712BaseUpgradeable {
     // EIP712 Domain Separator typehash
     bytes32 private constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -27,30 +24,33 @@ abstract contract EIP712Base {
     // Version of the EIP712 domain
     string public constant EIP712_VERSION = "1";
 
-    // Hashed name for the EIP712 domain
-    bytes32 private immutable _NAME_HASH;
-
-    // Chain ID at deployment
-    uint256 private immutable INITIAL_CHAIN_ID;
-
-    // Domain separator at deployment
-    bytes32 private immutable INITIAL_DOMAIN_SEPARATOR;
-
+    // Storage variables for upgradeable pattern
+    bytes32 private _nameHash;
+    bytes32 private _cachedDomainSeparator;
+    uint256 private _cachedChainId;
+    
     // Mapping of address nonces for replay protection
     mapping(address => uint256) private _nonces;
 
     // Custom errors
     error EIP712__InvalidSignature();
     error EIP712__ExpiredDeadline();
+    error EIP712__AlreadyInitialized();
+
+    // Initialization flag
+    bool private _initialized;
 
     /**
-     * @dev Constructor computes initial domain separator
+     * @dev Initializes the EIP712 domain separator
      * @param name The name for the EIP712 domain (e.g., token name)
      */
-    constructor(string memory name) {
-        _NAME_HASH = keccak256(bytes(name));
-        INITIAL_CHAIN_ID = block.chainid;
-        INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
+    function __EIP712Base_init(string memory name) internal {
+        if (_initialized) revert EIP712__AlreadyInitialized();
+        _initialized = true;
+        
+        _nameHash = keccak256(bytes(name));
+        _cachedChainId = block.chainid;
+        _cachedDomainSeparator = _computeDomainSeparator();
     }
 
     /**
@@ -59,7 +59,11 @@ abstract contract EIP712Base {
      * @return The domain separator for the current chain
      */
     function DOMAIN_SEPARATOR() public view virtual returns (bytes32) {
-        return block.chainid == INITIAL_CHAIN_ID ? INITIAL_DOMAIN_SEPARATOR : _computeDomainSeparator();
+        if (block.chainid == _cachedChainId) {
+            return _cachedDomainSeparator;
+        } else {
+            return _computeDomainSeparator();
+        }
     }
 
     /**
@@ -115,10 +119,10 @@ abstract contract EIP712Base {
             keccak256(
                 abi.encode(
                     EIP712_DOMAIN_TYPEHASH,
-                    _NAME_HASH,
+                    _nameHash,
                     keccak256(bytes(EIP712_VERSION)),
                     block.chainid,
-                    address(this)
+                    address(this) // Will correctly be proxy address when called through proxy
                 )
             );
     }
@@ -260,4 +264,10 @@ abstract contract EIP712Base {
         return _hashTypedDataV4(structHash);
     }
 
+    /**
+     * @dev This empty reserved space is put in place to allow future versions to add new
+     * variables without shifting down storage in the inheritance chain.
+     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+     */
+    uint256[47] private __gap;
 }
