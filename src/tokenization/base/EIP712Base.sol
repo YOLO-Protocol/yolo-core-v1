@@ -23,6 +23,9 @@ abstract contract EIP712Base {
     // Version of the EIP712 domain
     string public constant EIP712_VERSION = "1";
 
+    // Hashed name for the EIP712 domain
+    bytes32 private immutable _NAME_HASH;
+
     // Chain ID at deployment
     uint256 private immutable INITIAL_CHAIN_ID;
 
@@ -38,8 +41,10 @@ abstract contract EIP712Base {
 
     /**
      * @dev Constructor computes initial domain separator
+     * @param name The name for the EIP712 domain (e.g., token name)
      */
-    constructor() {
+    constructor(string memory name) {
+        _NAME_HASH = keccak256(bytes(name));
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
     }
@@ -106,7 +111,7 @@ abstract contract EIP712Base {
             keccak256(
                 abi.encode(
                     EIP712_DOMAIN_TYPEHASH,
-                    keccak256(bytes(_EIP712Name())),
+                    _NAME_HASH,
                     keccak256(bytes(EIP712_VERSION)),
                     block.chainid,
                     address(this)
@@ -251,10 +256,4 @@ abstract contract EIP712Base {
         return _hashTypedDataV4(structHash);
     }
 
-    /**
-     * @notice Get the name for the EIP712 domain
-     * @dev Must be implemented by inheriting contract
-     * @return The name of the signing domain (e.g., token name)
-     */
-    function _EIP712Name() internal view virtual returns (string memory);
 }
