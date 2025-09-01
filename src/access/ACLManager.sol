@@ -25,6 +25,8 @@ contract ACLManager is AccessControl {
     error ACL__NotPendingAdmin();
     error ACL__NoPendingAdmin();
     error ACL__CannotRemoveDefaultAdmin();
+    error ACL__RoleIsAdminOfOtherRoles();
+    error ACL__CannotRenounceLastAdmin();
 
     address public immutable YOLO_HOOK;
 
@@ -55,6 +57,22 @@ contract ACLManager is AccessControl {
         _allRoles.add(DEFAULT_ADMIN_ROLE);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _roleMembers[DEFAULT_ADMIN_ROLE].add(msg.sender);
+    }
+
+    /**
+     * @dev Internal function to check if a role is admin of any other roles
+     * @param role The role to check
+     * @return True if the role admins other roles
+     */
+    function _isAdminOfAnyRole(bytes32 role) internal view returns (bool) {
+        uint256 count = _allRoles.length();
+        for (uint256 i = 0; i < count; i++) {
+            bytes32 checkRole = _allRoles.at(i);
+            if (checkRole != role && getRoleAdmin(checkRole) == role) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -95,6 +113,9 @@ contract ACLManager is AccessControl {
         if (!_allRoles.contains(role)) revert ACL__RoleDoesNotExist();
         if (role == DEFAULT_ADMIN_ROLE) revert ACL__CannotRemoveDefaultAdmin(); // Can't remove DEFAULT_ADMIN_ROLE
         if (_roleMembers[role].length() > 0) revert ACL__RoleHasMembers();
+        
+        // Prevent removing roles that admin other roles
+        if (_isAdminOfAnyRole(role)) revert ACL__RoleIsAdminOfOtherRoles();
 
         _allRoles.remove(role);
         emit RoleRemoved(role);
@@ -150,6 +171,11 @@ contract ACLManager is AccessControl {
     function renounceRole(bytes32 role, address account) public override {
         if (account != msg.sender) revert ACL__CannotRenounceForOthers();
         if (!hasRole(role, account)) revert ACL__DoesNotHaveRole();
+        
+        // Prevent renouncing if it would leave no DEFAULT_ADMIN
+        if (role == DEFAULT_ADMIN_ROLE && _roleMembers[role].length() <= 1) {
+            revert ACL__CannotRenounceLastAdmin();
+        }
 
         super.renounceRole(role, account);
         _roleMembers[role].remove(account);
