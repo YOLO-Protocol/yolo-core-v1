@@ -35,6 +35,7 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
     error IncentivizedERC20__InsufficientAllowance();
     error IncentivizedERC20__InvalidAddress();
     error IncentivizedERC20__OnlyIncentivesAdmin();
+    error IncentivizedERC20__IncentivesReentrancy();
 
     // State variables
     mapping(address => UserState) internal _userState;
@@ -44,6 +45,9 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
     string private _name;
     string private _symbol;
     uint8 private _decimals;
+    
+    // Reentrancy guard for incentive calls
+    bool private _incentivesLocked;
     
     // Immutable reference
     IACLManager public immutable ACL_MANAGER;
@@ -86,6 +90,16 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
             revert IncentivizedERC20__OnlyIncentivesAdmin();
         }
         _;
+    }
+
+    /**
+     * @dev Prevents reentrancy specifically for incentive tracker calls
+     */
+    modifier incentivesGuard() {
+        if (_incentivesLocked) revert IncentivizedERC20__IncentivesReentrancy();
+        _incentivesLocked = true;
+        _;
+        _incentivesLocked = false;
     }
 
     // ============ ERC20 Metadata ============
@@ -254,29 +268,107 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
         
         if (fromBalanceBefore < castAmount) revert IncentivizedERC20__InsufficientBalance();
         
-        // Update balances
+        // Update balances (Solidity 0.8+ prevents overflow)
         unchecked {
             _userState[from].balance = fromBalanceBefore - castAmount;
-            _userState[to].balance = toBalanceBefore + castAmount;
         }
+        _userState[to].balance = toBalanceBefore + castAmount; // Safe: Solidity 0.8+ reverts on overflow
 
-        // Call incentives tracker with cached pre-transfer values
-        IIncentivesTracker tracker = incentivesTracker;
-        if (address(tracker) != address(0)) {
-            uint256 currentTotalSupply = _totalSupply;
-            
-            // Update incentives for sender with pre-transfer balance
-            tracker.handleAction(from, currentTotalSupply, fromBalanceBefore);
-            
-            // Update incentives for recipient if different from sender
-            if (from != to) {
-                tracker.handleAction(to, currentTotalSupply, toBalanceBefore);
-            }
-        }
+        // Update incentives with cached pre-transfer values
+        _updateIncentives(from, to, _totalSupply, fromBalanceBefore, toBalanceBefore);
 
         emit Transfer(from, to, amount);
 
         _afterTokenTransfer(from, to, amount);
+    }
+
+    /**
+     * @dev Updates incentives for affected addresses after balance changes
+     * @param from The sender address (or address(0) for mint)
+     * @param to The recipient address (or address(0) for burn)
+     * @param totalSupplyBefore The total supply before the balance change
+     * @param fromBalanceBefore The sender's balance before the change
+     * @param toBalanceBefore The recipient's balance before the change
+     */
+    function _updateIncentives(
+        address from,
+        address to,
+        uint256 totalSupplyBefore,
+        uint128 fromBalanceBefore,
+        uint128 toBalanceBefore
+    ) internal incentivesGuard {
+        IIncentivesTracker tracker = incentivesTracker;
+        if (address(tracker) == address(0)) return;
+        
+        // Update sender if not zero address (skip for mint)
+        if (from != address(0)) {
+            tracker.handleAction(from, totalSupplyBefore, fromBalanceBefore);
+        }
+        
+        // Update recipient if not zero address and different from sender
+        if (to != address(0) && from != to) {
+            tracker.handleAction(to, totalSupplyBefore, toBalanceBefore);
+        }
+    }
+
+    /**
+     * @dev Mints tokens to an account with incentive tracking
+     * @param account The account to mint to
+     * @param amount The amount to mint
+     */
+    function _mint(address account, uint256 amount) internal virtual {
+        if (account == address(0)) revert IncentivizedERC20__InvalidAddress();
+        
+        _beforeTokenTransfer(address(0), account, amount);
+        
+        uint128 castAmount = amount.toUint128();
+        
+        // Cache pre-mint state
+        uint256 totalSupplyBefore = _totalSupply;
+        uint128 accountBalanceBefore = _userState[account].balance;
+        
+        // Update state
+        _totalSupply = totalSupplyBefore + amount;
+        _userState[account].balance = accountBalanceBefore + castAmount;
+        
+        // Update incentives with pre-mint values
+        _updateIncentives(address(0), account, totalSupplyBefore, 0, accountBalanceBefore);
+        
+        emit Transfer(address(0), account, amount);
+        
+        _afterTokenTransfer(address(0), account, amount);
+    }
+
+    /**
+     * @dev Burns tokens from an account with incentive tracking
+     * @param account The account to burn from
+     * @param amount The amount to burn
+     */
+    function _burn(address account, uint256 amount) internal virtual {
+        if (account == address(0)) revert IncentivizedERC20__InvalidAddress();
+        
+        _beforeTokenTransfer(account, address(0), amount);
+        
+        uint128 castAmount = amount.toUint128();
+        
+        // Cache pre-burn state
+        uint256 totalSupplyBefore = _totalSupply;
+        uint128 accountBalanceBefore = _userState[account].balance;
+        
+        if (accountBalanceBefore < castAmount) revert IncentivizedERC20__InsufficientBalance();
+        
+        // Update state
+        unchecked {
+            _userState[account].balance = accountBalanceBefore - castAmount;
+            _totalSupply = totalSupplyBefore - amount;
+        }
+        
+        // Update incentives with pre-burn values
+        _updateIncentives(account, address(0), totalSupplyBefore, accountBalanceBefore, 0);
+        
+        emit Transfer(account, address(0), amount);
+        
+        _afterTokenTransfer(account, address(0), amount);
     }
 
     /**
