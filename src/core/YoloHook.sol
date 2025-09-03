@@ -15,7 +15,6 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
  * @dev Bare bones implementation with minimal inheritance structure
  */
 contract YoloHook is BaseHook, ReentrancyGuard, Ownable, Pausable {
-    
     /**
      * @notice Constructor to initialize the YoloHook with the V4 Pool Manager
      * @param _poolManager Address of the Uniswap V4 Pool Manager contract
