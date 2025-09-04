@@ -26,13 +26,9 @@ abstract contract MintableIncentivizedERC20 is IncentivizedERC20 {
      * @param symbol_ The token symbol
      * @param decimals_ The token decimals
      */
-    constructor(
-        address yoloHook,
-        address aclManager,
-        string memory name_,
-        string memory symbol_,
-        uint8 decimals_
-    ) IncentivizedERC20(aclManager, name_, symbol_, decimals_) {
+    constructor(address yoloHook, address aclManager, string memory name_, string memory symbol_, uint8 decimals_)
+        IncentivizedERC20(aclManager, name_, symbol_, decimals_)
+    {
         if (yoloHook == address(0)) revert MintableIncentivizedERC20__InvalidYoloHook();
         YOLO_HOOK = yoloHook;
     }
@@ -71,16 +67,15 @@ abstract contract MintableIncentivizedERC20 is IncentivizedERC20 {
      * @param recipients Array of recipient addresses
      * @param amounts Array of amounts to mint to each recipient
      */
-    function mintBatch(
-        address[] calldata recipients,
-        uint256[] calldata amounts
-    ) external virtual onlyYoloHook {
+    function mintBatch(address[] calldata recipients, uint256[] calldata amounts) external virtual onlyYoloHook {
         uint256 length = recipients.length;
         if (length != amounts.length) revert MintableIncentivizedERC20__LengthMismatch();
-        
-        for (uint256 i = 0; i < length; ) {
+
+        for (uint256 i = 0; i < length;) {
             _mint(recipients[i], amounts[i]);
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -90,16 +85,15 @@ abstract contract MintableIncentivizedERC20 is IncentivizedERC20 {
      * @param accounts Array of accounts to burn from
      * @param amounts Array of amounts to burn from each account
      */
-    function burnBatch(
-        address[] calldata accounts,
-        uint256[] calldata amounts
-    ) external virtual onlyYoloHook {
+    function burnBatch(address[] calldata accounts, uint256[] calldata amounts) external virtual onlyYoloHook {
         uint256 length = accounts.length;
         if (length != amounts.length) revert MintableIncentivizedERC20__LengthMismatch();
-        
-        for (uint256 i = 0; i < length; ) {
+
+        for (uint256 i = 0; i < length;) {
             _burn(accounts[i], amounts[i]);
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
     }
 }

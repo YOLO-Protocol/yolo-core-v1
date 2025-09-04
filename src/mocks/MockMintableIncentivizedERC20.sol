@@ -18,13 +18,9 @@ contract MockMintableIncentivizedERC20 is MintableIncentivizedERC20 {
      * @param symbol_ The token symbol
      * @param decimals_ The token decimals
      */
-    constructor(
-        address yoloHook,
-        address aclManager,
-        string memory name_,
-        string memory symbol_,
-        uint8 decimals_
-    ) MintableIncentivizedERC20(yoloHook, aclManager, name_, symbol_, decimals_) {}
+    constructor(address yoloHook, address aclManager, string memory name_, string memory symbol_, uint8 decimals_)
+        MintableIncentivizedERC20(yoloHook, aclManager, name_, symbol_, decimals_)
+    {}
 
     // ============ Helper Functions for Testing ============
 

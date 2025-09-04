@@ -6,7 +6,7 @@ pragma solidity ^0.8.26;
  * @author alvin@yolo.wtf
  * @notice Base contract implementation of EIP712 for meta-transactions and gasless approvals
  * @dev Provides domain separator computation, nonce management, and signature verification
- * 
+ *
  * WARNING: This contract uses immutable variables and constructor initialization,
  * making it incompatible with proxy patterns. For upgradeable contracts or proxies,
  * use EIP712BaseUpgradeable instead.
@@ -111,16 +111,11 @@ abstract contract EIP712Base {
      * @return The computed domain separator
      */
     function _computeDomainSeparator() private view returns (bytes32) {
-        return
-            keccak256(
-                abi.encode(
-                    EIP712_DOMAIN_TYPEHASH,
-                    _NAME_HASH,
-                    keccak256(bytes(EIP712_VERSION)),
-                    block.chainid,
-                    address(this)
-                )
-            );
+        return keccak256(
+            abi.encode(
+                EIP712_DOMAIN_TYPEHASH, _NAME_HASH, keccak256(bytes(EIP712_VERSION)), block.chainid, address(this)
+            )
+        );
     }
 
     /**
@@ -140,23 +135,18 @@ abstract contract EIP712Base {
      * @param s Half of the ECDSA signature pair
      * @return The recovered signer address
      */
-    function _recover(
-        bytes32 digest,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) internal pure returns (address) {
+    function _recover(bytes32 digest, uint8 v, bytes32 r, bytes32 s) internal pure returns (address) {
         // Normalize v value: accept both 0/1 and 27/28 formats
         uint8 normalizedV = v;
         if (normalizedV < 27) {
             normalizedV += 27;
         }
-        
+
         // Validate normalized v value
         if (normalizedV != 27 && normalizedV != 28) {
             revert EIP712__InvalidSignature();
         }
-        
+
         // Prevent signature malleability (EIP-2)
         if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {
             revert EIP712__InvalidSignature();
@@ -175,11 +165,7 @@ abstract contract EIP712Base {
      * @param vs Combined v and s values
      * @return The recovered signer address
      */
-    function _recover(
-        bytes32 digest,
-        bytes32 r,
-        bytes32 vs
-    ) internal pure returns (address) {
+    function _recover(bytes32 digest, bytes32 r, bytes32 vs) internal pure returns (address) {
         bytes32 s = vs & bytes32(0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
         uint8 v = uint8((uint256(vs) >> 255) + 27);
         return _recover(digest, v, r, s);
@@ -207,12 +193,12 @@ abstract contract EIP712Base {
     ) internal returns (uint256 nonce) {
         _checkDeadline(deadline);
         nonce = _nonces[owner];
-        
+
         bytes32 digest = _buildPermitDigest(owner, spender, value, nonce, deadline);
         address recovered = _recover(digest, v, r, s);
-        
+
         if (recovered != owner) revert EIP712__InvalidSignature();
-        
+
         unchecked {
             _nonces[owner] = nonce + 1;
         }
@@ -227,16 +213,12 @@ abstract contract EIP712Base {
      * @param deadline The deadline timestamp
      * @return The permit digest
      */
-    function _buildPermitDigest(
-        address owner,
-        address spender,
-        uint256 value,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (bytes32) {
-        bytes32 structHash = keccak256(
-            abi.encode(PERMIT_TYPEHASH, owner, spender, value, nonce, deadline)
-        );
+    function _buildPermitDigest(address owner, address spender, uint256 value, uint256 nonce, uint256 deadline)
+        internal
+        view
+        returns (bytes32)
+    {
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, nonce, deadline));
         return _hashTypedDataV4(structHash);
     }
 
@@ -248,16 +230,12 @@ abstract contract EIP712Base {
      * @param deadline The deadline timestamp
      * @return The delegation digest
      */
-    function _buildDelegationDigest(
-        address delegator,
-        address delegatee,
-        uint256 nonce,
-        uint256 deadline
-    ) internal view returns (bytes32) {
-        bytes32 structHash = keccak256(
-            abi.encode(DELEGATION_TYPEHASH, delegator, delegatee, nonce, deadline)
-        );
+    function _buildDelegationDigest(address delegator, address delegatee, uint256 nonce, uint256 deadline)
+        internal
+        view
+        returns (bytes32)
+    {
+        bytes32 structHash = keccak256(abi.encode(DELEGATION_TYPEHASH, delegator, delegatee, nonce, deadline));
         return _hashTypedDataV4(structHash);
     }
-
 }

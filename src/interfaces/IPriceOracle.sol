@@ -13,7 +13,7 @@ interface IPriceOracle {
      * @return The latest price (decimals depend on the feed)
      */
     function latestAnswer() external view returns (int256);
-    
+
     /**
      * @notice Get the number of decimals in the response
      * @return The number of decimals

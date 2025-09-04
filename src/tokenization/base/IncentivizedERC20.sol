@@ -16,7 +16,7 @@ import "../../interfaces/IIncentivesTracker.sol";
  */
 abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
     using SafeCast for uint256;
-    
+
     /**
      * @dev UserState struct packs balance with additional data for gas efficiency
      * The additionalData field usage varies by token type:
@@ -40,21 +40,21 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
     // State variables
     mapping(address => UserState) internal _userState;
     mapping(address => mapping(address => uint256)) private _allowances;
-    
+
     uint256 internal _totalSupply;
     string private _name;
     string private _symbol;
     uint8 private _decimals;
-    
+
     // Reentrancy guard for incentive calls
     bool private _incentivesLocked;
-    
+
     // Immutable reference
     IACLManager public immutable ACL_MANAGER;
-    
+
     // Role identifier for incentives administration
     bytes32 public constant INCENTIVES_ADMIN_ROLE = keccak256("INCENTIVES_ADMIN");
-    
+
     // Incentives tracker (can be updated by admin)
     IIncentivesTracker public incentivesTracker;
 
@@ -68,14 +68,9 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
      * @param symbol_ The token symbol
      * @param decimals_ The token decimals
      */
-    constructor(
-        address aclManager,
-        string memory name_,
-        string memory symbol_,
-        uint8 decimals_
-    ) {
+    constructor(address aclManager, string memory name_, string memory symbol_, uint8 decimals_) {
         if (aclManager == address(0)) revert IncentivizedERC20__InvalidAddress();
-        
+
         ACL_MANAGER = IACLManager(aclManager);
         _name = name_;
         _symbol = symbol_;
@@ -186,11 +181,7 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
      * @param to The recipient address
      * @param amount The amount to transfer
      */
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) public virtual override returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) public virtual override returns (bool) {
         _spendAllowance(from, _msgSender(), amount);
         _transfer(from, to, amount);
         return true;
@@ -250,24 +241,20 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
      * @param to The recipient address
      * @param amount The amount to transfer
      */
-    function _transfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal virtual {
+    function _transfer(address from, address to, uint256 amount) internal virtual {
         if (from == address(0)) revert IncentivizedERC20__InvalidAddress();
         if (to == address(0)) revert IncentivizedERC20__InvalidAddress();
 
         _beforeTokenTransfer(from, to, amount);
 
         uint128 castAmount = amount.toUint128();
-        
+
         // Cache pre-transfer balances for clarity
         uint128 fromBalanceBefore = _userState[from].balance;
         uint128 toBalanceBefore = _userState[to].balance;
-        
+
         if (fromBalanceBefore < castAmount) revert IncentivizedERC20__InsufficientBalance();
-        
+
         // Update balances (Solidity 0.8+ prevents overflow)
         unchecked {
             _userState[from].balance = fromBalanceBefore - castAmount;
@@ -299,12 +286,12 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
     ) internal incentivesGuard {
         IIncentivesTracker tracker = incentivesTracker;
         if (address(tracker) == address(0)) return;
-        
+
         // Update sender if not zero address (skip for mint)
         if (from != address(0)) {
             tracker.handleAction(from, totalSupplyBefore, fromBalanceBefore);
         }
-        
+
         // Update recipient if not zero address and different from sender
         if (to != address(0) && from != to) {
             tracker.handleAction(to, totalSupplyBefore, toBalanceBefore);
@@ -318,24 +305,24 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
      */
     function _mint(address account, uint256 amount) internal virtual {
         if (account == address(0)) revert IncentivizedERC20__InvalidAddress();
-        
+
         _beforeTokenTransfer(address(0), account, amount);
-        
+
         uint128 castAmount = amount.toUint128();
-        
+
         // Cache pre-mint state
         uint256 totalSupplyBefore = _totalSupply;
         uint128 accountBalanceBefore = _userState[account].balance;
-        
+
         // Update state
         _totalSupply = totalSupplyBefore + amount;
         _userState[account].balance = accountBalanceBefore + castAmount;
-        
+
         // Update incentives with pre-mint values
         _updateIncentives(address(0), account, totalSupplyBefore, 0, accountBalanceBefore);
-        
+
         emit Transfer(address(0), account, amount);
-        
+
         _afterTokenTransfer(address(0), account, amount);
     }
 
@@ -346,28 +333,28 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
      */
     function _burn(address account, uint256 amount) internal virtual {
         if (account == address(0)) revert IncentivizedERC20__InvalidAddress();
-        
+
         _beforeTokenTransfer(account, address(0), amount);
-        
+
         uint128 castAmount = amount.toUint128();
-        
+
         // Cache pre-burn state
         uint256 totalSupplyBefore = _totalSupply;
         uint128 accountBalanceBefore = _userState[account].balance;
-        
+
         if (accountBalanceBefore < castAmount) revert IncentivizedERC20__InsufficientBalance();
-        
+
         // Update state
         unchecked {
             _userState[account].balance = accountBalanceBefore - castAmount;
             _totalSupply = totalSupplyBefore - amount;
         }
-        
+
         // Update incentives with pre-burn values
         _updateIncentives(account, address(0), totalSupplyBefore, accountBalanceBefore, 0);
-        
+
         emit Transfer(account, address(0), amount);
-        
+
         _afterTokenTransfer(account, address(0), amount);
     }
 
@@ -386,11 +373,7 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
      * @param spender The spender address
      * @param amount The amount to approve
      */
-    function _approve(
-        address owner,
-        address spender,
-        uint256 amount
-    ) internal virtual {
+    function _approve(address owner, address spender, uint256 amount) internal virtual {
         if (owner == address(0)) revert IncentivizedERC20__InvalidAddress();
         if (spender == address(0)) revert IncentivizedERC20__InvalidAddress();
 
@@ -404,11 +387,7 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
      * @param spender The spender address
      * @param amount The amount to spend
      */
-    function _spendAllowance(
-        address owner,
-        address spender,
-        uint256 amount
-    ) internal virtual {
+    function _spendAllowance(address owner, address spender, uint256 amount) internal virtual {
         uint256 currentAllowance = allowance(owner, spender);
         if (currentAllowance != type(uint256).max) {
             if (currentAllowance < amount) revert IncentivizedERC20__InsufficientAllowance();
@@ -418,18 +397,13 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
         }
     }
 
-
     /**
      * @dev Hook called before any transfer
      * @param from The sender address
      * @param to The recipient address
      * @param amount The transfer amount
      */
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal virtual {}
+    function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual {}
 
     /**
      * @dev Hook called after any transfer
@@ -437,11 +411,7 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
      * @param to The recipient address
      * @param amount The transfer amount
      */
-    function _afterTokenTransfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal virtual {}
+    function _afterTokenTransfer(address from, address to, uint256 amount) internal virtual {}
 
     /**
      * @dev Updates token name (internal use only)

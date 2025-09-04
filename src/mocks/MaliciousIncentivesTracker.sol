@@ -22,17 +22,13 @@ contract MaliciousIncentivesTracker is IIncentivesTracker {
     /**
      * @notice Attempts to reenter the token contract
      */
-    function handleAction(
-        address user,
-        uint256 totalSupply,
-        uint256 userBalance
-    ) external override {
+    function handleAction(address user, uint256 totalSupply, uint256 userBalance) external override {
         reentrancyDepth++;
-        
+
         // Only attempt attack once to avoid infinite loop
         if (!attackAttempted && reentrancyDepth == 1) {
             attackAttempted = true;
-            
+
             // Attempt to reenter by minting (will fail due to onlyYoloHook)
             // or by triggering another transfer
             try token.transfer(user, 0) {

@@ -17,49 +17,49 @@ contract YoloOracle {
     // ========================
     // CONSTANTS
     // ========================
-    
+
     /// @notice Role for oracle administration
     bytes32 public constant ORACLE_ADMIN_ROLE = keccak256("ORACLE_ADMIN");
-    
+
     // ========================
     // IMMUTABLE STORAGE
     // ========================
-    
+
     /// @notice ACL Manager for role-based access control
     IACLManager public immutable ACL_MANAGER;
-    
+
     /// @notice YoloHook address (immutable for gas efficiency)
     address public immutable YOLO_HOOK;
-    
+
     /// @notice Anchor asset (USY) with fixed $1 price
     address public immutable ANCHOR;
-    
+
     // ========================
     // STATE VARIABLES
     // ========================
-    
+
     /// @notice Mapping from asset to price source oracle
     mapping(address => IPriceOracle) private assetToPriceSource;
-    
+
     // ========================
     // EVENTS
     // ========================
-    
+
     event AssetSourceUpdated(address indexed asset, address indexed source);
-    
+
     // ========================
     // ERRORS
     // ========================
-    
+
     error YoloOracle__ParamsLengthMismatch();
     error YoloOracle__PriceSourceCannotBeZero();
     error YoloOracle__CallerNotAuthorized();
     error YoloOracle__UnsupportedAsset();
-    
+
     // ========================
     // MODIFIERS
     // ========================
-    
+
     /**
      * @notice Ensure caller has ORACLE_ADMIN role
      * @dev YoloHook should be granted this role to set price sources when creating synthetic assets
@@ -70,11 +70,11 @@ contract YoloOracle {
         }
         _;
     }
-    
+
     // ========================
     // CONSTRUCTOR
     // ========================
-    
+
     /**
      * @notice Initialize YoloOracle with ACL Manager, YoloHook and anchor asset
      * @param _aclManager Address of the ACL Manager contract
@@ -95,11 +95,11 @@ contract YoloOracle {
         ANCHOR = _anchor;
         _setAssetsSources(_assets, _sources);
     }
-    
+
     // ========================
     // EXTERNAL VIEW FUNCTIONS
     // ========================
-    
+
     /**
      * @notice Get the price of a single asset
      * @param _asset Address of the asset for which the price is requested
@@ -108,15 +108,15 @@ contract YoloOracle {
     function getAssetPrice(address _asset) public view returns (uint256) {
         // If asset is the anchor (USY), return fixed $1.00 price
         if (_asset == ANCHOR) return 1e8;
-        
+
         IPriceOracle source = assetToPriceSource[_asset];
         if (source == IPriceOracle(address(0))) revert YoloOracle__UnsupportedAsset();
-        
+
         int256 price = source.latestAnswer();
         if (price > 0) return uint256(price);
         else return 0;
     }
-    
+
     /**
      * @notice Get prices of multiple assets in batch
      * @param _assets Array of asset addresses for which prices are requested
@@ -129,7 +129,7 @@ contract YoloOracle {
         }
         return prices;
     }
-    
+
     /**
      * @notice Get the price source address for a given asset
      * @param _asset The asset to query
@@ -138,11 +138,11 @@ contract YoloOracle {
     function getSourceOfAsset(address _asset) external view returns (address) {
         return address(assetToPriceSource[_asset]);
     }
-    
+
     // ========================
     // ADMIN FUNCTIONS
     // ========================
-    
+
     /**
      * @notice Set price sources for given assets
      * @dev Can be called by accounts with ORACLE_ADMIN role (including YoloHook)
@@ -152,11 +152,11 @@ contract YoloOracle {
     function setAssetSources(address[] calldata _assets, address[] calldata _sources) external onlyOracleAdmin {
         _setAssetsSources(_assets, _sources);
     }
-    
+
     // ========================
     // INTERNAL FUNCTIONS
     // ========================
-    
+
     /**
      * @notice Internal function to set price sources for assets
      * @param _assets Array of asset addresses
@@ -165,7 +165,7 @@ contract YoloOracle {
     function _setAssetsSources(address[] memory _assets, address[] memory _sources) internal {
         // Validate input arrays have same length
         if (_assets.length != _sources.length) revert YoloOracle__ParamsLengthMismatch();
-        
+
         // Set price source for each asset
         for (uint256 i = 0; i < _assets.length; i++) {
             if (_sources[i] == address(0)) revert YoloOracle__PriceSourceCannotBeZero();

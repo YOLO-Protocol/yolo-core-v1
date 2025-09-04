@@ -524,11 +524,11 @@ contract TestContract01_ACLManager is Test {
     function test_Contract01_Case19_cannotRemoveRoleThatAdminsOthers() public {
         bytes32 parentRole = aclManager.createRole("PARENT", bytes32(0));
         bytes32 childRole = aclManager.createRole("CHILD", parentRole);
-        
+
         // Try to remove parent role - should fail
         vm.expectRevert(ACLManager.ACL__RoleIsAdminOfOtherRoles.selector);
         aclManager.removeRole(parentRole);
-        
+
         // Should be able to remove child first, then parent
         aclManager.removeRole(childRole);
         aclManager.removeRole(parentRole);
@@ -540,17 +540,17 @@ contract TestContract01_ACLManager is Test {
      */
     function test_Contract01_Case20_cannotRenounceLastDefaultAdmin() public {
         bytes32 defaultAdminRole = aclManager.DEFAULT_ADMIN_ROLE();
-        
+
         // Verify we have exactly one admin
         assertEq(aclManager.getRoleMemberCount(defaultAdminRole), 1);
-        
+
         // Try to renounce - should fail
         vm.expectRevert(ACLManager.ACL__CannotRenounceLastAdmin.selector);
         aclManager.renounceRole(defaultAdminRole, admin);
-        
+
         // Add second admin
         aclManager.grantRole(defaultAdminRole, user1);
-        
+
         // Now first admin can renounce
         aclManager.renounceRole(defaultAdminRole, admin);
         assertEq(aclManager.getRoleMemberCount(defaultAdminRole), 1);
@@ -562,18 +562,18 @@ contract TestContract01_ACLManager is Test {
      */
     function test_Contract01_Case21_twoStepTransferWithMultipleAdmins() public {
         bytes32 adminRole = aclManager.DEFAULT_ADMIN_ROLE();
-        
+
         // Add second admin
         aclManager.grantRole(adminRole, user1);
         assertEq(aclManager.getRoleMemberCount(adminRole), 2);
-        
+
         // Propose user2
         aclManager.proposeDefaultAdmin(user2);
-        
+
         // User2 accepts
         vm.prank(user2);
         aclManager.acceptDefaultAdmin();
-        
+
         // Should have exactly one admin (user2)
         assertEq(aclManager.getRoleMemberCount(adminRole), 1);
         assertTrue(aclManager.hasRole(adminRole, user2));
@@ -587,11 +587,11 @@ contract TestContract01_ACLManager is Test {
     function test_Contract01_Case22_batchOperationsWithEmptyArrays() public {
         bytes32 role = aclManager.createRole("EMPTY_BATCH", bytes32(0));
         address[] memory emptyArray = new address[](0);
-        
+
         // Should not revert with empty arrays
         aclManager.grantRoleBatch(role, emptyArray);
         aclManager.revokeRoleBatch(role, emptyArray);
-        
+
         assertEq(aclManager.getRoleMemberCount(role), 0);
     }
 
@@ -600,13 +600,13 @@ contract TestContract01_ACLManager is Test {
      */
     function test_Contract01_Case23_grantRevokeIdempotency() public {
         bytes32 role = aclManager.createRole("IDEMPOTENT", bytes32(0));
-        
+
         // Grant twice - should be idempotent
         aclManager.grantRole(role, user1);
         aclManager.grantRole(role, user1);
         assertEq(aclManager.getRoleMemberCount(role), 1);
         assertTrue(aclManager.hasRole(role, user1), "User1 should have role");
-        
+
         // Revoke twice - should be idempotent
         aclManager.revokeRole(role, user1);
         aclManager.revokeRole(role, user1);
@@ -621,19 +621,19 @@ contract TestContract01_ACLManager is Test {
         bytes32 roleA = aclManager.createRole("ROLE_A", bytes32(0));
         bytes32 roleB = aclManager.createRole("ROLE_B", roleA);
         bytes32 roleC = aclManager.createRole("ROLE_C", roleB);
-        
+
         // Try to set roleA's admin to roleC (would create circular dependency A->C->B->A)
         vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
         aclManager.setRoleAdmin(roleA, roleC);
-        
+
         // Try to set roleB's admin to roleC (would create circular dependency B->C->B)
         vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
         aclManager.setRoleAdmin(roleB, roleC);
-        
+
         // Try to set roleA's admin to roleB (would create circular dependency A->B->A)
         vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
         aclManager.setRoleAdmin(roleA, roleB);
-        
+
         // Setting to DEFAULT_ADMIN_ROLE should always work
         aclManager.setRoleAdmin(roleA, aclManager.DEFAULT_ADMIN_ROLE());
         assertEq(aclManager.getRoleAdmin(roleA), aclManager.DEFAULT_ADMIN_ROLE());
@@ -644,16 +644,16 @@ contract TestContract01_ACLManager is Test {
      */
     function test_Contract01_Case25_defaultAdminRoleProperties() public {
         bytes32 defaultAdmin = aclManager.DEFAULT_ADMIN_ROLE();
-        
+
         // DEFAULT_ADMIN_ROLE should exist
         assertTrue(aclManager.roleExists(defaultAdmin), "DEFAULT_ADMIN_ROLE should exist");
-        
+
         // DEFAULT_ADMIN_ROLE's admin should be itself
         assertEq(aclManager.getRoleAdmin(defaultAdmin), defaultAdmin, "DEFAULT_ADMIN_ROLE should admin itself");
-        
+
         // Should have at least one member
         assertTrue(aclManager.getRoleMemberCount(defaultAdmin) > 0, "DEFAULT_ADMIN_ROLE should have members");
-        
+
         // Cannot be removed
         vm.expectRevert(ACLManager.ACL__CannotRemoveDefaultAdmin.selector);
         aclManager.removeRole(defaultAdmin);
@@ -676,24 +676,24 @@ contract TestContract01_ACLManager is Test {
         bytes32 roleB = aclManager.createRole("ROLE_B", bytes32(0));
         bytes32 roleC = aclManager.createRole("ROLE_C", bytes32(0));
         bytes32 roleD = aclManager.createRole("ROLE_D", bytes32(0));
-        
+
         // Set up a chain: A -> B -> C -> D
         aclManager.setRoleAdmin(roleB, roleA);
         aclManager.setRoleAdmin(roleC, roleB);
         aclManager.setRoleAdmin(roleD, roleC);
-        
+
         // Trying to make D admin of A should fail (would create circular dependency)
         vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
         aclManager.setRoleAdmin(roleA, roleD);
-        
+
         // Trying to make C admin of A should also fail
         vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
         aclManager.setRoleAdmin(roleA, roleC);
-        
+
         // Trying to make B admin of C should fail (C is already under B)
         vm.expectRevert(ACLManager.ACL__WouldCreateCircularDependency.selector);
         aclManager.setRoleAdmin(roleB, roleC);
-        
+
         // But making a new role E with D as admin should work
         bytes32 roleE = aclManager.createRole("ROLE_E", bytes32(0));
         aclManager.setRoleAdmin(roleE, roleD);

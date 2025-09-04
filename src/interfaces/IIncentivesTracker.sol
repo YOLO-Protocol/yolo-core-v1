@@ -18,9 +18,5 @@ interface IIncentivesTracker {
      * @param totalSupply The total supply of the token before the action
      * @param userBalance The user's balance before the action
      */
-    function handleAction(
-        address user,
-        uint256 totalSupply,
-        uint256 userBalance
-    ) external;
+    function handleAction(address user, uint256 totalSupply, uint256 userBalance) external;
 }

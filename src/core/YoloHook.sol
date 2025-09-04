@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
 import {BaseHook} from "@uniswap/v4-periphery/src/utils/BaseHook.sol";
@@ -10,16 +10,28 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
- * @title YoloHook V1
- * @notice YOLO Protocol V1 - Yield-Optimized Leverage Onchain Hook
- * @dev Bare bones implementation with minimal inheritance structure
+ * @title YoloHook
+ * @author alvin@yolo.wtf
+ * @notice Main hook contract for YOLO Protocol V1 - Yield-Optimized Leverage Onchain
+ * @dev Bare bones V1 implementation with minimal inheritance structure
+ *      - Uniswap V4 hook with all permissions enabled
+ *      - Reentrancy protection and pausable functionality
+ *      - Foundation for V1 modular architecture
  */
 contract YoloHook is BaseHook, ReentrancyGuard, Ownable, Pausable {
+    // ========================
+    // CONSTRUCTOR
+    // ========================
+
     /**
-     * @notice Constructor to initialize the YoloHook with the V4 Pool Manager
+     * @notice Initialize YoloHook with Uniswap V4 Pool Manager
      * @param _poolManager Address of the Uniswap V4 Pool Manager contract
      */
     constructor(IPoolManager _poolManager) BaseHook(_poolManager) Ownable(msg.sender) {}
+
+    // ========================
+    // EXTERNAL VIEW FUNCTIONS
+    // ========================
 
     /**
      * @notice Returns the permissions for this hook

@@ -87,7 +87,7 @@ contract ACLManager is AccessControl {
         bytes32 current = newAdmin;
         uint256 iterations = 0;
         uint256 maxIterations = _allRoles.length(); // Prevent infinite loops
-        
+
         while (current != bytes32(0) && current != DEFAULT_ADMIN_ROLE && iterations < maxIterations) {
             if (current == role) return true;
             current = getRoleAdmin(current);
@@ -135,7 +135,7 @@ contract ACLManager is AccessControl {
         if (!_allRoles.contains(role)) revert ACL__RoleDoesNotExist();
         if (role == DEFAULT_ADMIN_ROLE) revert ACL__CannotRemoveDefaultAdmin(); // Can't remove DEFAULT_ADMIN_ROLE
         if (_roleMembers[role].length() > 0) revert ACL__RoleHasMembers();
-        
+
         // Prevent removing roles that admin other roles
         if (_isAdminOfAnyRole(role)) revert ACL__RoleIsAdminOfOtherRoles();
 
@@ -151,7 +151,7 @@ contract ACLManager is AccessControl {
     function setRoleAdmin(bytes32 role, bytes32 adminRole) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (!_allRoles.contains(role)) revert ACL__RoleDoesNotExist();
         if (!_allRoles.contains(adminRole)) revert ACL__RoleDoesNotExist();
-        
+
         // Prevent circular dependencies
         if (_wouldCreateCircularDependency(role, adminRole)) {
             revert ACL__WouldCreateCircularDependency();
@@ -198,7 +198,7 @@ contract ACLManager is AccessControl {
     function renounceRole(bytes32 role, address account) public override {
         if (account != msg.sender) revert ACL__CannotRenounceForOthers();
         if (!hasRole(role, account)) revert ACL__DoesNotHaveRole();
-        
+
         // Prevent renouncing if it would leave no DEFAULT_ADMIN
         if (role == DEFAULT_ADMIN_ROLE && _roleMembers[role].length() <= 1) {
             revert ACL__CannotRenounceLastAdmin();

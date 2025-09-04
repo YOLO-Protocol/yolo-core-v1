@@ -20,20 +20,15 @@ contract MockIncentivesController is IIncentivesTracker {
     // Track all handleAction calls
     mapping(address => ActionRecord[]) public userActions;
     mapping(address => uint256) public userActionCount;
-    
+
     // Track unique users
     address[] public users;
     mapping(address => bool) public isUser;
-    
+
     // Total action count
     uint256 public totalActionCount;
 
-    event ActionRecorded(
-        address indexed user,
-        uint256 totalSupply,
-        uint256 userBalance,
-        uint256 timestamp
-    );
+    event ActionRecorded(address indexed user, uint256 totalSupply, uint256 userBalance, uint256 timestamp);
 
     /**
      * @notice Records user action for incentive tracking
@@ -41,28 +36,20 @@ contract MockIncentivesController is IIncentivesTracker {
      * @param totalSupply The total supply before the action
      * @param userBalance The user's balance before the action
      */
-    function handleAction(
-        address user,
-        uint256 totalSupply,
-        uint256 userBalance
-    ) external override {
-        ActionRecord memory action = ActionRecord({
-            user: user,
-            totalSupply: totalSupply,
-            userBalance: userBalance,
-            timestamp: block.timestamp
-        });
-        
+    function handleAction(address user, uint256 totalSupply, uint256 userBalance) external override {
+        ActionRecord memory action =
+            ActionRecord({user: user, totalSupply: totalSupply, userBalance: userBalance, timestamp: block.timestamp});
+
         userActions[user].push(action);
         userActionCount[user]++;
         totalActionCount++;
-        
+
         // Track unique users
         if (!isUser[user]) {
             users.push(user);
             isUser[user] = true;
         }
-        
+
         emit ActionRecorded(user, totalSupply, userBalance, block.timestamp);
     }
 
