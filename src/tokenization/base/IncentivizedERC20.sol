@@ -235,8 +235,8 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
 
     /**
      * @dev Internal transfer logic with incentive hooks
-     * @notice Caches pre-transfer balances before updating state to ensure
-     *         the incentives tracker receives accurate historical balances
+     * @notice Updates incentives with NEW balances after state changes to ensure
+     *         the incentives tracker calculates rewards based on current positions
      * @param from The sender address
      * @param to The recipient address
      * @param amount The amount to transfer
@@ -249,7 +249,7 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
 
         uint128 castAmount = amount.toUint128();
 
-        // Cache pre-transfer balances for clarity
+        // Cache pre-transfer balances
         uint128 fromBalanceBefore = _userState[from].balance;
         uint128 toBalanceBefore = _userState[to].balance;
 
@@ -261,8 +261,8 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
         }
         _userState[to].balance = toBalanceBefore + castAmount; // Safe: Solidity 0.8+ reverts on overflow
 
-        // Update incentives with cached pre-transfer values
-        _updateIncentives(from, to, _totalSupply, fromBalanceBefore, toBalanceBefore);
+        // Update incentives with NEW balances after transfer
+        _updateIncentives(from, to, _totalSupply, _userState[from].balance, _userState[to].balance);
 
         emit Transfer(from, to, amount);
 
@@ -273,28 +273,28 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
      * @dev Updates incentives for affected addresses after balance changes
      * @param from The sender address (or address(0) for mint)
      * @param to The recipient address (or address(0) for burn)
-     * @param totalSupplyBefore The total supply before the balance change
-     * @param fromBalanceBefore The sender's balance before the change
-     * @param toBalanceBefore The recipient's balance before the change
+     * @param totalSupplyAfter The total supply after the balance change
+     * @param fromBalanceAfter The sender's balance after the change
+     * @param toBalanceAfter The recipient's balance after the change
      */
     function _updateIncentives(
         address from,
         address to,
-        uint256 totalSupplyBefore,
-        uint128 fromBalanceBefore,
-        uint128 toBalanceBefore
+        uint256 totalSupplyAfter,
+        uint128 fromBalanceAfter,
+        uint128 toBalanceAfter
     ) internal incentivesGuard {
         IIncentivesTracker tracker = incentivesTracker;
         if (address(tracker) == address(0)) return;
 
         // Update sender if not zero address (skip for mint)
         if (from != address(0)) {
-            tracker.handleAction(from, totalSupplyBefore, fromBalanceBefore);
+            tracker.handleAction(from, totalSupplyAfter, fromBalanceAfter);
         }
 
         // Update recipient if not zero address and different from sender
         if (to != address(0) && from != to) {
-            tracker.handleAction(to, totalSupplyBefore, toBalanceBefore);
+            tracker.handleAction(to, totalSupplyAfter, toBalanceAfter);
         }
     }
 
@@ -310,16 +310,12 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
 
         uint128 castAmount = amount.toUint128();
 
-        // Cache pre-mint state
-        uint256 totalSupplyBefore = _totalSupply;
-        uint128 accountBalanceBefore = _userState[account].balance;
-
         // Update state
-        _totalSupply = totalSupplyBefore + amount;
-        _userState[account].balance = accountBalanceBefore + castAmount;
+        _totalSupply = _totalSupply + amount;
+        _userState[account].balance = _userState[account].balance + castAmount;
 
-        // Update incentives with pre-mint values
-        _updateIncentives(address(0), account, totalSupplyBefore, 0, accountBalanceBefore);
+        // Update incentives with NEW values after mint
+        _updateIncentives(address(0), account, _totalSupply, 0, _userState[account].balance);
 
         emit Transfer(address(0), account, amount);
 
@@ -337,9 +333,6 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
         _beforeTokenTransfer(account, address(0), amount);
 
         uint128 castAmount = amount.toUint128();
-
-        // Cache pre-burn state
-        uint256 totalSupplyBefore = _totalSupply;
         uint128 accountBalanceBefore = _userState[account].balance;
 
         if (accountBalanceBefore < castAmount) revert IncentivizedERC20__InsufficientBalance();
@@ -347,11 +340,11 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
         // Update state
         unchecked {
             _userState[account].balance = accountBalanceBefore - castAmount;
-            _totalSupply = totalSupplyBefore - amount;
+            _totalSupply = _totalSupply - amount;
         }
 
-        // Update incentives with pre-burn values
-        _updateIncentives(account, address(0), totalSupplyBefore, accountBalanceBefore, 0);
+        // Update incentives with NEW values after burn
+        _updateIncentives(account, address(0), _totalSupply, _userState[account].balance, 0);
 
         emit Transfer(account, address(0), amount);
 

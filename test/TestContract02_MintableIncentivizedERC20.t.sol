@@ -123,8 +123,8 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
 
         MockIncentivesController.ActionRecord memory action = incentivesController.getLastAction(alice);
         assertEq(action.user, alice, "User mismatch");
-        assertEq(action.totalSupply, 0, "Should use pre-mint total supply");
-        assertEq(action.userBalance, 0, "Should use pre-mint balance");
+        assertEq(action.totalSupply, amount, "Should use post-mint total supply");
+        assertEq(action.userBalance, amount, "Should use post-mint balance");
     }
 
     /**
@@ -149,8 +149,8 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
 
         MockIncentivesController.ActionRecord memory action = incentivesController.getLastAction(alice);
         assertEq(action.user, alice, "User mismatch");
-        assertEq(action.totalSupply, amount, "Should use pre-burn total supply");
-        assertEq(action.userBalance, amount, "Should use pre-burn balance");
+        assertEq(action.totalSupply, amount / 2, "Should use post-burn total supply");
+        assertEq(action.userBalance, amount / 2, "Should use post-burn balance");
     }
 
     /**
@@ -173,12 +173,12 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
         // Check alice's incentive tracking
         assertEq(incentivesController.userActionCount(alice), 1, "Alice should have 1 action");
         MockIncentivesController.ActionRecord memory aliceAction = incentivesController.getLastAction(alice);
-        assertEq(aliceAction.userBalance, amount, "Alice's pre-transfer balance incorrect");
+        assertEq(aliceAction.userBalance, amount / 2, "Alice's post-transfer balance incorrect");
 
         // Check bob's incentive tracking
         assertEq(incentivesController.userActionCount(bob), 1, "Bob should have 1 action");
         MockIncentivesController.ActionRecord memory bobAction = incentivesController.getLastAction(bob);
-        assertEq(bobAction.userBalance, 0, "Bob's pre-transfer balance should be 0");
+        assertEq(bobAction.userBalance, amount / 2, "Bob's post-transfer balance should be amount/2");
 
         // Both should have same total supply
         assertEq(aliceAction.totalSupply, amount, "Total supply mismatch");
@@ -527,12 +527,12 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
         assertEq(incentivesController.userActionCount(alice), 1, "Alice action count");
         assertEq(incentivesController.userActionCount(charlie), 1, "Charlie action count");
 
-        // Verify pre-transfer balances in incentive tracking
+        // Verify post-transfer balances in incentive tracking
         MockIncentivesController.ActionRecord memory aliceAction = incentivesController.getLastAction(alice);
-        assertEq(aliceAction.userBalance, amount, "Alice pre-transfer balance");
+        assertEq(aliceAction.userBalance, amount / 2, "Alice post-transfer balance");
 
         MockIncentivesController.ActionRecord memory charlieAction = incentivesController.getLastAction(charlie);
-        assertEq(charlieAction.userBalance, 0, "Charlie pre-transfer balance");
+        assertEq(charlieAction.userBalance, amount / 2, "Charlie post-transfer balance");
     }
 
     /**
@@ -584,12 +584,12 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
         // Verify charlie's incentives were tracked for each receive
         assertEq(incentivesController.userActionCount(charlie), 2, "Charlie should have 2 actions");
 
-        // Verify each action has correct pre-transfer balance
+        // Verify each action has correct post-transfer balance
         MockIncentivesController.ActionRecord memory charlieAction1 = incentivesController.getAction(charlie, 0);
-        assertEq(charlieAction1.userBalance, 250 * 10 ** 18, "First transfer pre-balance");
+        assertEq(charlieAction1.userBalance, 350 * 10 ** 18, "First transfer post-balance");
 
         MockIncentivesController.ActionRecord memory charlieAction2 = incentivesController.getAction(charlie, 1);
-        assertEq(charlieAction2.userBalance, 350 * 10 ** 18, "Second transfer pre-balance");
+        assertEq(charlieAction2.userBalance, 400 * 10 ** 18, "Second transfer post-balance");
     }
 
     /**
