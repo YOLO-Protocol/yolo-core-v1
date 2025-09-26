@@ -32,9 +32,10 @@ contract MockIncentivesController is IIncentivesTracker {
 
     /**
      * @notice Records user action for incentive tracking
-     * @param user The user whose balance is changing
-     * @param totalSupply The total supply before the action
-     * @param userBalance The user's balance before the action
+     * @dev Expects post-action state (Chef-style semantics)
+     * @param user The user whose balance changed
+     * @param totalSupply The token total supply after the action
+     * @param userBalance The user's balance after the action
      */
     function handleAction(address user, uint256 totalSupply, uint256 userBalance) external override {
         ActionRecord memory action =
