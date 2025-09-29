@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+
 /**
  * @title EIP712BaseUpgradeable
  * @author alvin@yolo.wtf
@@ -8,7 +10,7 @@ pragma solidity ^0.8.26;
  * @dev Provides domain separator computation, nonce management, and signature verification
  *      Uses storage variables instead of immutables to support proxy deployment
  */
-abstract contract EIP712BaseUpgradeable {
+abstract contract EIP712BaseUpgradeable is Initializable {
     // EIP712 Domain Separator typehash
     bytes32 private constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -35,19 +37,12 @@ abstract contract EIP712BaseUpgradeable {
     // Custom errors
     error EIP712__InvalidSignature();
     error EIP712__ExpiredDeadline();
-    error EIP712__AlreadyInitialized();
-
-    // Initialization flag
-    bool private _initialized;
 
     /**
      * @dev Initializes the EIP712 domain separator
      * @param name The name for the EIP712 domain (e.g., token name)
      */
-    function __EIP712Base_init(string memory name) internal {
-        if (_initialized) revert EIP712__AlreadyInitialized();
-        _initialized = true;
-
+    function __EIP712Base_init(string memory name) internal onlyInitializing {
         _nameHash = keccak256(bytes(name));
         _cachedChainId = block.chainid;
         _cachedDomainSeparator = _computeDomainSeparator();
