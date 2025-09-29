@@ -3,4 +3,5 @@ forge-std/=lib/forge-std/src/
 @uniswap/v4-core=node_modules/@uniswap/v4-core
 @openzeppelin/=node_modules/@openzeppelin/
 @openzeppelin/contracts=node_modules/@openzeppelin/contracts
+@openzeppelin/contracts-upgradeable=node_modules/@openzeppelin/contracts-upgradeable
 @yolo/=src/
