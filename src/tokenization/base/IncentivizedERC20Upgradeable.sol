@@ -69,12 +69,10 @@ abstract contract IncentivizedERC20Upgradeable is Initializable, ContextUpgradea
      * @param symbol_ The token symbol
      * @param decimals_ The token decimals
      */
-    function __IncentivizedERC20_init(
-        address aclManager,
-        string memory name_,
-        string memory symbol_,
-        uint8 decimals_
-    ) internal onlyInitializing {
+    function __IncentivizedERC20_init(address aclManager, string memory name_, string memory symbol_, uint8 decimals_)
+        internal
+        onlyInitializing
+    {
         if (aclManager == address(0)) revert IncentivizedERC20__InvalidAddress();
 
         __Context_init();
