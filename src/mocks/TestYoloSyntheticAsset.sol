@@ -1,0 +1,267 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
+
+// Import all the parent contracts directly to avoid the constructor issue
+import "../tokenization/base/MintableIncentivizedERC20Upgradeable.sol";
+import "../tokenization/base/EIP712BaseUpgradeable.sol";
+import "../interfaces/IYoloSyntheticAsset.sol";
+import "../interfaces/IYoloOracle.sol";
+import "../interfaces/IYLPVault.sol";
+
+/**
+ * @title TestYoloSyntheticAsset
+ * @notice Test version of YoloSyntheticAsset that doesn't disable initializers
+ * @dev Duplicates YoloSyntheticAsset logic but without _disableInitializers() for testing
+ */
+contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712BaseUpgradeable, IYoloSyntheticAsset {
+
+    // Custom errors
+    error YoloSyntheticAsset__InvalidOracle();
+    error YoloSyntheticAsset__InvalidAddress();
+    error YoloSyntheticAsset__TradingDisabled();
+    error YoloSyntheticAsset__ExceedsMaxSupply();
+    error YoloSyntheticAsset__InvalidPrice();
+
+    // Cost basis tracking - using 8 decimals precision (1e8 = 1 USY)
+    mapping(address => uint128) public avgPriceX8;
+
+    // Synthetic asset configuration
+    address public underlyingAsset;
+    IYoloOracle public yoloOracle;
+    address public ylpVault;
+    uint256 public maxSupply;
+    bool public tradingEnabled;
+
+    /**
+     * @dev Constructor for test implementation - does NOT disable initializers
+     */
+    constructor() {
+        // Intentionally empty - allows testing without proxy
+    }
+
+    /**
+     * @notice Initializes the synthetic asset token
+     */
+    function initialize(
+        address yoloHook,
+        address aclManager,
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_,
+        address _underlyingAsset,
+        IYoloOracle _yoloOracle,
+        address _ylpVault,
+        uint256 _maxSupply
+    ) external initializer {
+        if (address(_yoloOracle) == address(0)) revert YoloSyntheticAsset__InvalidOracle();
+        if (_ylpVault == address(0)) revert YoloSyntheticAsset__InvalidAddress();
+
+        __MintableIncentivizedERC20_init(yoloHook, aclManager, name_, symbol_, decimals_);
+        __EIP712Base_init(name_);
+
+        underlyingAsset = _underlyingAsset;
+        yoloOracle = _yoloOracle;
+        ylpVault = _ylpVault;
+        maxSupply = _maxSupply;
+        tradingEnabled = true;
+    }
+
+    // Copy all the functions from YoloSyntheticAsset...
+    // For brevity, I'll include the key ones
+
+    function mint(address to, uint256 amount)
+        external
+        virtual
+        override(MintableIncentivizedERC20Upgradeable, IYoloSyntheticAsset)
+        onlyYoloHook
+    {
+        _mintWithOraclePrice(to, amount);
+    }
+
+    function burn(address from, uint256 amount)
+        external
+        virtual
+        override(MintableIncentivizedERC20Upgradeable, IYoloSyntheticAsset)
+        onlyYoloHook
+    {
+        _settleAndBurn(from, amount);
+    }
+
+    function _mintWithOraclePrice(address to, uint256 amount) internal {
+        if (maxSupply > 0) {
+            uint256 newSupply = totalSupply() + amount;
+            if (newSupply > maxSupply) revert YoloSyntheticAsset__ExceedsMaxSupply();
+        }
+
+        uint256 priceX8 = yoloOracle.getAssetPrice(underlyingAsset);
+        if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
+
+        uint256 currentBalance = balanceOf(to);
+        if (currentBalance > 0) {
+            uint256 totalCost = uint256(avgPriceX8[to]) * currentBalance + priceX8 * amount;
+            uint256 totalQuantity = currentBalance + amount;
+            avgPriceX8[to] = uint128((totalCost + totalQuantity - 1) / totalQuantity);
+        } else {
+            avgPriceX8[to] = uint128(priceX8);
+        }
+
+        emit CostBasisUpdated(to, currentBalance + amount, avgPriceX8[to]);
+        _mint(to, amount);
+    }
+
+    function _settleAndBurn(address from, uint256 amount) internal {
+        uint256 balance = balanceOf(from);
+        uint128 avgCost = avgPriceX8[from];
+
+        uint256 currentPriceX8 = yoloOracle.getAssetPrice(underlyingAsset);
+        if (currentPriceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
+
+        if (avgCost > 0) {
+            int256 deltaX8 = int256(currentPriceX8) - int256(uint256(avgCost));
+            int256 pnlUSY;
+
+            if (deltaX8 >= 0) {
+                uint256 profitNumerator = uint256(deltaX8) * amount;
+                pnlUSY = int256(profitNumerator / 1e8);
+            } else {
+                uint256 lossNumerator = uint256(-deltaX8) * amount;
+                pnlUSY = -int256((lossNumerator + 1e8 - 1) / 1e8);
+            }
+
+            IYLPVault(ylpVault).settlePnL(from, address(this), pnlUSY);
+            emit CostBasisUpdated(from, balance - amount, avgCost);
+        }
+
+        if (balance == amount && avgCost > 0) {
+            avgPriceX8[from] = 0;
+            emit CostBasisUpdated(from, 0, 0);
+        }
+
+        _burn(from, amount);
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual override {
+        if (!tradingEnabled && from != address(0) && to != address(0)) {
+            revert YoloSyntheticAsset__TradingDisabled();
+        }
+
+        if (from == address(0) || to == address(0)) {
+            super._beforeTokenTransfer(from, to, amount);
+            return;
+        }
+
+        if (from == to || amount == 0) {
+            super._beforeTokenTransfer(from, to, amount);
+            return;
+        }
+
+        uint256 fromBalance = balanceOf(from);
+        uint256 toBalance = balanceOf(to);
+
+        if (toBalance == 0) {
+            avgPriceX8[to] = avgPriceX8[from];
+        } else if (avgPriceX8[from] > 0) {
+            uint256 carriedCost = uint256(avgPriceX8[from]) * amount;
+            uint256 existingCost = uint256(avgPriceX8[to]) * toBalance;
+            uint256 totalCost = existingCost + carriedCost;
+            uint256 totalQuantity = toBalance + amount;
+            avgPriceX8[to] = uint128((totalCost + totalQuantity - 1) / totalQuantity);
+        }
+
+        if (fromBalance == amount && avgPriceX8[from] > 0) {
+            avgPriceX8[from] = 0;
+            emit CostBasisUpdated(from, 0, 0);
+        }
+
+        if (toBalance == 0 || avgPriceX8[from] > 0) {
+            emit CostBasisUpdated(to, toBalance + amount, avgPriceX8[to]);
+        }
+
+        super._beforeTokenTransfer(from, to, amount);
+    }
+
+    // Implement all other required functions...
+    function averagePriceX8(address user) external view override returns (uint128) {
+        return avgPriceX8[user];
+    }
+
+    function setTradingEnabled(bool enabled) external override {
+        if (!ACL_MANAGER.hasRole(keccak256("RISK_ADMIN"), _msgSender())) {
+            revert IncentivizedERC20__OnlyIncentivesAdmin();
+        }
+        tradingEnabled = enabled;
+    }
+
+    function setMaxSupply(uint256 _maxSupply) external override {
+        if (!ACL_MANAGER.hasRole(keccak256("ASSETS_ADMIN"), _msgSender())) {
+            revert IncentivizedERC20__OnlyIncentivesAdmin();
+        }
+        maxSupply = _maxSupply;
+    }
+
+    function setYoloOracle(IYoloOracle _yoloOracle) external override {
+        if (address(_yoloOracle) == address(0)) revert YoloSyntheticAsset__InvalidOracle();
+        if (!ACL_MANAGER.hasRole(keccak256("RISK_ADMIN"), _msgSender())) {
+            revert IncentivizedERC20__OnlyIncentivesAdmin();
+        }
+        yoloOracle = _yoloOracle;
+    }
+
+    function priceOracle() external view override returns (address) {
+        return address(yoloOracle);
+    }
+
+    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external
+        override
+    {
+        _validateAndUsePermit(owner, spender, value, deadline, v, r, s);
+        _approve(owner, spender, value);
+    }
+
+    function DOMAIN_SEPARATOR()
+        public
+        view
+        virtual
+        override(EIP712BaseUpgradeable, IYoloSyntheticAsset)
+        returns (bytes32)
+    {
+        return super.DOMAIN_SEPARATOR();
+    }
+
+    function nonces(address owner)
+        public
+        view
+        virtual
+        override(EIP712BaseUpgradeable, IYoloSyntheticAsset)
+        returns (uint256)
+    {
+        return super.nonces(owner);
+    }
+
+    function batchMint(address[] calldata recipients, uint256[] calldata amounts)
+        external
+        virtual
+        override(MintableIncentivizedERC20Upgradeable, IYoloSyntheticAsset)
+        onlyYoloHook
+    {
+        uint256 length = recipients.length;
+        for (uint256 i = 0; i < length; i++) {
+            _mintWithOraclePrice(recipients[i], amounts[i]);
+        }
+    }
+
+    function batchBurn(address[] calldata accounts, uint256[] calldata amounts)
+        external
+        virtual
+        override(MintableIncentivizedERC20Upgradeable, IYoloSyntheticAsset)
+        onlyYoloHook
+    {
+        uint256 length = accounts.length;
+        for (uint256 i = 0; i < length; i++) {
+            _settleAndBurn(accounts[i], amounts[i]);
+        }
+    }
+
+    uint256[44] private __gap;
+}
