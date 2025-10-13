@@ -1,0 +1,223 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
+
+import {DataTypes} from "./DataTypes.sol";
+import {AppStorage} from "../core/YoloHookStorage.sol";
+import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
+import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
+import {IACLManager} from "../interfaces/IACLManager.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
+/**
+ * @title SyntheticAssetModule
+ * @author alvin@yolo.wtf
+ * @notice Library for creating and managing synthetic assets in YOLO Protocol V1
+ * @dev Externally linked library following Aave-style architecture
+ *      Uses UUPS proxy pattern for all synthetic asset deployments
+ *      Implementation address passed as parameter (not stored)
+ */
+library SyntheticAssetModule {
+    // ============================================================
+    // EVENTS
+    // ============================================================
+
+    /**
+     * @notice Emitted when a new synthetic asset is created
+     * @param syntheticToken Address of the deployed synthetic token (proxy)
+     * @param underlyingAsset Reference asset for price feed
+     * @param name Token name
+     * @param symbol Token symbol
+     * @param implementation Implementation contract used for deployment
+     */
+    event SyntheticAssetCreated(
+        address indexed syntheticToken,
+        address indexed underlyingAsset,
+        string name,
+        string symbol,
+        address implementation
+    );
+
+    /**
+     * @notice Emitted when a synthetic asset is deactivated
+     * @param syntheticToken Address of the synthetic token
+     */
+    event SyntheticAssetDeactivated(address indexed syntheticToken);
+
+    /**
+     * @notice Emitted when a synthetic asset is reactivated
+     * @param syntheticToken Address of the synthetic token
+     */
+    event SyntheticAssetReactivated(address indexed syntheticToken);
+
+    /**
+     * @notice Emitted when a synthetic asset's max supply is updated
+     * @param syntheticToken Address of the synthetic token
+     * @param newMaxSupply New maximum supply
+     */
+    event SyntheticAssetMaxSupplyUpdated(address indexed syntheticToken, uint256 newMaxSupply);
+
+    // ============================================================
+    // ERRORS
+    // ============================================================
+
+    error SyntheticAssetModule__InvalidImplementation();
+    error SyntheticAssetModule__InvalidOracle();
+    error SyntheticAssetModule__InvalidYLPVault();
+    error SyntheticAssetModule__AssetAlreadyExists();
+    error SyntheticAssetModule__AssetNotFound();
+    error SyntheticAssetModule__InvalidAddress();
+
+    // ============================================================
+    // SYNTHETIC ASSET CREATION
+    // ============================================================
+
+    /**
+     * @notice Creates a new synthetic asset with UUPS proxy
+     * @dev Deploys ERC1967Proxy wrapping the provided implementation
+     *      Implementation address passed as parameter (Aave-style)
+     *      YoloHook maintains upgrade control via _authorizeUpgrade
+     * @param s Reference to AppStorage
+     * @param aclManager ACL manager for access control
+     * @param name Token name (e.g., "Yolo Synthetic ETH")
+     * @param symbol Token symbol (e.g., "yETH")
+     * @param decimals Token decimals (typically 18)
+     * @param underlyingAsset Reference asset for price oracle
+     * @param oracleSource Price feed source for the underlying asset
+     * @param implementation YoloSyntheticAsset implementation address
+     * @param maxSupply Maximum supply cap (0 for unlimited)
+     * @return syntheticToken Address of deployed synthetic token proxy
+     */
+    function createSyntheticAsset(
+        AppStorage storage s,
+        IACLManager aclManager,
+        string calldata name,
+        string calldata symbol,
+        uint8 decimals,
+        address underlyingAsset,
+        address oracleSource,
+        address implementation,
+        uint256 maxSupply
+    ) external returns (address syntheticToken) {
+        // Validation
+        if (implementation == address(0)) revert SyntheticAssetModule__InvalidImplementation();
+        if (address(s.yoloOracle) == address(0)) revert SyntheticAssetModule__InvalidOracle();
+        if (s.ylpVault == address(0)) revert SyntheticAssetModule__InvalidYLPVault();
+
+        // Encode initializer call
+        bytes memory initData = abi.encodeWithSignature(
+            "initialize(address,address,string,string,uint8,address,address,address,uint256)",
+            address(this), // yoloHook = address of YoloHook (this contract)
+            address(aclManager),
+            name,
+            symbol,
+            decimals,
+            underlyingAsset,
+            address(s.yoloOracle),
+            s.ylpVault,
+            maxSupply
+        );
+
+        // Deploy UUPS proxy
+        syntheticToken = address(new ERC1967Proxy(implementation, initData));
+
+        // Register synthetic asset
+        s._isYoloAsset[syntheticToken] = true;
+        s._yoloAssets.push(syntheticToken);
+
+        // Store configuration
+        s._assetConfigs[syntheticToken] = DataTypes.AssetConfiguration({
+            syntheticToken: syntheticToken,
+            underlyingAsset: underlyingAsset,
+            oracleSource: oracleSource,
+            maxSupply: maxSupply,
+            isActive: true,
+            createdAt: block.timestamp
+        });
+
+        // TODO: Create Uniswap V4 synthetic pool (USY-syntheticToken)
+        // This will be implemented in the pool creation phase
+
+        emit SyntheticAssetCreated(syntheticToken, underlyingAsset, name, symbol, implementation);
+    }
+
+    // ============================================================
+    // ASSET MANAGEMENT
+    // ============================================================
+
+    /**
+     * @notice Deactivates a synthetic asset
+     * @dev Only callable by assets admin via YoloHook
+     * @param s Reference to AppStorage
+     * @param syntheticToken Address of the synthetic token
+     */
+    function deactivateSyntheticAsset(AppStorage storage s, address syntheticToken) external {
+        if (!s._isYoloAsset[syntheticToken]) revert SyntheticAssetModule__AssetNotFound();
+
+        s._assetConfigs[syntheticToken].isActive = false;
+        emit SyntheticAssetDeactivated(syntheticToken);
+    }
+
+    /**
+     * @notice Reactivates a synthetic asset
+     * @dev Only callable by assets admin via YoloHook
+     * @param s Reference to AppStorage
+     * @param syntheticToken Address of the synthetic token
+     */
+    function reactivateSyntheticAsset(AppStorage storage s, address syntheticToken) external {
+        if (!s._isYoloAsset[syntheticToken]) revert SyntheticAssetModule__AssetNotFound();
+
+        s._assetConfigs[syntheticToken].isActive = true;
+        emit SyntheticAssetReactivated(syntheticToken);
+    }
+
+    /**
+     * @notice Updates max supply for a synthetic asset
+     * @dev Only callable by assets admin via YoloHook
+     * @param s Reference to AppStorage
+     * @param syntheticToken Address of the synthetic token
+     * @param newMaxSupply New maximum supply (0 for unlimited)
+     */
+    function updateMaxSupply(AppStorage storage s, address syntheticToken, uint256 newMaxSupply) external {
+        if (!s._isYoloAsset[syntheticToken]) revert SyntheticAssetModule__AssetNotFound();
+
+        s._assetConfigs[syntheticToken].maxSupply = newMaxSupply;
+        emit SyntheticAssetMaxSupplyUpdated(syntheticToken, newMaxSupply);
+    }
+
+    // ============================================================
+    // VIEW FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Returns all created synthetic assets
+     * @param s Reference to AppStorage
+     * @return Array of synthetic asset addresses
+     */
+    function getAllSyntheticAssets(AppStorage storage s) external view returns (address[] memory) {
+        return s._yoloAssets;
+    }
+
+    /**
+     * @notice Returns configuration for a synthetic asset
+     * @param s Reference to AppStorage
+     * @param syntheticToken Address of the synthetic token
+     * @return Configuration struct
+     */
+    function getAssetConfiguration(AppStorage storage s, address syntheticToken)
+        external
+        view
+        returns (DataTypes.AssetConfiguration memory)
+    {
+        return s._assetConfigs[syntheticToken];
+    }
+
+    /**
+     * @notice Checks if address is a YOLO synthetic asset
+     * @param s Reference to AppStorage
+     * @param syntheticToken Address to check
+     * @return True if asset is a YOLO synthetic asset
+     */
+    function isYoloAsset(AppStorage storage s, address syntheticToken) external view returns (bool) {
+        return s._isYoloAsset[syntheticToken];
+    }
+}
