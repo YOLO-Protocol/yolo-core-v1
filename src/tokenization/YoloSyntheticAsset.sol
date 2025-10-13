@@ -6,6 +6,7 @@ import "./base/EIP712BaseUpgradeable.sol";
 import "../interfaces/IYoloSyntheticAsset.sol";
 import "../interfaces/IYoloOracle.sol";
 import "../interfaces/IYLPVault.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
  * @title YoloSyntheticAsset
@@ -16,7 +17,12 @@ import "../interfaces/IYLPVault.sol";
  *      Uses ceiling division for average price calculations so rounding dust
  *      benefits the protocol (users pay slightly more).
  */
-contract YoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712BaseUpgradeable, IYoloSyntheticAsset {
+contract YoloSyntheticAsset is
+    MintableIncentivizedERC20Upgradeable,
+    EIP712BaseUpgradeable,
+    UUPSUpgradeable,
+    IYoloSyntheticAsset
+{
     // Custom errors
     error YoloSyntheticAsset__InvalidOracle();
     error YoloSyntheticAsset__InvalidAddress();
@@ -360,6 +366,19 @@ contract YoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712BaseU
             _settleAndBurn(accounts[i], amounts[i]);
         }
     }
+
+    // ============================================================
+    // UPGRADE AUTHORIZATION
+    // ============================================================
+
+    /**
+     * @notice Authorizes contract upgrades
+     * @dev Only YoloHook can upgrade synthetic assets it created
+     *      This follows the Aave pattern where the main protocol contract
+     *      maintains upgrade control over all deployed tokens
+     * @param newImplementation Address of the new implementation contract
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyYoloHook {}
 
     /**
      * @dev Storage gap for future upgrades
