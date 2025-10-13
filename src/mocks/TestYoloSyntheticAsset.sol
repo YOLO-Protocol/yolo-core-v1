@@ -14,7 +14,6 @@ import "../interfaces/IYLPVault.sol";
  * @dev Duplicates YoloSyntheticAsset logic but without _disableInitializers() for testing
  */
 contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712BaseUpgradeable, IYoloSyntheticAsset {
-
     // Custom errors
     error YoloSyntheticAsset__InvalidOracle();
     error YoloSyntheticAsset__InvalidAddress();

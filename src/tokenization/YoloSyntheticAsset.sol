@@ -17,7 +17,6 @@ import "../interfaces/IYLPVault.sol";
  *      benefits the protocol (users pay slightly more).
  */
 contract YoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712BaseUpgradeable, IYoloSyntheticAsset {
-
     // Custom errors
     error YoloSyntheticAsset__InvalidOracle();
     error YoloSyntheticAsset__InvalidAddress();
