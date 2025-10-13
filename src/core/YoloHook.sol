@@ -7,7 +7,14 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IACLManager} from "../interfaces/IACLManager.sol";
+import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
+import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
+import {YoloHookStorage, AppStorage} from "./YoloHookStorage.sol";
+import {DataTypes} from "../libraries/DataTypes.sol";
+import {SyntheticAssetModule} from "../libraries/SyntheticAssetModule.sol";
+import {LendingPairModule} from "../libraries/LendingPairModule.sol";
 
 /**
  * @title YoloHook
@@ -18,10 +25,17 @@ import {IACLManager} from "../interfaces/IACLManager.sol";
  *      - All hook permissions enabled for maximum flexibility
  *      - ACL-based access control (no Ownable/Pausable inheritance)
  *      - Reentrancy protection for external calls
- *      - Foundation for externally linked library modules (Aave-style)
+ *      - Externally linked library modules (Aave-style) for gas efficiency
+ *      - UUPS upgradeability with admin-only authorization
  *      - Handles both anchor pool (USY-USDC Curve) and synthetic pools (oracle-based)
  */
-contract YoloHook is BaseHook, ReentrancyGuard, Initializable {
+contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable {
+    // ========================
+    // LIBRARY USAGE
+    // ========================
+
+    using SyntheticAssetModule for AppStorage;
+    using LendingPairModule for AppStorage;
     // ========================
     // CONSTANTS
     // ========================
@@ -43,13 +57,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, Initializable {
     /// @dev Immutable is proxy-safe (stored in bytecode, not storage)
     IACLManager public immutable ACL_MANAGER;
 
-    // ========================
-    // STATE VARIABLES
-    // ========================
-
-    /// @notice Protocol pause state
-    /// @dev Initialized via initialize() function, not constructor (proxy-safe)
-    bool private _paused;
+    // Note: State variables moved to YoloHookStorage for upgradeability
 
     // ========================
     // EVENTS
@@ -57,6 +65,9 @@ contract YoloHook is BaseHook, ReentrancyGuard, Initializable {
 
     event Paused(address indexed account);
     event Unpaused(address indexed account);
+    event OracleUpdated(address indexed newOracle);
+    event YLPVaultUpdated(address indexed newVault);
+    event SyntheticAssetUpgraded(address indexed syntheticAsset, address indexed newImplementation);
 
     // ========================
     // ERRORS
@@ -65,6 +76,9 @@ contract YoloHook is BaseHook, ReentrancyGuard, Initializable {
     error YoloHook__CallerNotAuthorized();
     error YoloHook__ProtocolPaused();
     error YoloHook__ProtocolNotPaused();
+    error YoloHook__InvalidOracle();
+    error YoloHook__InvalidAddress();
+    error YoloHook__NotYoloAsset();
 
     // ========================
     // MODIFIERS
@@ -108,7 +122,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, Initializable {
      * @dev Used to protect user-facing functions during emergency pause
      */
     modifier whenNotPaused() {
-        if (_paused) {
+        if (s._paused) {
             revert YoloHook__ProtocolPaused();
         }
         _;
@@ -119,7 +133,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, Initializable {
      * @dev Used to ensure unpause is only called when protocol is paused
      */
     modifier whenPaused() {
-        if (!_paused) {
+        if (!s._paused) {
             revert YoloHook__ProtocolNotPaused();
         }
         _;
@@ -150,12 +164,22 @@ contract YoloHook is BaseHook, ReentrancyGuard, Initializable {
 
     /**
      * @notice Initialize storage variables for proxy deployment
+     * @param _yoloOracle Oracle module for price feeds (swappable)
+     * @param _usy USY stablecoin address
+     * @param _ylpVault YLP vault address for P&L settlement
      * @dev Can only be called once due to initializer modifier
      *      Must be called immediately after proxy deployment
      *      Protocol starts in unpaused state
      */
-    function initialize() external initializer {
-        _paused = false;
+    function initialize(IYoloOracle _yoloOracle, address _usy, address _ylpVault) external initializer {
+        if (address(_yoloOracle) == address(0)) revert YoloHook__InvalidOracle();
+        if (_usy == address(0)) revert YoloHook__InvalidAddress();
+        if (_ylpVault == address(0)) revert YoloHook__InvalidAddress();
+
+        s.yoloOracle = _yoloOracle;
+        s.usy = _usy;
+        s.ylpVault = _ylpVault;
+        s._paused = false;
     }
 
     // ========================
@@ -196,7 +220,31 @@ contract YoloHook is BaseHook, ReentrancyGuard, Initializable {
      * @return True if protocol is paused, false otherwise
      */
     function paused() public view returns (bool) {
-        return _paused;
+        return s._paused;
+    }
+
+    /**
+     * @notice Returns the oracle module address
+     * @return Oracle module address
+     */
+    function yoloOracle() external view returns (IYoloOracle) {
+        return s.yoloOracle;
+    }
+
+    /**
+     * @notice Returns the USY stablecoin address
+     * @return USY stablecoin address
+     */
+    function usy() external view returns (address) {
+        return s.usy;
+    }
+
+    /**
+     * @notice Returns the YLP vault address
+     * @return YLP vault address
+     */
+    function ylpVault() external view returns (address) {
+        return s.ylpVault;
     }
 
     // ========================
@@ -209,7 +257,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, Initializable {
      *      Prevents execution of user-facing functions while allowing admin operations
      */
     function pause() external onlyPauser whenNotPaused {
-        _paused = true;
+        s._paused = true;
         emit Paused(msg.sender);
     }
 
@@ -219,7 +267,226 @@ contract YoloHook is BaseHook, ReentrancyGuard, Initializable {
      *      Resumes normal protocol operations after emergency pause
      */
     function unpause() external onlyPauser whenPaused {
-        _paused = false;
+        s._paused = false;
         emit Unpaused(msg.sender);
     }
+
+    // ============================================================
+    // SYNTHETIC ASSET MANAGEMENT
+    // ============================================================
+
+    /**
+     * @notice Creates a new synthetic asset with UUPS proxy
+     * @dev Only callable by assets admin
+     *      Implementation address passed as parameter (Aave-style)
+     *      YoloHook maintains upgrade control via _authorizeUpgrade
+     * @param name Token name (e.g., "Yolo Synthetic ETH")
+     * @param symbol Token symbol (e.g., "yETH")
+     * @param decimals Token decimals (typically 18)
+     * @param underlyingAsset Reference asset for price oracle
+     * @param oracleSource Price feed source for the underlying asset
+     * @param implementation YoloSyntheticAsset implementation address
+     * @param maxSupply Maximum supply cap (0 for unlimited)
+     * @return syntheticToken Address of deployed synthetic token proxy
+     */
+    function createSyntheticAsset(
+        string calldata name,
+        string calldata symbol,
+        uint8 decimals,
+        address underlyingAsset,
+        address oracleSource,
+        address implementation,
+        uint256 maxSupply
+    ) external onlyAssetsAdmin returns (address syntheticToken) {
+        return s.createSyntheticAsset(
+            ACL_MANAGER, name, symbol, decimals, underlyingAsset, oracleSource, implementation, maxSupply
+        );
+    }
+
+    /**
+     * @notice Upgrades a synthetic asset implementation
+     * @dev Only callable by default admin (via UUPS authorization)
+     *      YoloHook holds upgrade power over all synthetic assets it created
+     * @param syntheticAsset Address of the synthetic asset to upgrade
+     * @param newImplementation Address of the new implementation
+     */
+    function upgradeSyntheticAsset(address syntheticAsset, address newImplementation)
+        external
+        onlyAssetsAdmin
+        nonReentrant
+    {
+        if (!s._isYoloAsset[syntheticAsset]) revert YoloHook__NotYoloAsset();
+        if (newImplementation == address(0)) revert YoloHook__InvalidAddress();
+
+        UUPSUpgradeable(syntheticAsset).upgradeToAndCall(newImplementation, "");
+        emit SyntheticAssetUpgraded(syntheticAsset, newImplementation);
+    }
+
+    /**
+     * @notice Deactivates a synthetic asset
+     * @dev Only callable by assets admin
+     * @param syntheticToken Address of the synthetic token
+     */
+    function deactivateSyntheticAsset(address syntheticToken) external onlyAssetsAdmin {
+        s.deactivateSyntheticAsset(syntheticToken);
+    }
+
+    /**
+     * @notice Reactivates a synthetic asset
+     * @dev Only callable by assets admin
+     * @param syntheticToken Address of the synthetic token
+     */
+    function reactivateSyntheticAsset(address syntheticToken) external onlyAssetsAdmin {
+        s.reactivateSyntheticAsset(syntheticToken);
+    }
+
+    // ============================================================
+    // LENDING PAIR CONFIGURATION
+    // ============================================================
+
+    /**
+     * @notice Configures a new lending pair
+     * @dev Only callable by assets admin
+     *      Deposit/debt tokens are OPTIONAL (pass address(0) to skip)
+     * @param syntheticAsset The synthetic asset being borrowed
+     * @param collateralAsset The collateral asset
+     * @param depositToken Optional receipt token for deposits (can be address(0))
+     * @param debtToken Optional debt tracking token (can be address(0))
+     * @param ltv Loan-to-Value ratio in basis points
+     * @param liquidationThreshold Liquidation threshold in basis points
+     * @param liquidationBonus Liquidation bonus in basis points
+     * @param borrowRate Annual borrow rate in basis points
+     * @return pairId Unique identifier for the pair
+     */
+    function configureLendingPair(
+        address syntheticAsset,
+        address collateralAsset,
+        address depositToken,
+        address debtToken,
+        uint256 ltv,
+        uint256 liquidationThreshold,
+        uint256 liquidationBonus,
+        uint256 borrowRate
+    ) external onlyAssetsAdmin returns (bytes32 pairId) {
+        return s.configureLendingPair(
+            syntheticAsset,
+            collateralAsset,
+            depositToken,
+            debtToken,
+            ltv,
+            liquidationThreshold,
+            liquidationBonus,
+            borrowRate
+        );
+    }
+
+    /**
+     * @notice Whitelists a collateral asset
+     * @dev Only callable by assets admin
+     * @param collateralAsset Address of collateral to whitelist
+     */
+    function whitelistCollateral(address collateralAsset) external onlyAssetsAdmin {
+        s.whitelistCollateral(collateralAsset);
+    }
+
+    /**
+     * @notice Updates risk parameters for a lending pair
+     * @dev Only callable by risk admin
+     * @param pairId Unique identifier for the pair
+     * @param ltv New Loan-to-Value ratio
+     * @param liquidationThreshold New liquidation threshold
+     * @param liquidationBonus New liquidation bonus
+     */
+    function updateRiskParameters(bytes32 pairId, uint256 ltv, uint256 liquidationThreshold, uint256 liquidationBonus)
+        external
+        onlyRiskAdmin
+    {
+        s.updateRiskParameters(pairId, ltv, liquidationThreshold, liquidationBonus);
+    }
+
+    // ============================================================
+    // PROTOCOL CONFIGURATION
+    // ============================================================
+
+    /**
+     * @notice Updates the oracle module
+     * @dev Only callable by risk admin (oracle is swappable)
+     * @param _yoloOracle New oracle address
+     */
+    function updateOracle(IYoloOracle _yoloOracle) external onlyRiskAdmin {
+        if (address(_yoloOracle) == address(0)) revert YoloHook__InvalidOracle();
+        s.yoloOracle = _yoloOracle;
+        emit OracleUpdated(address(_yoloOracle));
+    }
+
+    /**
+     * @notice Updates the YLP vault
+     * @dev Only callable by assets admin
+     * @param _ylpVault New YLP vault address
+     */
+    function updateYLPVault(address _ylpVault) external onlyAssetsAdmin {
+        if (_ylpVault == address(0)) revert YoloHook__InvalidAddress();
+        s.ylpVault = _ylpVault;
+        emit YLPVaultUpdated(_ylpVault);
+    }
+
+    // ============================================================
+    // VIEW FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Returns all created synthetic assets
+     * @return Array of synthetic asset addresses
+     */
+    function getAllSyntheticAssets() external view returns (address[] memory) {
+        return s._yoloAssets;
+    }
+
+    /**
+     * @notice Returns configuration for a synthetic asset
+     * @param syntheticToken Address of the synthetic token
+     * @return Configuration struct
+     */
+    function getAssetConfiguration(address syntheticToken)
+        external
+        view
+        returns (DataTypes.AssetConfiguration memory)
+    {
+        return s._assetConfigs[syntheticToken];
+    }
+
+    /**
+     * @notice Returns configuration for a lending pair
+     * @param syntheticAsset The synthetic asset
+     * @param collateralAsset The collateral asset
+     * @return Configuration struct
+     */
+    function getPairConfiguration(address syntheticAsset, address collateralAsset)
+        external
+        view
+        returns (DataTypes.PairConfiguration memory)
+    {
+        bytes32 pairId = keccak256(abi.encodePacked(syntheticAsset, collateralAsset));
+        return s._pairConfigs[pairId];
+    }
+
+    /**
+     * @notice Checks if address is a YOLO synthetic asset
+     * @param syntheticToken Address to check
+     * @return True if asset is a YOLO synthetic asset
+     */
+    function isYoloAsset(address syntheticToken) external view returns (bool) {
+        return s._isYoloAsset[syntheticToken];
+    }
+
+    // ============================================================
+    // UPGRADE AUTHORIZATION
+    // ============================================================
+
+    /**
+     * @notice Authorizes contract upgrades
+     * @dev Only default admin can upgrade YoloHook
+     * @param newImplementation Address of the new implementation contract
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyAssetsAdmin {}
 }
