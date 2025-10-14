@@ -34,6 +34,9 @@ struct AppStorage {
     address ylpVault;
     /// @notice USDC decimals (chain-dependent - can be 6 or 18)
     uint8 usdcDecimals;
+    /// @notice Scale factor to convert USDC to 18 decimals: 10^(18-usdcDecimals)
+    /// @dev Mirrors V0.5 USDC_SCALE_UP pattern for consistent decimal handling
+    uint256 usdcScaleUp;
     /// @notice Pause state (managed via ACLManager PAUSER_ROLE)
     bool _paused;
     // ============================================================
@@ -84,6 +87,19 @@ struct AppStorage {
     /// @notice Anchor pool reserves for Curve math
     uint256 totalAnchorReserveUSY;
     uint256 totalAnchorReserveUSDC;
+    /// @notice Pending rehypothecation/dehypothecation amounts (v0.5 pattern)
+    uint256 _pendingRehypoUSDC;
+    uint256 _pendingDehypoUSDC;
+    // ============================================================
+    // SWAP CONFIGURATION
+    // ============================================================
+
+    /// @notice Anchor pool amplification coefficient (A parameter for Curve StableSwap)
+    uint256 anchorAmplificationCoefficient;
+    /// @notice Anchor pool swap fee in basis points (0-10000, e.g., 4 = 0.04%)
+    uint256 anchorSwapFeeBps;
+    /// @notice Synthetic pool swap fee in basis points (0-10000)
+    uint256 syntheticSwapFeeBps;
 }
 
 /**
@@ -119,6 +135,12 @@ abstract contract YoloHookStorage {
     error ImbalancedDeposit();
     error DirectPoolManagerLiquidityNotAllowed(); // modifyLiquidity must use YoloHook functions
 
+    // Swap errors
+    error InsufficientLiquidityForSwap();
+    error InvalidSwapAmount();
+    error SyntheticSwapNotImplemented();
+    error UnknownPool();
+
     // ============================================================
     // EVENTS
     // ============================================================
@@ -151,5 +173,25 @@ abstract contract YoloHookStorage {
      */
     event LiquidityRemoved(
         address indexed sender, address indexed receiver, uint256 sUSYBurned, uint256 usyAmount, uint256 usdcAmount
+    );
+
+    /**
+     * @notice Emitted when a swap occurs in the anchor pool
+     * @param poolId Pool identifier
+     * @param sender Address initiating the swap
+     * @param amount0Delta Delta for token0 (negative = to pool, positive = from pool)
+     * @param amount1Delta Delta for token1 (negative = to pool, positive = from pool)
+     * @param reserveUSY Updated USY reserve after swap
+     * @param reserveUSDC Updated USDC reserve after swap
+     * @param feeAmount Fee collected in output token (native decimals)
+     */
+    event AnchorSwap(
+        bytes32 indexed poolId,
+        address indexed sender,
+        int128 amount0Delta,
+        int128 amount1Delta,
+        uint256 reserveUSY,
+        uint256 reserveUSDC,
+        uint256 feeAmount
     );
 }
