@@ -90,12 +90,15 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         deployCodeTo("YoloHook.sol:YoloHook", abi.encode(address(manager), address(aclManager)), hookImplAddress);
 
         bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,address,address,address)",
+            "initialize(address,address,address,address,address,uint256,uint256,uint256)",
             address(oracle),
             address(usdc),
             address(usyImpl),
             address(sUSYImpl),
-            address(ylpVault)
+            address(ylpVault),
+            100, // anchorAmplificationCoefficient (A=100 for stablecoins)
+            10, // anchorSwapFeeBps (0.1% = 10 bps)
+            10 // syntheticSwapFeeBps (0.1% = 10 bps)
         );
 
         deployCodeTo("ERC1967Proxy.sol:ERC1967Proxy", abi.encode(hookImplAddress, initData), hookProxyAddress);
