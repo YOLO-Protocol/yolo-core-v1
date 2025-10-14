@@ -26,8 +26,14 @@ struct AppStorage {
     IYoloOracle yoloOracle;
     /// @notice USY stablecoin address
     address usy;
+    /// @notice USDC stablecoin address (chain-dependent: 6 or 18 decimals)
+    address usdc;
+    /// @notice sUSY LP receipt token address
+    address sUSY;
     /// @notice YLP vault address for P&L settlement
     address ylpVault;
+    /// @notice USDC decimals (chain-dependent - can be 6 or 18)
+    uint8 usdcDecimals;
     /// @notice Pause state (managed via ACLManager PAUSER_ROLE)
     bool _paused;
     // ============================================================
@@ -89,4 +95,61 @@ abstract contract YoloHookStorage {
     /// @notice Single storage variable using AppStorage pattern
     /// @dev All protocol state accessed through this struct
     AppStorage internal s;
+
+    // ============================================================
+    // CONSTANTS
+    // ============================================================
+
+    /// @notice Minimum liquidity locked on first deposit to prevent zero-supply attacks
+    uint256 public constant MINIMUM_LIQUIDITY = 1000;
+
+    // ============================================================
+    // ERRORS
+    // ============================================================
+
+    // Liquidity errors
+    error InvalidAmount();
+    error InvalidAddress();
+    error sUSYNotInitialized();
+    error InsufficientBalance();
+    error InsufficientBootstrapLiquidity();
+    error InsufficientLiquidityMinted();
+    error InsufficientLiquidity();
+    error InsufficientOutput();
+    error ImbalancedDeposit();
+    error DirectPoolManagerLiquidityNotAllowed(); // modifyLiquidity must use YoloHook functions
+
+    // ============================================================
+    // EVENTS
+    // ============================================================
+
+    /**
+     * @notice Emitted when liquidity is added to anchor pool
+     * @param sender Address initiating the add
+     * @param receiver Address receiving sUSY tokens
+     * @param usyAmount USY deposited (18 decimals)
+     * @param usdcAmount USDC deposited (native decimals)
+     * @param sUSYMinted sUSY tokens minted (18 decimals)
+     * @param isBootstrap Whether this was the first liquidity
+     */
+    event LiquidityAdded(
+        address indexed sender,
+        address indexed receiver,
+        uint256 usyAmount,
+        uint256 usdcAmount,
+        uint256 sUSYMinted,
+        bool isBootstrap
+    );
+
+    /**
+     * @notice Emitted when liquidity is removed from anchor pool
+     * @param sender Address initiating the removal (sUSY burner)
+     * @param receiver Address receiving USY + USDC
+     * @param sUSYBurned sUSY tokens burned (18 decimals)
+     * @param usyAmount USY received (18 decimals)
+     * @param usdcAmount USDC received (native decimals)
+     */
+    event LiquidityRemoved(
+        address indexed sender, address indexed receiver, uint256 sUSYBurned, uint256 usyAmount, uint256 usdcAmount
+    );
 }
