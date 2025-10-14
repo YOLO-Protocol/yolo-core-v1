@@ -20,7 +20,7 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 /**
  * @title TestAction03_AnchorPoolSwaps
- * @notice Comprehensive test suite for USY-USDC anchor pool swaps using Curve StableSwap
+ * @notice Comprehensive test suite for USY-USDC anchor pool swaps using StableSwap
  * @dev Tests exact-input swaps, fees, reserve updates, and StableSwap properties
  */
 contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {

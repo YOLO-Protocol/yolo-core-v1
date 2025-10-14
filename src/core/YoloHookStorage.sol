@@ -80,11 +80,11 @@ struct AppStorage {
 
     /// @notice Registry of created Uniswap V4 pools (both anchor and synthetic)
     mapping(bytes32 => DataTypes.PoolConfiguration) _poolConfigs;
-    /// @notice Anchor pool key (USY-USDC Curve StableSwap)
+    /// @notice Anchor pool key (USY-USDC StableSwap)
     bytes32 _anchorPoolKey;
     /// @notice Mapping from synthetic asset to its pool ID
     mapping(address => bytes32) _syntheticAssetToPool;
-    /// @notice Anchor pool reserves for Curve math
+    /// @notice Anchor pool reserves for StableSwap math
     uint256 totalAnchorReserveUSY;
     uint256 totalAnchorReserveUSDC;
     /// @notice Pending rehypothecation/dehypothecation amounts (v0.5 pattern)
@@ -94,7 +94,7 @@ struct AppStorage {
     // SWAP CONFIGURATION
     // ============================================================
 
-    /// @notice Anchor pool amplification coefficient (A parameter for Curve StableSwap)
+    /// @notice Anchor pool amplification coefficient (A parameter for StableSwap)
     uint256 anchorAmplificationCoefficient;
     /// @notice Anchor pool swap fee in basis points (0-10000, e.g., 4 = 0.04%)
     uint256 anchorSwapFeeBps;

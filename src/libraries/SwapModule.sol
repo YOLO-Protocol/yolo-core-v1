@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {AppStorage} from "../core/YoloHookStorage.sol";
-import {CurveMath} from "./CurveMath.sol";
+import {StableMath} from "./StableMath.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
@@ -12,7 +12,7 @@ import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
  * @author alvin@yolo.wtf
  * @notice Library for anchor pool swap logic (USY-USDC StableSwap)
  * @dev Handles delta calculations for beforeSwap and reserve updates for afterSwap
- *      Uses CurveMath for StableSwap invariant calculations
+ *      Uses StableMath for StableSwap invariant calculations
  */
 library SwapModule {
     // ============================================================
@@ -83,7 +83,7 @@ library SwapModule {
         uint256 netIn18 = grossIn18 - fee18;
 
         // Scale reserves to 18 decimals and calculate output with NET input (V0.5 pattern: line 972)
-        uint256 amountOut18 = CurveMath.calculateSwapOutput(
+        uint256 amountOut18 = StableMath.calculateSwapOutput(
             netIn18, // NET input in 18 decimals (after fee deduction)
             rIn * sIn, // reserve in, scaled to 18 decimals
             rOut * sOut, // reserve out, scaled to 18 decimals

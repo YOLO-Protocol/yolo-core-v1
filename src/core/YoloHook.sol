@@ -43,7 +43,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
  *      - Reentrancy protection for external calls
  *      - Externally linked library modules (Aave-style) for gas efficiency
  *      - UUPS upgradeability with admin-only authorization
- *      - Handles both anchor pool (USY-USDC Curve) and synthetic pools (oracle-based)
+ *      - Handles both anchor pool (USY-USDC StableSwap) and synthetic pools (oracle-based)
  */
 contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable {
     // ========================
@@ -309,7 +309,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     /**
      * @notice Returns the permissions for this hook
      * @dev Enable all hook permissions for future upgradability and module integration
-     *      - beforeSwap/afterSwap: Anchor pool (Curve) + Synthetic pool (oracle) swap logic
+     *      - beforeSwap/afterSwap: Anchor pool (StableSwap) + Synthetic pool (oracle) swap logic
      *      - beforeSwapReturnDelta: Override default pool math with custom calculations
      *      - beforeInitialize/afterInitialize: Pool setup and validation
      *      - Liquidity hooks: Anchor pool LP management (sUSY minting)

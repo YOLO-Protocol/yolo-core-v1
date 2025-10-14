@@ -2,9 +2,9 @@
 pragma solidity ^0.8.26;
 
 /**
- * @title CurveMath
+ * @title StableMath
  * @author alvin@yolo.wtf
- * @notice Library for Curve StableSwap invariant calculations
+ * @notice Library for StableSwap invariant calculations
  * @dev Implements Newton's method for solving the StableSwap invariant
  *      Used for USY-USDC anchor pool with low-slippage swaps
  *
@@ -17,7 +17,7 @@ pragma solidity ^0.8.26;
  *   D = invariant (constant sum in amplified proportion)
  *   x_i = balance of coin i
  */
-library CurveMath {
+library StableMath {
     // ============================================================
     // CONSTANTS
     // ============================================================
@@ -41,9 +41,9 @@ library CurveMath {
     // ERRORS
     // ============================================================
 
-    error CurveMath__ConvergenceFailure();
-    error CurveMath__InvalidReserves();
-    error CurveMath__InvalidAmount();
+    error StableMath__ConvergenceFailure();
+    error StableMath__InvalidReserves();
+    error StableMath__InvalidAmount();
 
     // ============================================================
     // D INVARIANT CALCULATION
@@ -58,7 +58,7 @@ library CurveMath {
      */
     function getD(uint256[2] memory xp, uint256 A) internal pure returns (uint256) {
         // Validation
-        if (xp[0] == 0 || xp[1] == 0) revert CurveMath__InvalidReserves();
+        if (xp[0] == 0 || xp[1] == 0) revert StableMath__InvalidReserves();
 
         uint256 S = xp[0] + xp[1]; // Sum of balances
         if (S == 0) return 0;
@@ -97,7 +97,7 @@ library CurveMath {
         }
 
         // Sanity check - D should be close to S for balanced pools
-        if (D == 0) revert CurveMath__ConvergenceFailure();
+        if (D == 0) revert StableMath__ConvergenceFailure();
 
         return D;
     }
@@ -116,8 +116,8 @@ library CurveMath {
      */
     function getY(uint256 x, uint256 D, uint256 A) internal pure returns (uint256) {
         // Validation
-        if (x == 0) revert CurveMath__InvalidAmount();
-        if (D == 0) revert CurveMath__InvalidReserves();
+        if (x == 0) revert StableMath__InvalidAmount();
+        if (D == 0) revert StableMath__InvalidReserves();
 
         // Ann = A * n^n
         uint256 Ann = A * N_COINS * N_COINS / A_PRECISION;
@@ -153,7 +153,7 @@ library CurveMath {
             }
         }
 
-        if (y == 0) revert CurveMath__ConvergenceFailure();
+        if (y == 0) revert StableMath__ConvergenceFailure();
 
         return y;
     }
@@ -176,8 +176,8 @@ library CurveMath {
         pure
         returns (uint256 amountOut)
     {
-        if (amountIn == 0) revert CurveMath__InvalidAmount();
-        if (reserveIn == 0 || reserveOut == 0) revert CurveMath__InvalidReserves();
+        if (amountIn == 0) revert StableMath__InvalidAmount();
+        if (reserveIn == 0 || reserveOut == 0) revert StableMath__InvalidReserves();
 
         // 1. Calculate current D invariant
         uint256[2] memory xp;
@@ -192,7 +192,7 @@ library CurveMath {
         uint256 newReserveOut = getY(newReserveIn, D, A);
 
         // 4. Calculate output amount (difference in reserves)
-        if (newReserveOut >= reserveOut) revert CurveMath__InvalidAmount();
+        if (newReserveOut >= reserveOut) revert StableMath__InvalidAmount();
         amountOut = reserveOut - newReserveOut;
 
         return amountOut;
