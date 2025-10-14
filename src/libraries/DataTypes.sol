@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 
 /**
  * @title DataTypes
@@ -82,23 +83,24 @@ library DataTypes {
     }
 
     // ============================================================
-    // POOL CONFIGURATION (For Future Implementation)
+    // POOL CONFIGURATION
     // ============================================================
 
     /**
-     * @notice Configuration for Uniswap V4 pools
-     * @dev Placeholder for future pool creation implementation
-     * @param poolKey The Uniswap V4 pool key
-     * @param isAnchorPool True for USY-USDC anchor pool, false for synthetic pools
-     * @param amplificationParameter For anchor pool Curve math (A parameter)
-     * @param swapFee Swap fee in basis points
-     * @param isActive Whether the pool is active
+     * @notice Configuration for Uniswap V4 pools (both anchor and synthetic)
+     * @param poolKey The full Uniswap V4 pool key (contains currencies, fee, tickSpacing, hooks)
+     * @param isAnchorPool True for USY-USDC anchor pool (Curve StableSwap)
+     * @param isSyntheticPool True for USY-yAsset synthetic pools (oracle-based)
+     * @param token0 Address of token0 (for convenience)
+     * @param token1 Address of token1 (for convenience)
+     * @param createdAt Timestamp when pool was created
      */
     struct PoolConfiguration {
-        bytes32 poolKey;
+        PoolKey poolKey;
         bool isAnchorPool;
-        uint256 amplificationParameter;
-        uint256 swapFee;
-        bool isActive;
+        bool isSyntheticPool;
+        address token0;
+        address token1;
+        uint256 createdAt;
     }
 }
