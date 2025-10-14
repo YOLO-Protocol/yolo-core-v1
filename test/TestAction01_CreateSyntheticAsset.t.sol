@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "forge-std/Test.sol";
+import {Base01_DeployUniswapV4Pool} from "./base/Base01_DeployUniswapV4Pool.t.sol";
 import {YoloHook} from "../src/core/YoloHook.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
 import {ACLManager} from "../src/access/ACLManager.sol";
@@ -10,16 +10,18 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IYoloOracle} from "../src/interfaces/IYoloOracle.sol";
 import {DataTypes} from "../src/libraries/DataTypes.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
+import {MockYoloOracle} from "../src/mocks/MockYoloOracle.sol";
+import {MockYLPVault} from "../src/mocks/MockYLPVault.sol";
 
 /**
  * @title TestAction01_CreateSyntheticAsset
  * @notice Comprehensive test suite for synthetic asset creation and pairing
  * @dev Tests YoloHook's asset creation, management, and lending pair configuration
  *      Uses deployCodeTo to deploy YoloHook at valid hook address matching Uniswap V4 requirements
+ *      Inherits from Base01_DeployUniswapV4Pool to get real PoolManager deployment
  */
-contract TestAction01_CreateSyntheticAsset is Test {
+contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
     // ============================================================
     // CONTRACTS
     // ============================================================
@@ -27,7 +29,7 @@ contract TestAction01_CreateSyntheticAsset is Test {
     YoloHook public yoloHookImpl;
     YoloHook public yoloHook;
     ACLManager public aclManager;
-    MockPoolManager public poolManager;
+    // PoolManager inherited from Base01_DeployUniswapV4Pool
     MockYoloOracle public oracle;
     MockYLPVault public ylpVault;
     YoloSyntheticAsset public syntheticAssetImpl;
@@ -51,20 +53,23 @@ contract TestAction01_CreateSyntheticAsset is Test {
     MockERC20 public weth;
     MockERC20 public wbtc;
     address public usy;
+    YoloSyntheticAsset public usyImpl;
 
     // ============================================================
     // SETUP
     // ============================================================
 
-    function setUp() public {
-        // Deploy mock infrastructure
-        poolManager = new MockPoolManager();
+    function setUp() public override {
+        // Call parent setUp to deploy real PoolManager
+
+        super.setUp();
+
+        // Deploy mock infrastructure (PoolManager comes from base)
         oracle = new MockYoloOracle();
         ylpVault = new MockYLPVault();
         usdc = new MockERC20("USD Coin", "USDC", 6);
         weth = new MockERC20("Wrapped Ether", "WETH", 18);
         wbtc = new MockERC20("Wrapped Bitcoin", "WBTC", 8);
-        usy = makeAddr("USY"); // Placeholder for stablecoin
 
         // Deploy ACL Manager (test contract becomes DEFAULT_ADMIN)
         aclManager = new ACLManager(admin);
@@ -77,29 +82,43 @@ contract TestAction01_CreateSyntheticAsset is Test {
         aclManager.grantRole(keccak256("RISK_ADMIN"), riskAdmin);
         aclManager.grantRole(keccak256("PAUSER"), pauser);
 
+        // Deploy USY implementation
+        usyImpl = new YoloSyntheticAsset();
+
         // Precompute valid hook addresses following Uniswap V4 requirements
         // Hook implementation: all permission bits must be set
         address hookImplAddress = address(uint160(Hooks.ALL_HOOK_MASK));
         // Hook proxy: shifted pattern (ALL_HOOK_MASK << 1) + 1
         address hookProxyAddress = address(uint160(Hooks.ALL_HOOK_MASK << 1) + 1);
 
-        // Deploy YoloHook implementation at computed address using deployCodeTo
+        // Deploy YoloHook implementation at specific address using deployCodeTo (V0.5 pattern)
+        // Use the real PoolManager from base contract
         deployCodeTo(
-            "YoloHook.sol",
-            abi.encode(IPoolManager(address(poolManager)), IACLManager(address(aclManager))),
+            "YoloHook.sol:YoloHook",
+            abi.encode(address(manager), address(aclManager)), // manager from Base01_DeployUniswapV4Pool
             hookImplAddress
         );
         yoloHookImpl = YoloHook(hookImplAddress);
 
-        // Deploy ERC1967Proxy at computed proxy address
-        bytes memory initData =
-            abi.encodeWithSignature("initialize(address,address,address)", address(oracle), usy, address(ylpVault));
-        deployCodeTo("ERC1967Proxy.sol", abi.encode(hookImplAddress, initData), hookProxyAddress);
+        // Deploy ERC1967Proxy (UUPS) at specific address using deployCodeTo
+        // Pass initialize calldata in constructor to avoid admin restrictions
+        bytes memory initData = abi.encodeWithSignature(
+            "initialize(address,address,address,address)",
+            address(oracle),
+            address(usdc),
+            address(usyImpl),
+            address(ylpVault)
+        );
+
+        deployCodeTo("ERC1967Proxy.sol:ERC1967Proxy", abi.encode(hookImplAddress, initData), hookProxyAddress);
         yoloHook = YoloHook(hookProxyAddress);
+
+        // Get USY address from YoloHook (it's deployed during initialization)
+        usy = yoloHook.usy();
 
         // Verify proxy setup
         assertEq(address(yoloHook.yoloOracle()), address(oracle), "Oracle mismatch");
-        assertEq(yoloHook.usy(), usy, "USY mismatch");
+        assertTrue(usy != address(0), "USY should be deployed");
         assertEq(yoloHook.ylpVault(), address(ylpVault), "YLP vault mismatch");
 
         // Deploy YoloSyntheticAsset implementation
@@ -188,11 +207,12 @@ contract TestAction01_CreateSyntheticAsset is Test {
         assertTrue(yoloHook.isYoloAsset(yETH), "yETH should be registered");
         assertTrue(yoloHook.isYoloAsset(yBTC), "yBTC should be registered");
 
-        // Verify getAllSyntheticAssets
+        // Verify getAllSyntheticAssets (includes USY created during initialization)
         address[] memory assets = yoloHook.getAllSyntheticAssets();
-        assertEq(assets.length, 2, "Should have 2 synthetic assets");
-        assertEq(assets[0], yETH, "First asset should be yETH");
-        assertEq(assets[1], yBTC, "Second asset should be yBTC");
+        assertEq(assets.length, 3, "Should have 3 assets (USY + yETH + yBTC)");
+        assertEq(assets[0], usy, "First asset should be USY");
+        assertEq(assets[1], yETH, "Second asset should be yETH");
+        assertEq(assets[2], yBTC, "Third asset should be yBTC");
     }
 
     // ============================================================
@@ -544,9 +564,9 @@ contract TestAction01_CreateSyntheticAsset is Test {
 
         vm.stopPrank();
 
-        // Verify all assets and pairs
+        // Verify all assets and pairs (includes USY created during initialization)
         address[] memory assets = yoloHook.getAllSyntheticAssets();
-        assertEq(assets.length, 2, "Should have 2 synthetic assets");
+        assertEq(assets.length, 3, "Should have 3 assets (USY + yETH + yBTC)");
 
         DataTypes.PairConfiguration memory config1 = yoloHook.getPairConfiguration(yETH, address(usdc));
         DataTypes.PairConfiguration memory config2 = yoloHook.getPairConfiguration(yETH, address(weth));
@@ -587,30 +607,4 @@ contract TestAction01_CreateSyntheticAsset is Test {
 
         assertFalse(yoloHook.paused(), "Protocol should be unpaused");
     }
-}
-
-// ============================================================
-// MOCK CONTRACTS
-// ============================================================
-
-contract MockYoloOracle {
-    mapping(address => uint256) public prices;
-
-    function setAssetPrice(address asset, uint256 price) external {
-        prices[asset] = price;
-    }
-
-    function getAssetPrice(address asset) external view returns (uint256) {
-        return prices[asset];
-    }
-}
-
-contract MockYLPVault {
-    function settlePnL(address user, address asset, int256 pnl) external {
-        // Mock implementation
-    }
-}
-
-contract MockPoolManager {
-// Minimal mock for IPoolManager
 }
