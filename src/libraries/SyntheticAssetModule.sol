@@ -7,6 +7,12 @@ import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
 import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
 import {IACLManager} from "../interfaces/IACLManager.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title SyntheticAssetModule
@@ -17,6 +23,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
  *      Implementation address passed as parameter (not stored)
  */
 library SyntheticAssetModule {
+    using PoolIdLibrary for PoolKey;
     // ============================================================
     // EVENTS
     // ============================================================
@@ -76,7 +83,10 @@ library SyntheticAssetModule {
      * @dev Deploys ERC1967Proxy wrapping the provided implementation
      *      Implementation address passed as parameter (Aave-style)
      *      YoloHook maintains upgrade control via _authorizeUpgrade
+     *      Automatically creates virtual synthetic pool (USY-yAsset) on PoolManager
      * @param s Reference to AppStorage
+     * @param poolManager Uniswap V4 PoolManager for pool creation
+     * @param yoloHook Address of YoloHook (used as hook address for pools)
      * @param aclManager ACL manager for access control
      * @param name Token name (e.g., "Yolo Synthetic ETH")
      * @param symbol Token symbol (e.g., "yETH")
@@ -89,6 +99,8 @@ library SyntheticAssetModule {
      */
     function createSyntheticAsset(
         AppStorage storage s,
+        IPoolManager poolManager,
+        address yoloHook,
         IACLManager aclManager,
         string calldata name,
         string calldata symbol,
@@ -134,8 +146,45 @@ library SyntheticAssetModule {
             createdAt: block.timestamp
         });
 
-        // TODO: Create Uniswap V4 synthetic pool (USY-syntheticToken)
-        // This will be implemented in the pool creation phase
+        // Register oracle source for this synthetic asset
+        address[] memory assets = new address[](1);
+        address[] memory sources = new address[](1);
+        assets[0] = syntheticToken;
+        sources[0] = oracleSource;
+        s.yoloOracle.setAssetSources(assets, sources);
+
+        // CRITICAL: Approve PoolManager for synthetic token settlement
+        IERC20(syntheticToken).approve(address(poolManager), type(uint256).max);
+
+        // Create virtual synthetic pool (USY-syntheticToken)
+        bool usyIs0 = s.usy < syntheticToken;
+        Currency currency0 = Currency.wrap(usyIs0 ? s.usy : syntheticToken);
+        Currency currency1 = Currency.wrap(usyIs0 ? syntheticToken : s.usy);
+
+        PoolKey memory syntheticPoolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: 0, // Fees handled in hook
+            tickSpacing: 1, // Tighter tick spacing for synthetic pools
+            hooks: IHooks(yoloHook)
+        });
+
+        // Initialize at 1:1 price (virtual pool, no actual liquidity)
+        poolManager.initialize(syntheticPoolKey, uint160(1) << 96);
+
+        // Store pool configuration
+        bytes32 syntheticPoolId = PoolId.unwrap(syntheticPoolKey.toId());
+        s._poolConfigs[syntheticPoolId] = DataTypes.PoolConfiguration({
+            poolKey: syntheticPoolKey,
+            isAnchorPool: false,
+            isSyntheticPool: true,
+            token0: Currency.unwrap(currency0),
+            token1: Currency.unwrap(currency1),
+            createdAt: block.timestamp
+        });
+
+        // Register synthetic asset to pool mapping
+        s._syntheticAssetToPool[syntheticToken] = syntheticPoolId;
 
         emit SyntheticAssetCreated(syntheticToken, underlyingAsset, name, symbol, implementation);
     }
