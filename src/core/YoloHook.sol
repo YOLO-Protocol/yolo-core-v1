@@ -15,6 +15,12 @@ import {YoloHookStorage, AppStorage} from "./YoloHookStorage.sol";
 import {DataTypes} from "../libraries/DataTypes.sol";
 import {SyntheticAssetModule} from "../libraries/SyntheticAssetModule.sol";
 import {LendingPairModule} from "../libraries/LendingPairModule.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /**
  * @title YoloHook
@@ -36,6 +42,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     using SyntheticAssetModule for AppStorage;
     using LendingPairModule for AppStorage;
+    using PoolIdLibrary for PoolKey;
     // ========================
     // CONSTANTS
     // ========================
@@ -164,22 +171,102 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Initialize storage variables for proxy deployment
-     * @param _yoloOracle Oracle module for price feeds (swappable)
-     * @param _usy USY stablecoin address
-     * @param _ylpVault YLP vault address for P&L settlement
+     * @param _yoloOracle Oracle module for price feeds
+     * @param _usdc USDC token address (varies by chain)
+     * @param _usyImplementation USY implementation for UUPS deployment
+     * @param _ylpVaultImplementation YLP vault implementation (placeholder for Phase 3)
      * @dev Can only be called once due to initializer modifier
-     *      Must be called immediately after proxy deployment
+     *      Deploys USY with UUPS and creates anchor pool (USY-USDC)
      *      Protocol starts in unpaused state
      */
-    function initialize(IYoloOracle _yoloOracle, address _usy, address _ylpVault) external initializer {
+    function initialize(
+        IYoloOracle _yoloOracle,
+        address _usdc,
+        address _usyImplementation,
+        address _ylpVaultImplementation
+    ) external initializer {
+        // Validation
         if (address(_yoloOracle) == address(0)) revert YoloHook__InvalidOracle();
-        if (_usy == address(0)) revert YoloHook__InvalidAddress();
-        if (_ylpVault == address(0)) revert YoloHook__InvalidAddress();
+        if (_usdc == address(0)) revert YoloHook__InvalidAddress();
+        if (_usyImplementation == address(0)) revert YoloHook__InvalidAddress();
 
+        // Store oracle
         s.yoloOracle = _yoloOracle;
-        s.usy = _usy;
-        s.ylpVault = _ylpVault;
+
+        // Deploy USY with UUPS
+        bytes memory usyInitData = abi.encodeWithSignature(
+            "initialize(address,address,string,string,uint8,address,address,address,uint256)",
+            address(this), // yoloHook
+            address(ACL_MANAGER),
+            "Yolo USD",
+            "USY",
+            uint8(18),
+            address(0), // no underlying (USY is the anchor)
+            address(_yoloOracle),
+            _ylpVaultImplementation, // ylpVault placeholder (Phase 3)
+            uint256(0) // no max supply for USY
+        );
+
+        address usyProxy = address(new ERC1967Proxy(_usyImplementation, usyInitData));
+        s.usy = usyProxy;
+
+        // Register USY as YOLO asset
+        s._isYoloAsset[usyProxy] = true;
+        s._yoloAssets.push(usyProxy);
+        s._assetConfigs[usyProxy] = DataTypes.AssetConfiguration({
+            syntheticToken: usyProxy,
+            underlyingAsset: address(0), // USY is the anchor
+            oracleSource: address(0), // Fixed $1 price
+            maxSupply: 0, // Unlimited for stablecoin
+            isActive: true,
+            createdAt: block.timestamp
+        });
+
+        // Approve PoolManager for settlement (CRITICAL)
+        IERC20(_usdc).approve(address(poolManager), type(uint256).max);
+        IERC20(usyProxy).approve(address(poolManager), type(uint256).max);
+
+        // Create anchor pool (USY-USDC) on PoolManager
+        bool usdcIs0 = _usdc < usyProxy;
+        Currency currency0 = Currency.wrap(usdcIs0 ? _usdc : usyProxy);
+        Currency currency1 = Currency.wrap(usdcIs0 ? usyProxy : _usdc);
+
+        PoolKey memory anchorPoolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: 0, // Fees handled in hook
+            tickSpacing: 60, // Standard for stableswap
+            hooks: IHooks(address(this))
+        });
+
+        // Initialize at 1:1 price (sqrtPriceX96 = 2^96)
+        poolManager.initialize(anchorPoolKey, uint160(1) << 96);
+
+        // Store anchor pool configuration
+        bytes32 anchorPoolId = PoolId.unwrap(anchorPoolKey.toId());
+        s._anchorPoolKey = anchorPoolId;
+        s._poolConfigs[anchorPoolId] = DataTypes.PoolConfiguration({
+            poolKey: anchorPoolKey,
+            isAnchorPool: true,
+            isSyntheticPool: false,
+            token0: Currency.unwrap(currency0),
+            token1: Currency.unwrap(currency1),
+            createdAt: block.timestamp
+        });
+
+        // Initialize protocol state
         s._paused = false;
+
+        // Store YLP vault placeholder (will be properly deployed in Phase 3)
+        s.ylpVault = _ylpVaultImplementation;
+
+        // TODO: Phase 3 - Deploy sUSY (LP receipt token)
+        // IStakedYoloUSD sUSY = IStakedYoloUSD(address(new ERC1967Proxy(_sUSYImplementation, sUSYInitData)));
+        // s.sUSY = address(sUSY);
+
+        // TODO: Phase 3 - Deploy YLP Vault (ERC4626) with proper proxy
+        // address ylpVault = address(new ERC1967Proxy(_ylpVaultImplementation, ylpInitData));
+        // s.ylpVault = ylpVault; // Would replace the placeholder
     }
 
     // ========================
@@ -299,7 +386,16 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         uint256 maxSupply
     ) external onlyAssetsAdmin returns (address syntheticToken) {
         return s.createSyntheticAsset(
-            ACL_MANAGER, name, symbol, decimals, underlyingAsset, oracleSource, implementation, maxSupply
+            poolManager,
+            address(this),
+            ACL_MANAGER,
+            name,
+            symbol,
+            decimals,
+            underlyingAsset,
+            oracleSource,
+            implementation,
+            maxSupply
         );
     }
 
