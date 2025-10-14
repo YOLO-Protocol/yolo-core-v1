@@ -15,9 +15,14 @@ import {YoloHookStorage, AppStorage} from "./YoloHookStorage.sol";
 import {DataTypes} from "../libraries/DataTypes.sol";
 import {SyntheticAssetModule} from "../libraries/SyntheticAssetModule.sol";
 import {LendingPairModule} from "../libraries/LendingPairModule.sol";
+import {StablecoinModule} from "../libraries/StablecoinModule.sol";
+import {DecimalNormalization} from "../libraries/DecimalNormalization.sol";
+import {StakedYoloUSD} from "../tokenization/StakedYoloUSD.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import {ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
@@ -42,6 +47,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     using SyntheticAssetModule for AppStorage;
     using LendingPairModule for AppStorage;
+    using DecimalNormalization for uint256;
     using PoolIdLibrary for PoolKey;
     // ========================
     // CONSTANTS
@@ -86,6 +92,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     error YoloHook__InvalidOracle();
     error YoloHook__InvalidAddress();
     error YoloHook__NotYoloAsset();
+    error YoloHook__ImbalancedDeposit();
 
     // ========================
     // MODIFIERS
@@ -183,15 +190,19 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         IYoloOracle _yoloOracle,
         address _usdc,
         address _usyImplementation,
+        address _sUSYImplementation,
         address _ylpVaultImplementation
     ) external initializer {
         // Validation
         if (address(_yoloOracle) == address(0)) revert YoloHook__InvalidOracle();
         if (_usdc == address(0)) revert YoloHook__InvalidAddress();
         if (_usyImplementation == address(0)) revert YoloHook__InvalidAddress();
+        if (_sUSYImplementation == address(0)) revert YoloHook__InvalidAddress();
 
-        // Store oracle
+        // Store oracle, USDC address, and USDC decimals
         s.yoloOracle = _yoloOracle;
+        s.usdc = _usdc;
+        s.usdcDecimals = IERC20Metadata(_usdc).decimals();
 
         // Deploy USY with UUPS
         bytes memory usyInitData = abi.encodeWithSignature(
@@ -254,15 +265,17 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             createdAt: block.timestamp
         });
 
+        // Deploy sUSY (LP receipt token) with UUPS
+        bytes memory sUSYInitData = abi.encodeWithSignature("initialize(address)", address(this));
+
+        address sUSYProxy = address(new ERC1967Proxy(_sUSYImplementation, sUSYInitData));
+        s.sUSY = sUSYProxy;
+
         // Initialize protocol state
         s._paused = false;
 
         // Store YLP vault placeholder (will be properly deployed in Phase 3)
         s.ylpVault = _ylpVaultImplementation;
-
-        // TODO: Phase 3 - Deploy sUSY (LP receipt token)
-        // IStakedYoloUSD sUSY = IStakedYoloUSD(address(new ERC1967Proxy(_sUSYImplementation, sUSYInitData)));
-        // s.sUSY = address(sUSY);
 
         // TODO: Phase 3 - Deploy YLP Vault (ERC4626) with proper proxy
         // address ylpVault = address(new ERC1967Proxy(_ylpVaultImplementation, ylpInitData));
@@ -566,6 +579,124 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         return s._pairConfigs[pairId];
     }
 
+    // ========================
+    // ANCHOR POOL & sUSY VIEWS
+    // ========================
+
+    /**
+     * @notice Get current anchor pool reserves (raw values)
+     * @dev USY in 18 decimals, USDC in native decimals (6 or 18 depending on chain)
+     * @return reserveUSY USY reserves (18 decimals)
+     * @return reserveUSDC USDC reserves (native decimals)
+     */
+    function getAnchorReserves() external view returns (uint256 reserveUSY, uint256 reserveUSDC) {
+        return (s.totalAnchorReserveUSY, s.totalAnchorReserveUSDC);
+    }
+
+    /**
+     * @notice Get anchor pool reserves normalized to 18 decimals
+     * @dev Both values returned in 18 decimals for consistent calculations
+     * @return reserveUSY18 USY reserves (18 decimals)
+     * @return reserveUSDC18 USDC reserves (18 decimals normalized)
+     */
+    function getAnchorReservesNormalized18() external view returns (uint256 reserveUSY18, uint256 reserveUSDC18) {
+        reserveUSY18 = s.totalAnchorReserveUSY; // Already 18 decimals
+        reserveUSDC18 = s.totalAnchorReserveUSDC.to18(s.usdcDecimals);
+    }
+
+    /**
+     * @notice Get USDC decimals (chain-dependent)
+     * @dev Retrieved during initialize() from USDC contract
+     * @return decimals USDC decimals (typically 6, but can be 18 on some chains)
+     */
+    function usdcDecimals() external view returns (uint8) {
+        return s.usdcDecimals;
+    }
+
+    /**
+     * @notice Get sUSY token address
+     * @return sUSY address
+     */
+    function sUSY() external view returns (address) {
+        return s.sUSY;
+    }
+
+    /**
+     * @notice Preview sUSY minted for adding liquidity
+     * @dev Uses min-share formula to prevent dilution
+     *      Enforces balanced deposits within 1% tolerance
+     *      Bootstrap case subtracts MINIMUM_LIQUIDITY
+     *      All inputs normalized to 18 decimals
+     * @param usyIn18 USY amount to deposit (18 decimals)
+     * @param usdcIn18 USDC amount to deposit (18 decimals normalized)
+     * @return sUSYToMint Expected sUSY tokens (18 decimals)
+     */
+    function previewAddLiquidity(uint256 usyIn18, uint256 usdcIn18) external view returns (uint256 sUSYToMint) {
+        uint256 totalSupply = IERC20(s.sUSY).totalSupply();
+
+        // Get normalized reserves
+        uint256 reserveUSY18 = s.totalAnchorReserveUSY;
+        uint256 reserveUSDC18 = s.totalAnchorReserveUSDC.to18(s.usdcDecimals);
+
+        if (totalSupply == 0) {
+            // Bootstrap: Enforce 1:1 ratio and subtract MINIMUM_LIQUIDITY
+            uint256 minAmount18 = usyIn18 < usdcIn18 ? usyIn18 : usdcIn18;
+            uint256 totalValue18 = minAmount18 + minAmount18;
+
+            if (totalValue18 <= MINIMUM_LIQUIDITY) return 0; // Would revert
+            sUSYToMint = totalValue18 - MINIMUM_LIQUIDITY;
+        } else {
+            // Calculate optimal amounts maintaining pool ratio
+            uint256 optimalUsyIn18 = (usdcIn18 * reserveUSY18) / reserveUSDC18;
+            uint256 usyToUse;
+            uint256 usdcToUse;
+
+            if (optimalUsyIn18 <= usyIn18) {
+                usdcToUse = usdcIn18;
+                usyToUse = optimalUsyIn18;
+            } else {
+                uint256 optimalUsdcIn18 = (usyIn18 * reserveUSDC18) / reserveUSY18;
+                usyToUse = usyIn18;
+                usdcToUse = optimalUsdcIn18;
+            }
+
+            // Min-share formula
+            uint256 shareUSY = (usyToUse * totalSupply) / reserveUSY18;
+            uint256 shareUSDC = (usdcToUse * totalSupply) / reserveUSDC18;
+
+            // Check balance tolerance (1% max imbalance)
+            uint256 diff = shareUSY > shareUSDC ? shareUSY - shareUSDC : shareUSDC - shareUSY;
+            uint256 maxShare = shareUSY > shareUSDC ? shareUSY : shareUSDC;
+
+            // Return 0 if imbalance > 1% (would revert)
+            if ((diff * 10000) / maxShare > 100) return 0;
+
+            // Take minimum (round down to favor pool)
+            sUSYToMint = shareUSY < shareUSDC ? shareUSY : shareUSDC;
+        }
+    }
+
+    /**
+     * @notice Preview token amounts for removing liquidity
+     * @dev Proportional redemption based on sUSY share
+     *      Rounds down to favor pool
+     *      All outputs normalized to 18 decimals
+     * @param sUSYAmount sUSY to burn
+     * @return usyOut18 USY to receive (18 decimals)
+     * @return usdcOut18 USDC to receive (18 decimals normalized)
+     */
+    function previewRemoveLiquidity(uint256 sUSYAmount) external view returns (uint256 usyOut18, uint256 usdcOut18) {
+        uint256 totalSupply = IERC20(s.sUSY).totalSupply();
+
+        // Get normalized reserves
+        uint256 reserveUSY18 = s.totalAnchorReserveUSY;
+        uint256 reserveUSDC18 = s.totalAnchorReserveUSDC.to18(s.usdcDecimals);
+
+        // Proportional redemption (round down to favor pool)
+        usyOut18 = (reserveUSY18 * sUSYAmount) / totalSupply;
+        usdcOut18 = (reserveUSDC18 * sUSYAmount) / totalSupply;
+    }
+
     /**
      * @notice Checks if address is a YOLO synthetic asset
      * @param syntheticToken Address to check
@@ -573,6 +704,191 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     function isYoloAsset(address syntheticToken) external view returns (bool) {
         return s._isYoloAsset[syntheticToken];
+    }
+
+    // ============================================================
+    // LIQUIDITY OPERATIONS (POOLMANAGER-CENTRIC)
+    // ============================================================
+
+    /**
+     * @notice Add liquidity to USY-USDC anchor pool via PoolManager
+     * @dev Routes through PoolManager.unlock() for Uniswap V4 router compatibility
+     *      Uses min-share formula with 1% imbalance tolerance
+     *      First liquidity provider locks MINIMUM_LIQUIDITY permanently
+     * @param maxUsyAmount Maximum USY to deposit (18 decimals)
+     * @param maxUsdcAmount Maximum USDC to deposit (native decimals)
+     * @param minSUSYReceive Minimum sUSY to receive (slippage protection, 18 decimals)
+     * @param receiver Address to receive sUSY LP tokens
+     * @return usyUsed Actual USY deposited (18 decimals)
+     * @return usdcUsed Actual USDC deposited (native decimals)
+     * @return sUSYMinted LP tokens minted (18 decimals)
+     */
+    function addLiquidity(uint256 maxUsyAmount, uint256 maxUsdcAmount, uint256 minSUSYReceive, address receiver)
+        external
+        whenNotPaused
+        nonReentrant
+        returns (uint256 usyUsed, uint256 usdcUsed, uint256 sUSYMinted)
+    {
+        // Validation
+        if (maxUsyAmount == 0 || maxUsdcAmount == 0) revert InvalidAmount();
+        if (receiver == address(0)) revert InvalidAddress();
+        if (s.sUSY == address(0)) revert sUSYNotInitialized();
+
+        // Encode callback data
+        bytes memory callbackData = abi.encode(
+            DataTypes.CallbackData({
+                action: DataTypes.UnlockAction.ADD_LIQUIDITY,
+                data: abi.encode(
+                    DataTypes.AddLiquidityData({
+                        sender: msg.sender,
+                        receiver: receiver,
+                        maxUsyIn: maxUsyAmount,
+                        maxUsdcIn: maxUsdcAmount,
+                        minSUSY: minSUSYReceive
+                    })
+                )
+            })
+        );
+
+        // Check if bootstrap (before unlock changes state)
+        bool isBootstrap = IERC20(s.sUSY).totalSupply() == 0;
+
+        // Route through PoolManager
+        bytes memory result = poolManager.unlock(callbackData);
+
+        // Decode result
+        (usyUsed, usdcUsed, sUSYMinted) = abi.decode(result, (uint256, uint256, uint256));
+
+        // Emit event
+        emit LiquidityAdded(msg.sender, receiver, usyUsed, usdcUsed, sUSYMinted, isBootstrap);
+    }
+
+    /**
+     * @notice Remove liquidity from USY-USDC anchor pool via PoolManager
+     * @dev Routes through PoolManager.unlock() for Uniswap V4 router compatibility
+     *      Burns sUSY and returns proportional USY + USDC
+     * @param sUSYAmount Amount of sUSY to burn (18 decimals)
+     * @param minUsyOut Minimum USY to receive (slippage protection, 18 decimals)
+     * @param minUsdcOut Minimum USDC to receive (slippage protection, native decimals)
+     * @param receiver Address to receive USY + USDC
+     * @return usyOut Actual USY received (18 decimals)
+     * @return usdcOut Actual USDC received (native decimals)
+     */
+    function removeLiquidity(uint256 sUSYAmount, uint256 minUsyOut, uint256 minUsdcOut, address receiver)
+        external
+        whenNotPaused
+        nonReentrant
+        returns (uint256 usyOut, uint256 usdcOut)
+    {
+        // Validation
+        if (sUSYAmount == 0) revert InvalidAmount();
+        if (receiver == address(0)) revert InvalidAddress();
+        if (s.sUSY == address(0)) revert sUSYNotInitialized();
+
+        StakedYoloUSD sUSYContract = StakedYoloUSD(s.sUSY);
+        if (sUSYContract.balanceOf(msg.sender) < sUSYAmount) revert InsufficientBalance();
+
+        // Encode callback data
+        bytes memory callbackData = abi.encode(
+            DataTypes.CallbackData({
+                action: DataTypes.UnlockAction.REMOVE_LIQUIDITY,
+                data: abi.encode(
+                    DataTypes.RemoveLiquidityData({
+                        sender: msg.sender,
+                        receiver: receiver,
+                        sUSYAmount: sUSYAmount,
+                        minUsyOut: minUsyOut,
+                        minUsdcOut: minUsdcOut
+                    })
+                )
+            })
+        );
+
+        // Route through PoolManager
+        bytes memory result = poolManager.unlock(callbackData);
+
+        // Decode result
+        (usyOut, usdcOut) = abi.decode(result, (uint256, uint256));
+
+        // Emit event
+        emit LiquidityRemoved(msg.sender, receiver, sUSYAmount, usyOut, usdcOut);
+    }
+
+    /**
+     * @notice PoolManager unlock callback for liquidity operations
+     * @dev Only callable by PoolManager during unlock
+     *      Routes to StablecoinModule library based on action type
+     * @param data Encoded CallbackData with action and parameters
+     * @return Encoded result data
+     */
+    function unlockCallback(bytes calldata data) external returns (bytes memory) {
+        // Only PoolManager can call
+        if (msg.sender != address(poolManager)) revert YoloHook__CallerNotAuthorized();
+
+        // Delegate to StablecoinModule library
+        return StablecoinModule.handleUnlockCallback(s, poolManager, data);
+    }
+
+    // ============================================================
+    // MODIFY LIQUIDITY HOOKS (REVERTS - USE CUSTOM FUNCTIONS)
+    // ============================================================
+
+    /**
+     * @notice Reverts PoolManager.modifyLiquidity calls
+     * @dev Users MUST use YoloHook.addLiquidity() instead of PoolManager.modifyLiquidity
+     *      This ensures proper accounting, sUSY minting, and reserve tracking
+     */
+    function _beforeAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
+        internal
+        pure
+        override
+        returns (bytes4)
+    {
+        revert DirectPoolManagerLiquidityNotAllowed();
+    }
+
+    /**
+     * @notice Reverts PoolManager.modifyLiquidity calls
+     * @dev Users MUST use YoloHook.removeLiquidity() instead of PoolManager.modifyLiquidity
+     *      This ensures proper accounting, sUSY burning, and reserve tracking
+     */
+    function _beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
+        internal
+        pure
+        override
+        returns (bytes4)
+    {
+        revert DirectPoolManagerLiquidityNotAllowed();
+    }
+
+    /**
+     * @notice Reverts afterAddLiquidity (not used)
+     * @dev All liquidity logic handled in unlock callback
+     */
+    function _afterAddLiquidity(
+        address,
+        PoolKey calldata,
+        ModifyLiquidityParams calldata,
+        BalanceDelta,
+        BalanceDelta,
+        bytes calldata
+    ) internal pure override returns (bytes4, BalanceDelta) {
+        revert DirectPoolManagerLiquidityNotAllowed();
+    }
+
+    /**
+     * @notice Reverts afterRemoveLiquidity (not used)
+     * @dev All liquidity logic handled in unlock callback
+     */
+    function _afterRemoveLiquidity(
+        address,
+        PoolKey calldata,
+        ModifyLiquidityParams calldata,
+        BalanceDelta,
+        BalanceDelta,
+        bytes calldata
+    ) internal pure override returns (bytes4, BalanceDelta) {
+        revert DirectPoolManagerLiquidityNotAllowed();
     }
 
     // ============================================================
