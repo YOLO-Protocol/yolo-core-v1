@@ -47,6 +47,23 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
     address public sUSY;
 
     // ============================================================
+    // EVENTS (for expectEmit)
+    // ============================================================
+
+    event LiquidityAdded(
+        address indexed sender,
+        address indexed receiver,
+        uint256 usyAmount,
+        uint256 usdcAmount,
+        uint256 sUSYMinted,
+        bool isBootstrap
+    );
+
+    event LiquidityRemoved(
+        address indexed sender, address indexed receiver, uint256 sUSYBurned, uint256 usyAmount, uint256 usdcAmount
+    );
+
+    // ============================================================
     // SETUP
     // ============================================================
 
@@ -116,6 +133,11 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         uint256 usyIn = 1000e18;
         uint256 usdcIn = 1000e6;
 
+        // Expect LiquidityAdded event
+        uint256 expectedSUSY = 2000e18 - yoloHook.MINIMUM_LIQUIDITY();
+        vm.expectEmit(true, true, false, true);
+        emit LiquidityAdded(user1, user1, usyIn, usdcIn, expectedSUSY, true);
+
         vm.prank(user1);
         (uint256 usyUsed, uint256 usdcUsed, uint256 sUSYMinted) = yoloHook.addLiquidity(usyIn, usdcIn, 0, user1);
 
@@ -123,9 +145,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertEq(usyUsed, usyIn, "All USY should be used");
         assertEq(usdcUsed, usdcIn, "All USDC should be used");
 
-        // sUSY = totalValue - MINIMUM_LIQUIDITY
-        // totalValue = 1000e18 + 1000e18 = 2000e18 (normalized)
-        uint256 expectedSUSY = 2000e18 - yoloHook.MINIMUM_LIQUIDITY();
+        // Verify sUSY minted matches expected
         assertEq(sUSYMinted, expectedSUSY, "Should mint correct sUSY");
 
         // Check reserves updated
@@ -192,6 +212,10 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         vm.prank(user1);
         yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
 
+        // Expect LiquidityAdded event (non-bootstrap)
+        vm.expectEmit(true, true, false, false);
+        emit LiquidityAdded(user2, user2, 500e18, 500e6, 0, false);
+
         // Second provider adds proportionally
         vm.prank(user2);
         (uint256 usyUsed, uint256 usdcUsed, uint256 sUSYMinted) = yoloHook.addLiquidity(500e18, 500e6, 0, user2);
@@ -252,6 +276,10 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
 
         // Remove half
         uint256 sUSYToBurn = sUSYMinted / 2;
+
+        // Expect LiquidityRemoved event (check sender, receiver, and sUSYBurned exactly; not amounts)
+        vm.expectEmit(true, true, false, false);
+        emit LiquidityRemoved(user1, user1, sUSYToBurn, 0, 0);
 
         vm.prank(user1);
         (uint256 usyOut, uint256 usdcOut) = yoloHook.removeLiquidity(sUSYToBurn, 0, 0, user1);
