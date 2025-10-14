@@ -59,7 +59,7 @@ contract TestContract05_StakedYoloUSD is Test {
     // BOOTSTRAP TESTS (SUPPLY == 0)
     // ============================================================
 
-    function test_BreakdownZeroSupply_ReturnsBootstrapDefaults() public view {
+    function test_Contract05_Case01_breakdownZeroSupplyReturnsBootstrapDefaults() public view {
         // When supply is 0, should return placeholder (1e18, 1e18)
         (uint256 usyPerSUSY, uint256 usdcPerSUSY) = sUSY.getReserveBreakdownPerSUSY();
 
@@ -67,7 +67,7 @@ contract TestContract05_StakedYoloUSD is Test {
         assertEq(usdcPerSUSY, 1e18, "Bootstrap USDC per sUSY should be 1e18");
     }
 
-    function test_ApproxUsdValue_ZeroSupply_Returns2e18() public view {
+    function test_Contract05_Case02_approxUsdValueZeroSupplyReturns2e18() public view {
         // When supply is 0, approx USD value should be 2e18 (1 USY + 1 USDC)
         uint256 approxValue = sUSY.getApproxUsdValuePerSUSY();
 
@@ -78,7 +78,7 @@ contract TestContract05_StakedYoloUSD is Test {
     // BREAKDOWN TESTS (WITH RESERVES)
     // ============================================================
 
-    function test_BreakdownMatchesReservesAndSupply() public {
+    function test_Contract05_Case03_breakdownMatchesReservesAndSupply() public {
         // Setup: Mock reserves and mint some sUSY
         mockHook.setReserves(1000e18, 1000e6); // 1000 USY, 1000 USDC (6 decimals)
         mockHook.setUsdcDecimals(6);
@@ -96,7 +96,7 @@ contract TestContract05_StakedYoloUSD is Test {
         assertEq(usdcPerSUSY, 2e18, "USDC per sUSY should be 2e18 (normalized)");
     }
 
-    function test_BreakdownWithDifferentRatios() public {
+    function test_Contract05_Case04_breakdownWithDifferentRatios() public {
         // Setup: Unbalanced reserves
         mockHook.setReserves(2000e18, 1000e6); // 2:1 ratio
         mockHook.setUsdcDecimals(6);
@@ -117,7 +117,7 @@ contract TestContract05_StakedYoloUSD is Test {
     // PREVIEW TESTS
     // ============================================================
 
-    function test_PreviewMint_DelegatesToHook() public {
+    function test_Contract05_Case05_previewMintDelegatesToHook() public {
         // Setup reserves
         mockHook.setReserves(1000e18, 1000e6);
         mockHook.setUsdcDecimals(6);
@@ -134,7 +134,7 @@ contract TestContract05_StakedYoloUSD is Test {
         assertEq(preview, 200e18, "Preview should delegate to hook");
     }
 
-    function test_PreviewRedeem_DelegatesToHook() public {
+    function test_Contract05_Case06_previewRedeemDelegatesToHook() public {
         // Setup
         mockHook.setReserves(1000e18, 1000e6);
         mockHook.setUsdcDecimals(6);
@@ -155,7 +155,7 @@ contract TestContract05_StakedYoloUSD is Test {
     // DECIMAL NORMALIZATION TESTS
     // ============================================================
 
-    function test_Normalization_UsdcWith6Decimals() public {
+    function test_Contract05_Case07_normalizationUsdcWith6Decimals() public {
         // Setup: USDC with 6 decimals
         mockHook.setReserves(1000e18, 1000e6); // 1000 USDC (6 decimals)
         mockHook.setUsdcDecimals(6);
@@ -171,7 +171,7 @@ contract TestContract05_StakedYoloUSD is Test {
         assertEq(usdcPerSUSY, 2e18, "USDC normalized to 18 decimals");
     }
 
-    function test_Normalization_UsdcWith18Decimals() public {
+    function test_Contract05_Case08_normalizationUsdcWith18Decimals() public {
         // Setup: USDC with 18 decimals (some chains)
         mockHook.setReserves(1000e18, 1000e18); // Both 18 decimals
         mockHook.setUsdcDecimals(18);
@@ -189,13 +189,13 @@ contract TestContract05_StakedYoloUSD is Test {
     // ACCESS CONTROL TESTS
     // ============================================================
 
-    function test_OnlyHookCanMint() public {
+    function test_Contract05_Case09_onlyHookCanMint() public {
         vm.prank(user1);
         vm.expectRevert(StakedYoloUSD.OnlyYoloHook.selector);
         sUSY.mint(user1, 100e18);
     }
 
-    function test_OnlyHookCanBurn() public {
+    function test_Contract05_Case10_onlyHookCanBurn() public {
         vm.prank(address(mockHook));
         sUSY.mint(user1, 100e18);
 
@@ -204,7 +204,7 @@ contract TestContract05_StakedYoloUSD is Test {
         sUSY.burn(user1, 50e18);
     }
 
-    function test_OnlyAssetsAdminCanUpdateHook() public {
+    function test_Contract05_Case11_onlyAssetsAdminCanUpdateHook() public {
         address newHook = makeAddr("newHook");
 
         // Should fail from non-admin
@@ -223,7 +223,7 @@ contract TestContract05_StakedYoloUSD is Test {
     // EDGE CASES
     // ============================================================
 
-    function test_BreakdownWithSmallSupply() public {
+    function test_Contract05_Case12_breakdownWithSmallSupply() public {
         mockHook.setReserves(1e18, 1e6); // Minimal reserves
         mockHook.setUsdcDecimals(6);
 
@@ -236,7 +236,7 @@ contract TestContract05_StakedYoloUSD is Test {
         assertEq(usdcPerSUSY, 1e18, "USDC per sUSY should be 1e18");
     }
 
-    function test_BreakdownWithLargeSupply() public {
+    function test_Contract05_Case13_breakdownWithLargeSupply() public {
         mockHook.setReserves(1000000e18, 1000000e6); // 1M each
         mockHook.setUsdcDecimals(6);
 

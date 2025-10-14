@@ -137,7 +137,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
     // BASIC SWAP TESTS
     // ============================================================
 
-    function test_SwapUSYForUSDC_SmallAmount() public {
+    function test_Action03_Case01_swapUSYForUSDCSmallAmount() public {
         uint256 swapAmount = 1000e18; // 1K USY
 
         // Get alice's initial balances
@@ -153,7 +153,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         assertGt(usdc.balanceOf(alice), aliceUSDCBefore, "USDC balance should increase");
     }
 
-    function test_SwapUSDCForUSY_SmallAmount() public {
+    function test_Action03_Case02_swapUSDCForUSYSmallAmount() public {
         uint256 swapAmount = 1000e6; // 1K USDC (6 decimals)
 
         // Get alice's initial balances
@@ -169,7 +169,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         assertLt(usdc.balanceOf(alice), aliceUSDCBefore, "USDC balance should decrease");
     }
 
-    function test_SwapUSYForUSDC_LargeAmount() public {
+    function test_Action03_Case03_swapUSYForUSDCLargeAmount() public {
         uint256 swapAmount = 100000e18; // 100K USY
 
         vm.prank(alice);
@@ -179,7 +179,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         assertTrue(delta.amount0() != 0 || delta.amount1() != 0, "Swap should execute");
     }
 
-    function test_SwapUSDCForUSY_LargeAmount() public {
+    function test_Action03_Case04_swapUSDCForUSYLargeAmount() public {
         uint256 swapAmount = 100000e6; // 100K USDC
 
         vm.prank(alice);
@@ -193,7 +193,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
     // STABLESWAP PROPERTIES TESTS
     // ============================================================
 
-    function test_StableSwap_LowSlippage() public {
+    function test_Action03_Case05_stableSwapLowSlippage() public {
         uint256 swapAmount = 10000e18; // 10K USY
 
         // Preview swap
@@ -209,7 +209,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         assertApproxEqAbs(expectedOut, expectedWithFee, deviation, "Slippage should be low for stablecoins");
     }
 
-    function test_StableSwap_Symmetry() public {
+    function test_Action03_Case06_stableSwapSymmetry() public {
         uint256 swapAmount = 5000e18;
 
         // Swap USY -> USDC
@@ -234,7 +234,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         assertApproxEqRel(usyAfter, expectedAfterFees, 0.01e18, "Round-trip should be symmetric");
     }
 
-    function test_StableSwap_InvariantHolds() public {
+    function test_Action03_Case07_stableSwapInvariantHolds() public {
         // Get initial reserves
         (uint256 reserve0Before, uint256 reserve1Before) = _getReserves();
 
@@ -258,7 +258,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
     // RESERVE UPDATE TESTS
     // ============================================================
 
-    function test_ReserveUpdates_CorrectAfterSwap() public {
+    function test_Action03_Case08_reserveUpdatesCorrectAfterSwap() public {
         (uint256 reserve0Before, uint256 reserve1Before) = _getReserves();
 
         uint256 swapAmount = 5000e18;
@@ -281,7 +281,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
     // EVENT TESTS
     // ============================================================
 
-    function test_AnchorSwapEvent_Emitted() public {
+    function test_Action03_Case09_anchorSwapEventEmitted() public {
         uint256 swapAmount = 1000e18;
 
         // TODO: Fix event testing - AnchorSwap is in YoloHookStorage
@@ -299,7 +299,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
     // PREVIEW TESTS
     // ============================================================
 
-    function test_PreviewMatchesExecution() public {
+    function test_Action03_Case10_previewMatchesExecution() public {
         uint256 swapAmount = 10000e18;
 
         // Preview swap
@@ -327,7 +327,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
     // FEE TESTS
     // ============================================================
 
-    function test_SwapFee_Applied() public {
+    function test_Action03_Case11_swapFeeApplied() public {
         uint256 swapAmount = 10000e18; // 10K USY
 
         // Calculate expected output without fee
@@ -353,13 +353,13 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
     // EDGE CASE TESTS
     // ============================================================
 
-    function test_RevertWhen_SwapAmountZero() public {
+    function test_Action03_Case12_revertWhenSwapAmountZero() public {
         vm.prank(alice);
         vm.expectRevert();
         _swapUSYForUSDC(0);
     }
 
-    function test_RevertWhen_InsufficientLiquidity() public {
+    function test_Action03_Case13_revertWhenInsufficientLiquidity() public {
         // Try to swap more than available liquidity
         uint256 swapAmount = 2000000e18; // 2M USY (more than pool has)
 
@@ -372,7 +372,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
     // FUZZ TESTS
     // ============================================================
 
-    function testFuzz_SwapUSYForUSDC(uint256 swapAmount) public {
+    function testFuzz_Action03_Case14_swapUSYForUSDC(uint256 swapAmount) public {
         // Bound swap amount to reasonable range
         swapAmount = bound(swapAmount, 1e18, 100000e18); // 1 to 100K USY
 
@@ -385,7 +385,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         assertGt(reserve1, 0, "Reserve1 should remain positive");
     }
 
-    function testFuzz_SwapUSDCForUSY(uint256 swapAmount) public {
+    function testFuzz_Action03_Case15_swapUSDCForUSY(uint256 swapAmount) public {
         // Bound swap amount (USDC has 6 decimals)
         swapAmount = bound(swapAmount, 1e6, 100000e6); // 1 to 100K USDC
 

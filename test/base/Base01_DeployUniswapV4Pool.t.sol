@@ -45,8 +45,9 @@ contract Base01_DeployUniswapV4Pool is Test, Deployers {
     /**
      * @notice Verify PoolManager is properly deployed and can execute swaps
      * @dev Creates a test pool specifically for this validation test
+     *      Made internal to avoid running in child test contracts
      */
-    function test_Base01_PoolManagerWorks() public {
+    function _validatePoolManager() internal {
         // Deploy test currencies for basic pool testing
         (testCurrency0, testCurrency1) = deployMintAndApprove2Currencies();
 
@@ -72,6 +73,14 @@ contract Base01_DeployUniswapV4Pool is Test, Deployers {
         // Verify swap executed (currency0 decreases, currency1 increases)
         assertLt(delta.amount0(), 0, "Currency0 should decrease");
         assertGt(delta.amount1(), 0, "Currency1 should increase");
+    }
+
+    /**
+     * @notice Public test function for Base01 test suite only
+     * @dev Calls the internal validation to test PoolManager in the base contract
+     */
+    function test_Base01_Case01_PoolManagerWorks() public {
+        _validatePoolManager();
     }
 
     /**

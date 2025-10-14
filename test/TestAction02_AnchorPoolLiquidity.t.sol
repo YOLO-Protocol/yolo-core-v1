@@ -132,7 +132,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
     // BOOTSTRAP LIQUIDITY TESTS
     // ============================================================
 
-    function test_Bootstrap_EqualAmounts() public {
+    function test_Action02_Case01_bootstrapEqualAmounts() public {
         uint256 usyIn = 1000e18;
         uint256 usdcIn = 1000e6;
 
@@ -163,7 +163,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertEq(IERC20(sUSY).balanceOf(address(1)), yoloHook.MINIMUM_LIQUIDITY(), "MINIMUM_LIQUIDITY should be locked");
     }
 
-    function test_Bootstrap_UsdcLimiting() public {
+    function test_Action02_Case02_bootstrapUsdcLimiting() public {
         uint256 usyIn = 2000e18;
         uint256 usdcIn = 1000e6; // USDC is limiting factor
 
@@ -178,7 +178,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertEq(sUSYMinted, expectedSUSY, "Should mint based on minimum");
     }
 
-    function test_Bootstrap_UsyLimiting() public {
+    function test_Action02_Case03_bootstrapUsyLimiting() public {
         uint256 usyIn = 1000e18; // USY is limiting factor
         uint256 usdcIn = 2000e6;
 
@@ -193,14 +193,14 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertEq(sUSYMinted, expectedSUSY, "Should mint based on minimum");
     }
 
-    function test_Bootstrap_InsufficientValue_Reverts() public {
+    function test_Action02_Case04_bootstrapInsufficientValueReverts() public {
         // Try to add less than MINIMUM_LIQUIDITY worth
         vm.prank(user1);
         vm.expectRevert();
         yoloHook.addLiquidity(100, 100, 0, user1); // Tiny amounts
     }
 
-    function test_Bootstrap_SlippageProtection_Reverts() public {
+    function test_Action02_Case05_bootstrapSlippageProtectionReverts() public {
         vm.prank(user1);
         vm.expectRevert();
         yoloHook.addLiquidity(1000e18, 1000e6, 3000e18, user1); // Expect too much sUSY
@@ -210,7 +210,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
     // SUBSEQUENT LIQUIDITY TESTS (MIN-SHARE)
     // ============================================================
 
-    function test_AddLiquidity_SecondProvider_MaintainsRatio() public {
+    function test_Action02_Case06_addLiquiditySecondProviderMaintainsRatio() public {
         // Bootstrap
         vm.prank(user1);
         yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -235,7 +235,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertEq(reserveUSDC, 1500e6, "Total USDC reserve should be 1500");
     }
 
-    function test_AddLiquidity_ImbalancedDeposit_WithinTolerance() public {
+    function test_Action02_Case07_addLiquidityImbalancedDepositWithinTolerance() public {
         // Bootstrap
         vm.prank(user1);
         yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -250,7 +250,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertGt(sUSYMinted, 0, "Should mint sUSY");
     }
 
-    function test_AddLiquidity_ExcessiveImbalance_AutoAdjusts() public {
+    function test_Action02_Case08_addLiquidityExcessiveImbalanceAutoAdjusts() public {
         // Bootstrap
         vm.prank(user1);
         yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -272,7 +272,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
     // REMOVE LIQUIDITY TESTS
     // ============================================================
 
-    function test_RemoveLiquidity_ProportionalRedemption() public {
+    function test_Action02_Case09_removeLiquidityProportionalRedemption() public {
         // Bootstrap
         vm.prank(user1);
         (,, uint256 sUSYMinted) = yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -301,7 +301,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertApproxEqRel(remainingSUSY, sUSYMinted - sUSYToBurn, 0.01e18, "sUSY should be burned");
     }
 
-    function test_RemoveLiquidity_FullRemoval() public {
+    function test_Action02_Case10_removeLiquidityFullRemoval() public {
         // Bootstrap
         vm.prank(user1);
         (,, uint256 sUSYMinted) = yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -318,7 +318,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertEq(IERC20(sUSY).balanceOf(user1), 0, "User should have no sUSY left");
     }
 
-    function test_RemoveLiquidity_SlippageProtection_Reverts() public {
+    function test_Action02_Case11_removeLiquiditySlippageProtectionReverts() public {
         // Bootstrap
         vm.prank(user1);
         (,, uint256 sUSYMinted) = yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -329,7 +329,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         yoloHook.removeLiquidity(sUSYMinted / 2, 600e18, 600e6, user1); // Expect too much
     }
 
-    function test_RemoveLiquidity_InsufficientBalance_Reverts() public {
+    function test_Action02_Case12_removeLiquidityInsufficientBalanceReverts() public {
         // Bootstrap
         vm.prank(user1);
         yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -344,7 +344,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
     // MULTI-USER SCENARIOS
     // ============================================================
 
-    function test_MultiUser_AddAndRemove() public {
+    function test_Action02_Case13_multiUserAddAndRemove() public {
         // User1 bootstraps
         vm.prank(user1);
         (,, uint256 user1SUSY) = yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -375,7 +375,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
     // PREVIEW CONSISTENCY TESTS
     // ============================================================
 
-    function test_PreviewMatches_Bootstrap() public {
+    function test_Action02_Case14_previewMatchesBootstrap() public {
         uint256 usyIn = 1000e18;
         uint256 usdcIn = 1000e6;
 
@@ -390,7 +390,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertEq(previewSUSY, actualSUSY, "Preview should match execution");
     }
 
-    function test_PreviewMatches_SubsequentAdd() public {
+    function test_Action02_Case15_previewMatchesSubsequentAdd() public {
         // Bootstrap
         vm.prank(user1);
         yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -406,7 +406,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertApproxEqRel(previewSUSY, actualSUSY, 0.001e18, "Preview should match execution");
     }
 
-    function test_PreviewMatches_Remove() public {
+    function test_Action02_Case16_previewMatchesRemove() public {
         // Bootstrap
         vm.prank(user1);
         (,, uint256 sUSYMinted) = yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -430,7 +430,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
     // SECURITY & EDGE CASE TESTS
     // ============================================================
 
-    function test_UnlockCallback_OnlyPoolManager() public {
+    function test_Action02_Case17_unlockCallbackOnlyPoolManager() public {
         // Attempt to call unlockCallback directly (not from PoolManager)
         bytes memory fakeData = abi.encode(
             DataTypes.CallbackData({
@@ -452,7 +452,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         yoloHook.unlockCallback(fakeData);
     }
 
-    function test_Preview_HandlesImbalancedInputs() public {
+    function test_Action02_Case18_previewHandlesImbalancedInputs() public {
         // Bootstrap first
         vm.prank(user1);
         yoloHook.addLiquidity(1000e18, 1000e6, 0, user1);
@@ -473,7 +473,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         assertApproxEqRel(previewSUSY, actualSUSY, 0.01e18, "Preview should match execution");
     }
 
-    function test_Usdc18Decimals_Normalization() public {
+    function test_Action02_Case19_usdc18DecimalsNormalization() public {
         // Note: Full end-to-end test with 18-decimal USDC is covered in TestContract05_StakedYoloUSD
         // This test verifies the normalization logic works correctly in the preview functions
 
