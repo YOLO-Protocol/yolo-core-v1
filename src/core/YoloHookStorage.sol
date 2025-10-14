@@ -66,13 +66,18 @@ struct AppStorage {
     /// @notice User positions for lending pairs
     mapping(bytes32 => mapping(address => DataTypes.UserPosition)) _userPositions;
     // ============================================================
-    // POOL REGISTRY (Placeholder for Future Implementation)
+    // POOL REGISTRY
     // ============================================================
 
-    /// @notice Registry of created Uniswap V4 pools
+    /// @notice Registry of created Uniswap V4 pools (both anchor and synthetic)
     mapping(bytes32 => DataTypes.PoolConfiguration) _poolConfigs;
     /// @notice Anchor pool key (USY-USDC Curve StableSwap)
     bytes32 _anchorPoolKey;
+    /// @notice Mapping from synthetic asset to its pool ID
+    mapping(address => bytes32) _syntheticAssetToPool;
+    /// @notice Anchor pool reserves for Curve math
+    uint256 totalAnchorReserveUSY;
+    uint256 totalAnchorReserveUSDC;
 }
 
 /**
