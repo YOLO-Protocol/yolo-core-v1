@@ -103,4 +103,62 @@ library DataTypes {
         address token1;
         uint256 createdAt;
     }
+
+    // ============================================================
+    // UNLOCK CALLBACK DATA
+    // ============================================================
+
+    /**
+     * @notice Enum for unlock callback action types
+     * @dev Extensible for future operations (swaps, flash loans, etc.)
+     */
+    enum UnlockAction {
+        ADD_LIQUIDITY, // 0: Add liquidity to anchor pool
+        REMOVE_LIQUIDITY, // 1: Remove liquidity from anchor pool
+        SWAP, // 2: Swap operations (reserved)
+        FLASH_LOAN // 3: Flash loan operations (reserved)
+
+    }
+
+    /**
+     * @notice Generic callback data structure for PoolManager unlock callbacks
+     * @param action Action type enum
+     * @param data Encoded action-specific data
+     */
+    struct CallbackData {
+        UnlockAction action;
+        bytes data;
+    }
+
+    /**
+     * @notice Data for add liquidity unlock callback
+     * @param sender Address initiating the add (msg.sender)
+     * @param receiver Address to receive sUSY tokens
+     * @param maxUsyIn Maximum USY to deposit (18 decimals)
+     * @param maxUsdcIn Maximum USDC to deposit (native decimals)
+     * @param minSUSY Minimum sUSY to receive (slippage protection)
+     */
+    struct AddLiquidityData {
+        address sender;
+        address receiver;
+        uint256 maxUsyIn;
+        uint256 maxUsdcIn;
+        uint256 minSUSY;
+    }
+
+    /**
+     * @notice Data for remove liquidity unlock callback
+     * @param sender Address initiating the removal (msg.sender, sUSY holder)
+     * @param receiver Address to receive USY + USDC
+     * @param sUSYAmount Amount of sUSY to burn (18 decimals)
+     * @param minUsyOut Minimum USY to receive (18 decimals)
+     * @param minUsdcOut Minimum USDC to receive (native decimals)
+     */
+    struct RemoveLiquidityData {
+        address sender;
+        address receiver;
+        uint256 sUSYAmount;
+        uint256 minUsyOut;
+        uint256 minUsdcOut;
+    }
 }

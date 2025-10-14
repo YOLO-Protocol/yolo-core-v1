@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Base01_DeployUniswapV4Pool} from "./base/Base01_DeployUniswapV4Pool.t.sol";
 import {YoloHook} from "../src/core/YoloHook.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
+import {StakedYoloUSD} from "../src/tokenization/StakedYoloUSD.sol";
 import {ACLManager} from "../src/access/ACLManager.sol";
 import {IACLManager} from "../src/interfaces/IACLManager.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
@@ -53,7 +54,9 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
     MockERC20 public weth;
     MockERC20 public wbtc;
     address public usy;
+    address public sUSY;
     YoloSyntheticAsset public usyImpl;
+    StakedYoloUSD public sUSYImpl;
 
     // ============================================================
     // SETUP
@@ -85,6 +88,9 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
         // Deploy USY implementation
         usyImpl = new YoloSyntheticAsset();
 
+        // Deploy sUSY implementation
+        sUSYImpl = new StakedYoloUSD(IACLManager(address(aclManager)));
+
         // Precompute valid hook addresses following Uniswap V4 requirements
         // Hook implementation: all permission bits must be set
         address hookImplAddress = address(uint160(Hooks.ALL_HOOK_MASK));
@@ -103,22 +109,26 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
         // Deploy ERC1967Proxy (UUPS) at specific address using deployCodeTo
         // Pass initialize calldata in constructor to avoid admin restrictions
         bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,address,address)",
+            "initialize(address,address,address,address,address)",
             address(oracle),
             address(usdc),
             address(usyImpl),
+            address(sUSYImpl),
             address(ylpVault)
         );
 
         deployCodeTo("ERC1967Proxy.sol:ERC1967Proxy", abi.encode(hookImplAddress, initData), hookProxyAddress);
         yoloHook = YoloHook(hookProxyAddress);
 
-        // Get USY address from YoloHook (it's deployed during initialization)
+        // Get USY and sUSY addresses from YoloHook (deployed during initialization)
         usy = yoloHook.usy();
+        sUSY = yoloHook.sUSY();
 
         // Verify proxy setup
         assertEq(address(yoloHook.yoloOracle()), address(oracle), "Oracle mismatch");
         assertTrue(usy != address(0), "USY should be deployed");
+        assertTrue(sUSY != address(0), "sUSY should be deployed");
+        assertEq(yoloHook.usdcDecimals(), 6, "USDC decimals should be 6");
         assertEq(yoloHook.ylpVault(), address(ylpVault), "YLP vault mismatch");
 
         // Deploy YoloSyntheticAsset implementation
