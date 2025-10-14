@@ -21,6 +21,9 @@ importers:
       '@uniswap/v4-periphery':
         specifier: ^1.0.1
         version: 1.0.3
+      solmate:
+        specifier: ^6.8.0
+        version: 6.8.0
 
 packages:
 
@@ -38,6 +41,9 @@ packages:
   '@uniswap/v4-periphery@1.0.3':
     resolution: {integrity: sha512-JxLL0Djv9XcMvI2PatEnWrCrxuEaYNVhHxstndBOP+aJfh1XLg5ec8SDZ0xyoVfg2ElJTvuKpBgnu90bNValsg==}
 
+  solmate@6.8.0:
+    resolution: {integrity: sha512-/oI8kgEvSxGG1mrFv3FmCEZd0F8Z9VzRmoYMIhzmmzt6mjtPwfdCm3oh8yOL7bMHJBSfXJuMpnMPrM0uyaKsKg==}
+
 snapshots:
 
   '@openzeppelin/contracts-upgradeable@5.4.0(@openzeppelin/contracts@5.4.0)':
@@ -49,3 +55,5 @@ snapshots:
   '@uniswap/v4-core@1.0.2': {}
 
   '@uniswap/v4-periphery@1.0.3': {}
+
+  solmate@6.8.0: {}
