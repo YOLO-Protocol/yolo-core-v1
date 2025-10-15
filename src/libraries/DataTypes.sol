@@ -54,6 +54,7 @@ library DataTypes {
      * @param lastUpdateTimestamp Last time the liquidity index was updated
      * @param maxMintableCap Maximum mintable cap for the synthetic asset
      * @param maxSupplyCap Maximum supply cap for the collateral asset
+     * @param minimumBorrowAmount Minimum borrow amount per transaction (in synthetic asset decimals, 0 = no minimum)
      * @param isExpirable Whether positions expire
      * @param expirePeriod Expiry period in seconds
      * @param isActive Whether the pair is active
@@ -73,6 +74,7 @@ library DataTypes {
         uint256 lastUpdateTimestamp;
         uint256 maxMintableCap;
         uint256 maxSupplyCap;
+        uint256 minimumBorrowAmount;
         bool isExpirable;
         uint256 expirePeriod;
         bool isActive;

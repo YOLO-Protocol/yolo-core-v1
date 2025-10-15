@@ -71,6 +71,13 @@ library LendingPairModule {
     event BorrowRateUpdated(bytes32 indexed pairId, uint256 newBorrowRate);
 
     /**
+     * @notice Emitted when minimum borrow amount is updated
+     * @param pairId Unique identifier for the pair
+     * @param newMinimumBorrowAmount New minimum borrow amount
+     */
+    event MinimumBorrowAmountUpdated(bytes32 indexed pairId, uint256 newMinimumBorrowAmount);
+
+    /**
      * @notice Emitted when a borrow occurs
      */
     event Borrowed(
@@ -129,7 +136,7 @@ library LendingPairModule {
 
     uint256 internal constant RAY = 1e27;
     uint256 internal constant PRECISION_DIVISOR = 10000;
-    uint256 internal constant MINIMUM_BORROW_AMOUNT = 1e18; // 1 unit minimum
+    // Note: Minimum borrow amount is now per-pair (see PairConfiguration.minimumBorrowAmount)
 
     uint256 private constant MAX_LTV = 9000; // 90% max LTV
     uint256 private constant MAX_LIQUIDATION_THRESHOLD = 9500; // 95% max threshold
@@ -173,6 +180,7 @@ library LendingPairModule {
      * @param borrowRate Annual borrow rate in basis points (e.g., 300 = 3%)
      * @param maxMintableCap Maximum mintable cap for synthetic asset
      * @param maxSupplyCap Maximum supply cap for collateral
+     * @param minimumBorrowAmount Minimum borrow amount (in synthetic asset decimals, 0 = no minimum)
      * @param isExpirable Whether positions expire
      * @param expirePeriod Expiry period in seconds
      * @return pairId Unique identifier for the pair
@@ -190,6 +198,7 @@ library LendingPairModule {
         uint256 borrowRate,
         uint256 maxMintableCap,
         uint256 maxSupplyCap,
+        uint256 minimumBorrowAmount,
         bool isExpirable,
         uint256 expirePeriod
     ) external returns (bytes32 pairId) {
@@ -225,6 +234,7 @@ library LendingPairModule {
             lastUpdateTimestamp: block.timestamp,
             maxMintableCap: maxMintableCap,
             maxSupplyCap: maxSupplyCap,
+            minimumBorrowAmount: minimumBorrowAmount, // Per-pair minimum (0 = no minimum)
             isExpirable: isExpirable,
             expirePeriod: expirePeriod,
             isActive: true,
@@ -348,6 +358,22 @@ library LendingPairModule {
         emit BorrowRateUpdated(pairId, newBorrowRate);
     }
 
+    /**
+     * @notice Updates minimum borrow amount for a lending pair
+     * @dev Only callable by risk admin via YoloHook
+     *      Allows admins to adjust minimums per asset economics (e.g., lower for high-value assets like yBRK.A)
+     * @param s Reference to AppStorage
+     * @param pairId Unique identifier for the pair
+     * @param newMinimumBorrowAmount New minimum borrow amount (in synthetic asset decimals, 0 = no minimum)
+     */
+    function updateMinimumBorrowAmount(AppStorage storage s, bytes32 pairId, uint256 newMinimumBorrowAmount) external {
+        if (s._pairConfigs[pairId].createdAt == 0) revert LendingPairModule__PairNotFound();
+
+        s._pairConfigs[pairId].minimumBorrowAmount = newMinimumBorrowAmount;
+
+        emit MinimumBorrowAmountUpdated(pairId, newMinimumBorrowAmount);
+    }
+
     // ============================================================
     // VIEW FUNCTIONS
     // ============================================================
@@ -437,13 +463,17 @@ library LendingPairModule {
     ) external {
         // Early validation
         if (borrowAmount == 0) revert LendingPairModule__InsufficientAmount();
-        if (borrowAmount < MINIMUM_BORROW_AMOUNT) revert LendingPairModule__InsufficientAmount();
         if (!s._isYoloAsset[yoloAsset]) revert LendingPairModule__NotYoloAsset();
         if (!s._isWhitelistedCollateral[collateral]) revert LendingPairModule__CollateralNotWhitelisted();
 
         bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
         DataTypes.PairConfiguration storage pairConfig = s._pairConfigs[pairId];
         if (pairConfig.collateralAsset == address(0)) revert LendingPairModule__InvalidPair();
+
+        // Per-pair minimum check (0 = no minimum)
+        if (pairConfig.minimumBorrowAmount > 0 && borrowAmount < pairConfig.minimumBorrowAmount) {
+            revert LendingPairModule__InsufficientAmount();
+        }
 
         if (pairConfig.maxMintableCap == 0) revert LendingPairModule__YoloAssetPaused();
         if (pairConfig.maxSupplyCap == 0) revert LendingPairModule__CollateralPaused();
