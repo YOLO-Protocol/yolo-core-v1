@@ -68,21 +68,21 @@ library SwapModule {
         // Determine swap direction (USDC -> USY or USY -> USDC)
         bool usdcToUsy = zeroForOne ? !isToken0USY : isToken0USY;
 
-        // Get reserves and scale factors (V0.5 pattern: lines 957-960)
+        // Get reserves and scale factors for decimal normalization
         // rIn/rOut are in native decimals, sIn/sOut are scale factors
         uint256 rIn = usdcToUsy ? reserveUSDC : reserveUSY;
         uint256 rOut = usdcToUsy ? reserveUSY : reserveUSDC;
         uint256 sIn = usdcToUsy ? s.usdcScaleUp : 1;
         uint256 sOut = usdcToUsy ? 1 : s.usdcScaleUp;
 
-        // Scale gross input to 18 decimals (V0.5 pattern: line 969)
+        // Scale gross input to 18 decimals
         uint256 grossIn18 = amountIn * sIn;
 
-        // Calculate fee and net input in 18 decimals (V0.5 pattern: line 970-971)
+        // Calculate fee and net input in 18 decimals
         uint256 fee18 = (grossIn18 * s.anchorSwapFeeBps) / 10000;
         uint256 netIn18 = grossIn18 - fee18;
 
-        // Scale reserves to 18 decimals and calculate output with NET input (V0.5 pattern: line 972)
+        // Scale reserves to 18 decimals and calculate output with NET input
         uint256 amountOut18 = StableMath.calculateSwapOutput(
             netIn18, // NET input in 18 decimals (after fee deduction)
             rIn * sIn, // reserve in, scaled to 18 decimals
@@ -90,7 +90,7 @@ library SwapModule {
             s.anchorAmplificationCoefficient
         );
 
-        // Scale output and fee back to native decimals (V0.5 pattern: line 974-976)
+        // Scale output and fee back to native decimals
         amountOut = amountOut18 / sOut;
         feeAmount = fee18 / sIn; // Fee is in input token decimals
 
@@ -110,7 +110,7 @@ library SwapModule {
      *      - delta < 0 means caller PAID → pool reserves INCREASE
      *      - delta > 0 means caller RECEIVED → pool reserves DECREASE
      *      IMPORTANT: Reserves are stored in NATIVE decimals (USY=18, USDC=6 or 18)
-     *      Deltas are also in NATIVE decimals, so no conversion needed (V0.5 pattern: lines 988-993)
+     *      Deltas are also in NATIVE decimals, so no conversion needed
      * @param s AppStorage reference
      * @param key PoolKey to determine token order
      * @param delta BalanceDelta from swap (caller's perspective)

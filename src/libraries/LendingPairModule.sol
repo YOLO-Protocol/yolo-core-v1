@@ -608,7 +608,7 @@ library LendingPairModule {
         bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
         DataTypes.PairConfiguration storage pairConfig = s._pairConfigs[pairId];
 
-        // V0.5 pattern: renewPosition only works on expirable pairs
+        // renewPosition only works on expirable pairs
         if (!pairConfig.isExpirable) revert LendingPairModule__InvalidPosition();
         if (position.expiryTimestamp == 0) revert LendingPairModule__InvalidPosition();
 

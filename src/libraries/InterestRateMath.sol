@@ -5,7 +5,7 @@ pragma solidity ^0.8.26;
  * @title InterestRateMath
  * @author alvin@yolo.wtf
  * @notice Mathematical functions for compound interest calculations using Aave-style liquidity index
- * @dev Uses 27 decimal precision (RAY) for maximum accuracy - V0.5 exact pattern
+ * @dev Uses 27 decimal precision (RAY) for maximum accuracy with lazy index updates
  */
 library InterestRateMath {
     // ============================================================
@@ -27,7 +27,7 @@ library InterestRateMath {
 
     /**
      * @notice Calculate new liquidity index with compound interest
-     * @dev V0.5 exact pattern - lazy updates only when positions change
+     * @dev Lazy updates only when positions change (no automatic accrual)
      * @param currentLiquidityIndexRay Current index value (27 decimals)
      * @param rateBps Interest rate in basis points (e.g., 500 = 5%)
      * @param timeDelta Time elapsed in seconds
@@ -54,7 +54,7 @@ library InterestRateMath {
 
     /**
      * @notice Calculate actual debt from normalized (scaled) debt
-     * @dev V0.5 pattern - always use divUp for user obligations
+     * @dev Always use divUp for user obligations (protocol-favorable rounding)
      * @param scaledDebtRay User's stored debt amount (27 decimals)
      * @param currentLiquidityIndexRay Current global index (27 decimals)
      * @return actualDebt Real debt amount with compound interest (18 decimals)
@@ -103,7 +103,7 @@ library InterestRateMath {
 
     /**
      * @notice Helper function for ceiling division (rounds up)
-     * @dev V0.5 critical pattern - protocol always rounds against user
+     * @dev Protocol always rounds against user (protocol-favorable rounding)
      * @param a Numerator
      * @param b Denominator
      * @return Result rounded up
@@ -134,7 +134,7 @@ library InterestRateMath {
 
     /**
      * @notice Split repayment between interest and principal
-     * @dev V0.5 exact pattern - interest paid first, then principal
+     * @dev Interest paid first, then principal (standard repayment waterfall)
      * @param repayAmount Total amount to repay
      * @param interestAccrued Total interest owed
      * @param currentPrincipal Current principal balance
