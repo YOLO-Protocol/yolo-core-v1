@@ -17,11 +17,10 @@ import {SyntheticAssetModule} from "../libraries/SyntheticAssetModule.sol";
 import {LendingPairModule} from "../libraries/LendingPairModule.sol";
 import {LiquidationModule} from "../libraries/LiquidationModule.sol";
 import {FlashLoanModule} from "../libraries/FlashLoanModule.sol";
-import {InterestRateMath} from "../libraries/InterestRateMath.sol";
 import {StablecoinModule} from "../libraries/StablecoinModule.sol";
 import {SwapModule} from "../libraries/SwapModule.sol";
+import {BootstrapModule} from "../libraries/BootstrapModule.sol";
 import {DecimalNormalization} from "../libraries/DecimalNormalization.sol";
-import {StakedYoloUSD} from "../tokenization/StakedYoloUSD.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -31,9 +30,6 @@ import {
     BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta
 } from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /**
  * @title YoloHook
@@ -230,100 +226,21 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         if (_anchorAmplificationCoefficient == 0) revert YoloHook__InvalidConfiguration();
         if (_anchorSwapFeeBps > 10000) revert YoloHook__InvalidConfiguration(); // Max 100%
         if (_syntheticSwapFeeBps > 10000) revert YoloHook__InvalidConfiguration(); // Max 100%
-
-        // Store oracle, USDC address, treasury, ACL Manager, and USDC decimals
-        s.yoloOracle = _yoloOracle;
-        s.usdc = _usdc;
-        s.treasury = _treasury;
-        s.ACL_MANAGER = address(ACL_MANAGER);
-        s.usdcDecimals = IERC20Metadata(_usdc).decimals();
-        s.usdcScaleUp = 10 ** (18 - s.usdcDecimals); // Scale factor for USDC decimal normalization
-
-        // Store swap configuration
-        s.anchorAmplificationCoefficient = _anchorAmplificationCoefficient;
-        s.anchorSwapFeeBps = _anchorSwapFeeBps;
-        s.syntheticSwapFeeBps = _syntheticSwapFeeBps;
-
-        // Initialize flash loan fee (9 bps = 0.09%, matching V0.5 reference)
-        s.flashLoanFeeBps = 9;
-
-        // Deploy USY with UUPS
-        bytes memory usyInitData = abi.encodeWithSignature(
-            "initialize(address,address,string,string,uint8,address,address,address,uint256)",
-            address(this), // yoloHook
-            address(ACL_MANAGER),
-            "Yolo USD",
-            "USY",
-            uint8(18),
-            address(0), // no underlying (USY is the anchor)
-            address(_yoloOracle),
-            _ylpVaultImplementation, // ylpVault placeholder (Phase 3)
-            uint256(0) // no max supply for USY
+        BootstrapModule.initialize(
+            s,
+            poolManager,
+            ACL_MANAGER,
+            address(this),
+            _yoloOracle,
+            _usdc,
+            _usyImplementation,
+            _sUSYImplementation,
+            _ylpVaultImplementation,
+            _treasury,
+            _anchorAmplificationCoefficient,
+            _anchorSwapFeeBps,
+            _syntheticSwapFeeBps
         );
-
-        address usyProxy = address(new ERC1967Proxy(_usyImplementation, usyInitData));
-        s.usy = usyProxy;
-
-        // Register USY as YOLO asset
-        s._isYoloAsset[usyProxy] = true;
-        s._yoloAssets.push(usyProxy);
-        s._assetConfigs[usyProxy] = DataTypes.AssetConfiguration({
-            syntheticToken: usyProxy,
-            underlyingAsset: address(0), // USY is the anchor
-            oracleSource: address(0), // Fixed $1 price
-            maxSupply: 0, // Unlimited for stablecoin
-            maxFlashLoanAmount: type(uint256).max, // Unlimited flash loans for USY (can be updated later)
-            isActive: true,
-            createdAt: block.timestamp
-        });
-
-        // Approve PoolManager for settlement (CRITICAL)
-        IERC20(_usdc).approve(address(poolManager), type(uint256).max);
-        IERC20(usyProxy).approve(address(poolManager), type(uint256).max);
-
-        // Create anchor pool (USY-USDC) on PoolManager
-        bool usdcIs0 = _usdc < usyProxy;
-        Currency currency0 = Currency.wrap(usdcIs0 ? _usdc : usyProxy);
-        Currency currency1 = Currency.wrap(usdcIs0 ? usyProxy : _usdc);
-
-        PoolKey memory anchorPoolKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: 0, // Fees handled in hook
-            tickSpacing: 60, // Standard for stableswap
-            hooks: IHooks(address(this))
-        });
-
-        // Initialize at 1:1 price (sqrtPriceX96 = 2^96)
-        poolManager.initialize(anchorPoolKey, uint160(1) << 96);
-
-        // Store anchor pool configuration
-        bytes32 anchorPoolId = PoolId.unwrap(anchorPoolKey.toId());
-        s._anchorPoolKey = anchorPoolId;
-        s._poolConfigs[anchorPoolId] = DataTypes.PoolConfiguration({
-            poolKey: anchorPoolKey,
-            isAnchorPool: true,
-            isSyntheticPool: false,
-            token0: Currency.unwrap(currency0),
-            token1: Currency.unwrap(currency1),
-            createdAt: block.timestamp
-        });
-
-        // Deploy sUSY (LP receipt token) with UUPS
-        bytes memory sUSYInitData = abi.encodeWithSignature("initialize(address)", address(this));
-
-        address sUSYProxy = address(new ERC1967Proxy(_sUSYImplementation, sUSYInitData));
-        s.sUSY = sUSYProxy;
-
-        // Initialize protocol state
-        s._paused = false;
-
-        // Store YLP vault placeholder (will be properly deployed in Phase 3)
-        s.ylpVault = _ylpVaultImplementation;
-
-        // TODO: Phase 3 - Deploy YLP Vault (ERC4626) with proper proxy
-        // address ylpVault = address(new ERC1967Proxy(_ylpVaultImplementation, ylpInitData));
-        // s.ylpVault = ylpVault; // Would replace the placeholder
     }
 
     // ========================
@@ -916,17 +833,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @return Current debt amount (18 decimals)
      */
     function getPositionDebt(address user, address collateral, address yoloAsset) external view returns (uint256) {
-        DataTypes.UserPosition storage position = s.positions[user][collateral][yoloAsset];
-        bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
-        DataTypes.PairConfiguration storage config = s._pairConfigs[pairId];
-
-        // Calculate effective index with accrued interest
-        uint256 timeDelta = block.timestamp - config.lastUpdateTimestamp;
-        uint256 effectiveIndex =
-            InterestRateMath.calculateEffectiveIndex(config.liquidityIndexRay, config.borrowRate, timeDelta);
-
-        // Calculate debt
-        return InterestRateMath.calculateActualDebt(position.normalizedDebtRay, effectiveIndex);
+        return LendingPairModule.getPositionDebt(s, user, collateral, yoloAsset);
     }
 
     /**
@@ -1037,15 +944,15 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         nonReentrant
         returns (bool success)
     {
-        success = FlashLoanModule.flashLoan(s, borrower, token, amount, data);
+        uint256 fee;
+        (success, fee) = FlashLoanModule.flashLoan(s, borrower, token, amount, data);
 
-        // Emit event (library cannot emit events with proper context)
         address[] memory tokens = new address[](1);
         tokens[0] = token;
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
         uint256[] memory fees = new uint256[](1);
-        fees[0] = (amount * s.flashLoanFeeBps) / 10000;
+        fees[0] = fee;
 
         emit FlashLoanExecuted(borrower, msg.sender, tokens, amounts, fees);
     }
@@ -1066,13 +973,8 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         uint256[] calldata amounts,
         bytes calldata data
     ) external whenNotPaused nonReentrant returns (bool success) {
-        success = FlashLoanModule.flashLoanBatch(s, borrower, tokens, amounts, data);
-
-        // Calculate fees for event
-        uint256[] memory fees = new uint256[](tokens.length);
-        for (uint256 i = 0; i < tokens.length; i++) {
-            fees[i] = (amounts[i] * s.flashLoanFeeBps) / 10000;
-        }
+        uint256[] memory fees;
+        (success, fees) = FlashLoanModule.flashLoanBatch(s, borrower, tokens, amounts, data);
 
         // Emit event (library cannot emit events with proper context)
         emit FlashLoanExecuted(borrower, msg.sender, tokens, amounts, fees);
@@ -1143,35 +1045,12 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         nonReentrant
         returns (uint256 usyUsed, uint256 usdcUsed, uint256 sUSYMinted)
     {
-        // Validation
-        if (maxUsyAmount == 0 || maxUsdcAmount == 0) revert InvalidAmount();
-        if (receiver == address(0)) revert InvalidAddress();
-        if (s.sUSY == address(0)) revert sUSYNotInitialized();
+        (bool isBootstrap, uint256 usyUsedLocal, uint256 usdcUsedLocal, uint256 sUSYMintedLocal) = StablecoinModule
+            .addLiquidity(s, poolManager, msg.sender, maxUsyAmount, maxUsdcAmount, minSUSYReceive, receiver);
 
-        // Encode callback data
-        bytes memory callbackData = abi.encode(
-            DataTypes.CallbackData({
-                action: DataTypes.UnlockAction.ADD_LIQUIDITY,
-                data: abi.encode(
-                    DataTypes.AddLiquidityData({
-                        sender: msg.sender,
-                        receiver: receiver,
-                        maxUsyIn: maxUsyAmount,
-                        maxUsdcIn: maxUsdcAmount,
-                        minSUSY: minSUSYReceive
-                    })
-                )
-            })
-        );
-
-        // Check if bootstrap (before unlock changes state)
-        bool isBootstrap = IERC20(s.sUSY).totalSupply() == 0;
-
-        // Route through PoolManager
-        bytes memory result = poolManager.unlock(callbackData);
-
-        // Decode result
-        (usyUsed, usdcUsed, sUSYMinted) = abi.decode(result, (uint256, uint256, uint256));
+        usyUsed = usyUsedLocal;
+        usdcUsed = usdcUsedLocal;
+        sUSYMinted = sUSYMintedLocal;
 
         // Emit event
         emit LiquidityAdded(msg.sender, receiver, usyUsed, usdcUsed, sUSYMinted, isBootstrap);
@@ -1194,35 +1073,11 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         nonReentrant
         returns (uint256 usyOut, uint256 usdcOut)
     {
-        // Validation
-        if (sUSYAmount == 0) revert InvalidAmount();
-        if (receiver == address(0)) revert InvalidAddress();
-        if (s.sUSY == address(0)) revert sUSYNotInitialized();
+        (uint256 usyOutLocal, uint256 usdcOutLocal) =
+            StablecoinModule.removeLiquidity(s, poolManager, msg.sender, sUSYAmount, minUsyOut, minUsdcOut, receiver);
 
-        StakedYoloUSD sUSYContract = StakedYoloUSD(s.sUSY);
-        if (sUSYContract.balanceOf(msg.sender) < sUSYAmount) revert InsufficientBalance();
-
-        // Encode callback data
-        bytes memory callbackData = abi.encode(
-            DataTypes.CallbackData({
-                action: DataTypes.UnlockAction.REMOVE_LIQUIDITY,
-                data: abi.encode(
-                    DataTypes.RemoveLiquidityData({
-                        sender: msg.sender,
-                        receiver: receiver,
-                        sUSYAmount: sUSYAmount,
-                        minUsyOut: minUsyOut,
-                        minUsdcOut: minUsdcOut
-                    })
-                )
-            })
-        );
-
-        // Route through PoolManager
-        bytes memory result = poolManager.unlock(callbackData);
-
-        // Decode result
-        (usyOut, usdcOut) = abi.decode(result, (uint256, uint256));
+        usyOut = usyOutLocal;
+        usdcOut = usdcOutLocal;
 
         // Emit event
         emit LiquidityRemoved(msg.sender, receiver, sUSYAmount, usyOut, usdcOut);
@@ -1355,49 +1210,19 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         internal
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        // Calculate swap amounts first for event data
-        (uint256 grossIn, uint256 amountOut, uint256 feeAmount) =
-            SwapModule.calculateAnchorSwapDelta(s, key, params.zeroForOne, params.amountSpecified);
-
-        // Delegate to SwapModule for swap execution
-        (bytes4 selector, BeforeSwapDelta delta, uint24 lpFeeOverride) =
-            SwapModule.handleAnchorSwap(s, poolManager, key, params, sender);
-
-        // Calculate delta values for event
-        bool exactIn = params.amountSpecified < 0;
-        int128 delta0;
-        int128 delta1;
-
-        if (exactIn) {
-            if (params.zeroForOne) {
-                delta0 = int128(uint128(grossIn));
-                delta1 = -int128(uint128(amountOut));
-            } else {
-                delta0 = -int128(uint128(amountOut));
-                delta1 = int128(uint128(grossIn));
-            }
-        } else {
-            if (params.zeroForOne) {
-                delta0 = -int128(uint128(amountOut));
-                delta1 = int128(uint128(grossIn));
-            } else {
-                delta0 = int128(uint128(grossIn));
-                delta1 = -int128(uint128(amountOut));
-            }
-        }
-
-        // Emit event in hook context
+        SwapModule.AnchorSwapResult memory result = SwapModule.executeAnchorSwap(s, poolManager, key, params);
+        BeforeSwapDelta delta = toBeforeSwapDelta(result.delta0, result.delta1);
         emit AnchorSwap(
             PoolId.unwrap(key.toId()),
             sender,
-            delta0,
-            delta1,
+            result.delta0,
+            result.delta1,
             s.totalAnchorReserveUSY,
             s.totalAnchorReserveUSDC,
-            feeAmount
+            result.feeAmount
         );
 
-        return (this.beforeSwap.selector, delta, 0);
+        return (result.selector, result.delta, result.lpFeeOverride);
     }
 
     /**
@@ -1418,10 +1243,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         BalanceDelta delta,
         bytes calldata hookData
     ) internal override returns (bytes4, int128) {
-        // Reset pending markers (rehypothecation module not yet integrated)
-        s._pendingRehypoUSDC = 0;
-        s._pendingDehypoUSDC = 0;
-
+        SwapModule.afterSwapCleanup(s);
         return (this.afterSwap.selector, 0);
     }
 
