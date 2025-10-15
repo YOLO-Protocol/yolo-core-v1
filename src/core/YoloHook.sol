@@ -377,44 +377,18 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     /**
      * @notice Preview anchor pool swap output
      * @dev Simulates a swap without executing it
+     *      Delegates to SwapModule for calculation
      * @param zeroForOne Direction of swap (true = token0 -> token1)
      * @param amountIn Input amount (in native decimals)
-     * @return amountOut Output amount (in native decimals, after fees)
-     * @return feeAmount Fee amount (in output token, native decimals)
+     * @return amountOut Output amount (in 18 decimals normalized)
+     * @return feeAmount Fee amount (in 18 decimals normalized)
      */
     function previewAnchorSwap(bool zeroForOne, uint256 amountIn)
         external
         view
         returns (uint256 amountOut, uint256 feeAmount)
     {
-        // Get anchor pool key
-        bytes32 anchorPoolId = s._anchorPoolKey;
-        DataTypes.PoolConfiguration memory poolConfig = s._poolConfigs[anchorPoolId];
-
-        // Construct swap params (exact input)
-        SwapParams memory params = SwapParams({
-            zeroForOne: zeroForOne,
-            amountSpecified: -int256(amountIn), // Negative for exact input
-            sqrtPriceLimitX96: zeroForOne ? 4295128739 : 1461446703485210103287273052203988822378723970342
-        });
-        // Price limits to prevent unlimited slippage
-
-        // Calculate swap delta using SwapModule
-        (uint256 calculatedAmountIn, uint256 calculatedAmountOut, uint256 calculatedFeeAmount) =
-            SwapModule.calculateAnchorSwapDelta(s, poolConfig.poolKey, params.zeroForOne, params.amountSpecified);
-
-        // Scale outputs to 18 decimals for consistency
-        // Determine if output is USDC (needs scaling) or USY (already 18 decimals)
-        bool isToken0USY = Currency.unwrap(poolConfig.poolKey.currency0) == s.usy;
-        bool outputIsUSY = zeroForOne ? !isToken0USY : isToken0USY;
-
-        // Scale USDC output to 18 decimals for tests
-        if (!outputIsUSY && s.usdcDecimals != 18) {
-            calculatedAmountOut = calculatedAmountOut * s.usdcScaleUp;
-            calculatedFeeAmount = calculatedFeeAmount * s.usdcScaleUp;
-        }
-
-        return (calculatedAmountOut, calculatedFeeAmount);
+        return SwapModule.previewAnchorSwap(s, s._anchorPoolKey, zeroForOne, amountIn);
     }
 
     /**
@@ -738,78 +712,24 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Preview sUSY minted for adding liquidity
-     * @dev Uses min-share formula to prevent dilution
-     *      Enforces balanced deposits within 1% tolerance
-     *      Bootstrap case subtracts MINIMUM_LIQUIDITY
-     *      All inputs normalized to 18 decimals
+     * @dev Delegates to StablecoinModule for calculation
      * @param usyIn18 USY amount to deposit (18 decimals)
      * @param usdcIn18 USDC amount to deposit (18 decimals normalized)
      * @return sUSYToMint Expected sUSY tokens (18 decimals)
      */
     function previewAddLiquidity(uint256 usyIn18, uint256 usdcIn18) external view returns (uint256 sUSYToMint) {
-        uint256 totalSupply = IERC20(s.sUSY).totalSupply();
-
-        // Get normalized reserves
-        uint256 reserveUSY18 = s.totalAnchorReserveUSY;
-        uint256 reserveUSDC18 = s.totalAnchorReserveUSDC.to18(s.usdcDecimals);
-
-        if (totalSupply == 0) {
-            // Bootstrap: Enforce 1:1 ratio and subtract MINIMUM_LIQUIDITY
-            uint256 minAmount18 = usyIn18 < usdcIn18 ? usyIn18 : usdcIn18;
-            uint256 totalValue18 = minAmount18 + minAmount18;
-
-            if (totalValue18 <= MINIMUM_LIQUIDITY) return 0; // Would revert
-            sUSYToMint = totalValue18 - MINIMUM_LIQUIDITY;
-        } else {
-            // Calculate optimal amounts maintaining pool ratio
-            uint256 optimalUsyIn18 = (usdcIn18 * reserveUSY18) / reserveUSDC18;
-            uint256 usyToUse;
-            uint256 usdcToUse;
-
-            if (optimalUsyIn18 <= usyIn18) {
-                usdcToUse = usdcIn18;
-                usyToUse = optimalUsyIn18;
-            } else {
-                uint256 optimalUsdcIn18 = (usyIn18 * reserveUSDC18) / reserveUSY18;
-                usyToUse = usyIn18;
-                usdcToUse = optimalUsdcIn18;
-            }
-
-            // Min-share formula
-            uint256 shareUSY = (usyToUse * totalSupply) / reserveUSY18;
-            uint256 shareUSDC = (usdcToUse * totalSupply) / reserveUSDC18;
-
-            // Check balance tolerance (1% max imbalance)
-            uint256 diff = shareUSY > shareUSDC ? shareUSY - shareUSDC : shareUSDC - shareUSY;
-            uint256 maxShare = shareUSY > shareUSDC ? shareUSY : shareUSDC;
-
-            // Return 0 if imbalance > 1% (would revert)
-            if ((diff * 10000) / maxShare > 100) return 0;
-
-            // Take minimum (round down to favor pool)
-            sUSYToMint = shareUSY < shareUSDC ? shareUSY : shareUSDC;
-        }
+        return StablecoinModule.previewAddLiquidity(s, usyIn18, usdcIn18);
     }
 
     /**
      * @notice Preview token amounts for removing liquidity
-     * @dev Proportional redemption based on sUSY share
-     *      Rounds down to favor pool
-     *      All outputs normalized to 18 decimals
+     * @dev Delegates to StablecoinModule for calculation
      * @param sUSYAmount sUSY to burn
      * @return usyOut18 USY to receive (18 decimals)
      * @return usdcOut18 USDC to receive (18 decimals normalized)
      */
     function previewRemoveLiquidity(uint256 sUSYAmount) external view returns (uint256 usyOut18, uint256 usdcOut18) {
-        uint256 totalSupply = IERC20(s.sUSY).totalSupply();
-
-        // Get normalized reserves
-        uint256 reserveUSY18 = s.totalAnchorReserveUSY;
-        uint256 reserveUSDC18 = s.totalAnchorReserveUSDC.to18(s.usdcDecimals);
-
-        // Proportional redemption (round down to favor pool)
-        usyOut18 = (reserveUSY18 * sUSYAmount) / totalSupply;
-        usdcOut18 = (reserveUSDC18 * sUSYAmount) / totalSupply;
+        return StablecoinModule.previewRemoveLiquidity(s, sUSYAmount);
     }
 
     /**
@@ -926,6 +846,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Get user account data across all positions
+     * @dev Delegates to LendingPairModule for calculation
      * @param user User address
      * @return totalCollateralUSD Total collateral value (8 decimals)
      * @return totalDebtUSD Total debt value (8 decimals)
@@ -936,39 +857,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         view
         returns (uint256 totalCollateralUSD, uint256 totalDebtUSD, uint256 ltv)
     {
-        DataTypes.UserPositionKey[] storage positionKeys = s.userPositionKeys[user];
-
-        for (uint256 i = 0; i < positionKeys.length; i++) {
-            address collateral = positionKeys[i].collateral;
-            address yoloAsset = positionKeys[i].yoloAsset;
-
-            DataTypes.UserPosition storage position = s.positions[user][collateral][yoloAsset];
-            if (position.collateralSuppliedAmount == 0) continue;
-
-            // Get prices
-            uint256 collateralPrice = s.yoloOracle.getAssetPrice(collateral);
-            uint256 yoloAssetPrice = s.yoloOracle.getAssetPrice(yoloAsset);
-
-            // Calculate collateral value
-            uint256 collateralDecimals = IERC20Metadata(collateral).decimals();
-            totalCollateralUSD += (position.collateralSuppliedAmount * collateralPrice) / (10 ** collateralDecimals);
-
-            // Calculate debt value with accrued interest
-            bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
-            DataTypes.PairConfiguration storage config = s._pairConfigs[pairId];
-            uint256 timeDelta = block.timestamp - config.lastUpdateTimestamp;
-            uint256 effectiveIndex =
-                InterestRateMath.calculateEffectiveIndex(config.liquidityIndexRay, config.borrowRate, timeDelta);
-            uint256 debt = InterestRateMath.calculateActualDebt(position.normalizedDebtRay, effectiveIndex);
-
-            uint256 yoloAssetDecimals = IERC20Metadata(yoloAsset).decimals();
-            totalDebtUSD += (debt * yoloAssetPrice) / (10 ** yoloAssetDecimals);
-        }
-
-        // Calculate LTV
-        if (totalCollateralUSD > 0) {
-            ltv = (totalDebtUSD * 10000) / totalCollateralUSD;
-        }
+        return LendingPairModule.getUserAccountData(s, user);
     }
 
     /**
@@ -1214,63 +1103,50 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Handle anchor pool swaps (USY-USDC StableSwap)
-     * @dev Hook handles all settlement logic and returns calculated deltas
+     * @dev Delegates swap logic to SwapModule, emits event in hook context
      * @param key PoolKey identifying the anchor pool
      * @param params Swap parameters
      * @param sender Address initiating the swap
      * @return selector Function selector
-     * @return delta BeforeSwapDelta (always zero - hook handles everything)
+     * @return delta BeforeSwapDelta specifying token flows
      * @return lpFeeOverride Always 0 (fees handled in hook)
      */
     function _handleAnchorSwap(PoolKey calldata key, SwapParams calldata params, address sender)
         internal
         returns (bytes4, BeforeSwapDelta, uint24)
     {
+        // Calculate swap amounts first for event data
         (uint256 grossIn, uint256 amountOut, uint256 feeAmount) =
             SwapModule.calculateAnchorSwapDelta(s, key, params.zeroForOne, params.amountSpecified);
 
-        uint256 netIn = grossIn - feeAmount;
+        // Delegate to SwapModule for swap execution
+        (bytes4 selector, BeforeSwapDelta delta, uint24 lpFeeOverride) =
+            SwapModule.handleAnchorSwap(s, poolManager, key, params, sender);
 
-        bool isToken0USY = Currency.unwrap(key.currency0) == s.usy;
-        bool usdcToUsy = params.zeroForOne ? !isToken0USY : isToken0USY;
-
-        Currency currencyIn = params.zeroForOne ? key.currency0 : key.currency1;
-        Currency currencyOut = params.zeroForOne ? key.currency1 : key.currency0;
-
-        // Settle token flows via PoolManager
-        if (netIn > 0) {
-            currencyIn.take(poolManager, address(this), netIn, true);
-        }
-        if (feeAmount > 0) {
-            currencyIn.take(poolManager, address(this), feeAmount, false);
-        }
-        if (amountOut > 0) {
-            currencyOut.settle(poolManager, address(this), amountOut, true);
-        }
-
-        // Update anchor pool reserves
-        if (usdcToUsy) {
-            s.totalAnchorReserveUSDC += netIn;
-            s.totalAnchorReserveUSY -= amountOut;
-            s._pendingRehypoUSDC = netIn;
-        } else {
-            s.totalAnchorReserveUSY += netIn;
-            s.totalAnchorReserveUSDC -= amountOut;
-            s._pendingDehypoUSDC = amountOut;
-        }
-
+        // Calculate delta values for event
         bool exactIn = params.amountSpecified < 0;
         int128 delta0;
         int128 delta1;
 
         if (exactIn) {
-            delta0 = int128(uint128(grossIn));
-            delta1 = -int128(uint128(amountOut));
+            if (params.zeroForOne) {
+                delta0 = int128(uint128(grossIn));
+                delta1 = -int128(uint128(amountOut));
+            } else {
+                delta0 = -int128(uint128(amountOut));
+                delta1 = int128(uint128(grossIn));
+            }
         } else {
-            delta0 = -int128(uint128(amountOut));
-            delta1 = int128(uint128(grossIn));
+            if (params.zeroForOne) {
+                delta0 = -int128(uint128(amountOut));
+                delta1 = int128(uint128(grossIn));
+            } else {
+                delta0 = int128(uint128(grossIn));
+                delta1 = -int128(uint128(amountOut));
+            }
         }
 
+        // Emit event in hook context
         emit AnchorSwap(
             PoolId.unwrap(key.toId()),
             sender,
@@ -1281,7 +1157,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             feeAmount
         );
 
-        return (this.beforeSwap.selector, toBeforeSwapDelta(delta0, delta1), 0);
+        return (this.beforeSwap.selector, delta, 0);
     }
 
     /**
