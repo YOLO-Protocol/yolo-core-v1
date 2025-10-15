@@ -167,6 +167,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base01_DeployUniswapV4P
             BORROW_RATE_5PCT,
             type(uint256).max, // unlimited mint cap
             type(uint256).max, // unlimited supply cap
+            1e18, // minimum borrow amount (1 unit)
             false, // not expirable
             0 // no expiry period
         );
@@ -183,6 +184,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base01_DeployUniswapV4P
             BORROW_RATE_10PCT,
             type(uint256).max,
             type(uint256).max,
+            1e18, // minimum borrow amount (1 unit)
             true, // expirable
             30 days // 30 day expiry
         );
@@ -697,7 +699,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base01_DeployUniswapV4P
     function test_Action04_Case15_storedInterestRate_lifecycle() public {
         // Initial borrow on EXPIRABLE pair (yETH-WETH)
         vm.prank(borrower1);
-        yoloHook.borrow(yETH, 1 ether, address(weth), 1.25 ether);
+        yoloHook.borrow(yETH, 1 ether, address(weth), 2.6 ether);
 
         DataTypes.UserPosition memory pos1 = yoloHook.getUserPosition(borrower1, address(weth), yETH);
         assertEq(pos1.storedInterestRate, BORROW_RATE_10PCT, "Should store initial rate");
@@ -709,7 +711,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base01_DeployUniswapV4P
         // Reborrow (DOES NOT update stored rate - only renewal does)
         vm.warp(block.timestamp + 1 days);
         vm.prank(borrower1);
-        yoloHook.borrow(yETH, 0.5 ether, address(weth), 0);
+        yoloHook.borrow(yETH, 1 ether, address(weth), 0); // Changed from 0.5 to 1 to meet minimum
 
         DataTypes.UserPosition memory pos2 = yoloHook.getUserPosition(borrower1, address(weth), yETH);
         assertEq(
@@ -718,7 +720,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base01_DeployUniswapV4P
 
         // Now renew position - this WILL update stored rate (only works on expirable pairs)
         vm.prank(borrower1);
-        yoloHook.renewPosition(address(weth), yETH);
+        yoloHook.renewPosition(yETH, address(weth));
 
         DataTypes.UserPosition memory pos3 = yoloHook.getUserPosition(borrower1, address(weth), yETH);
         assertEq(pos3.storedInterestRate, BORROW_RATE_5PCT, "Rate should update to new pair rate after renewal");

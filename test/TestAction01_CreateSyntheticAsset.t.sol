@@ -317,6 +317,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
             300, // 3% borrow rate
             type(uint256).max, // unlimited mint cap
             type(uint256).max, // unlimited supply cap
+            1e18, // minimum borrow amount (1 unit)
             false, // not expirable
             0 // no expiry period
         );
@@ -365,6 +366,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
             300,
             type(uint256).max,
             type(uint256).max,
+            1e18, // minimum borrow amount (1 unit)
             false,
             0
         );
@@ -405,6 +407,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
             300,
             type(uint256).max,
             type(uint256).max,
+            1e18, // minimum borrow amount (1 unit)
             false,
             0
         );
@@ -420,6 +423,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
             250,
             type(uint256).max,
             type(uint256).max,
+            1e18, // minimum borrow amount (1 unit)
             false,
             0
         );
@@ -460,6 +464,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
             300,
             type(uint256).max,
             type(uint256).max,
+            1e18, // minimum borrow amount (1 unit)
             false,
             0
         );
@@ -506,6 +511,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
             300,
             type(uint256).max,
             type(uint256).max,
+            1e18, // minimum borrow amount (1 unit)
             false,
             0
         );
@@ -658,6 +664,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
             300,
             type(uint256).max,
             type(uint256).max,
+            1e18, // minimum borrow amount (1 unit)
             false,
             0
         );
@@ -673,6 +680,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
             250,
             type(uint256).max,
             type(uint256).max,
+            1e18, // minimum borrow amount (1 unit)
             false,
             0
         );
@@ -688,6 +696,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
             400,
             type(uint256).max,
             type(uint256).max,
+            1e18, // minimum borrow amount (1 unit)
             false,
             0
         );
