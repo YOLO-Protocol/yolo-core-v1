@@ -95,6 +95,7 @@ library SyntheticAssetModule {
      * @param oracleSource Price feed source for the underlying asset
      * @param implementation YoloSyntheticAsset implementation address
      * @param maxSupply Maximum supply cap (0 for unlimited)
+     * @param maxFlashLoanAmount Maximum flash loan amount (0 for unlimited)
      * @return syntheticToken Address of deployed synthetic token proxy
      */
     function createSyntheticAsset(
@@ -108,7 +109,8 @@ library SyntheticAssetModule {
         address underlyingAsset,
         address oracleSource,
         address implementation,
-        uint256 maxSupply
+        uint256 maxSupply,
+        uint256 maxFlashLoanAmount
     ) external returns (address syntheticToken) {
         // Validation
         if (implementation == address(0)) revert SyntheticAssetModule__InvalidImplementation();
@@ -142,6 +144,7 @@ library SyntheticAssetModule {
             underlyingAsset: underlyingAsset,
             oracleSource: oracleSource,
             maxSupply: maxSupply,
+            maxFlashLoanAmount: maxFlashLoanAmount,
             isActive: true,
             createdAt: block.timestamp
         });

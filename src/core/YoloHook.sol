@@ -16,6 +16,7 @@ import {DataTypes} from "../libraries/DataTypes.sol";
 import {SyntheticAssetModule} from "../libraries/SyntheticAssetModule.sol";
 import {LendingPairModule} from "../libraries/LendingPairModule.sol";
 import {LiquidationModule} from "../libraries/LiquidationModule.sol";
+import {FlashLoanModule} from "../libraries/FlashLoanModule.sol";
 import {InterestRateMath} from "../libraries/InterestRateMath.sol";
 import {StablecoinModule} from "../libraries/StablecoinModule.sol";
 import {SwapModule} from "../libraries/SwapModule.sol";
@@ -71,6 +72,12 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     /// @notice Role for risk parameter management
     bytes32 public constant RISK_ADMIN_ROLE = keccak256("RISK_ADMIN");
 
+    /// @notice Role for privileged liquidators (when onlyPrivilegedLiquidator is enabled)
+    bytes32 public constant PRIVILEGED_LIQUIDATOR_ROLE = keccak256("PRIVILEGED_LIQUIDATOR");
+
+    /// @notice Role for zero-fee flash loans
+    bytes32 public constant PRIVILEGED_FLASHLOANER_ROLE = keccak256("PRIVILEGED_FLASHLOANER");
+
     // ========================
     // IMMUTABLE STORAGE
     // ========================
@@ -91,6 +98,10 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     event YLPVaultUpdated(address indexed newVault);
     event TreasuryUpdated(address indexed newTreasury);
     event SyntheticAssetUpgraded(address indexed syntheticAsset, address indexed newImplementation);
+    event AnchorSwapFeeUpdated(uint256 newFeeBps);
+    event SyntheticSwapFeeUpdated(uint256 newFeeBps);
+    event AnchorAmplificationUpdated(uint256 newAmplification);
+    event PrivilegedLiquidatorToggled(bool enabled);
 
     // ========================
     // ERRORS
@@ -104,6 +115,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     error YoloHook__NotYoloAsset();
     error YoloHook__ImbalancedDeposit();
     error YoloHook__InvalidConfiguration();
+    error YoloHook__NoPrivilegedLiquidators();
 
     // ========================
     // MODIFIERS
@@ -219,10 +231,11 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         if (_anchorSwapFeeBps > 10000) revert YoloHook__InvalidConfiguration(); // Max 100%
         if (_syntheticSwapFeeBps > 10000) revert YoloHook__InvalidConfiguration(); // Max 100%
 
-        // Store oracle, USDC address, treasury, and USDC decimals
+        // Store oracle, USDC address, treasury, ACL Manager, and USDC decimals
         s.yoloOracle = _yoloOracle;
         s.usdc = _usdc;
         s.treasury = _treasury;
+        s.ACL_MANAGER = address(ACL_MANAGER);
         s.usdcDecimals = IERC20Metadata(_usdc).decimals();
         s.usdcScaleUp = 10 ** (18 - s.usdcDecimals); // Scale factor for USDC decimal normalization
 
@@ -230,6 +243,9 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         s.anchorAmplificationCoefficient = _anchorAmplificationCoefficient;
         s.anchorSwapFeeBps = _anchorSwapFeeBps;
         s.syntheticSwapFeeBps = _syntheticSwapFeeBps;
+
+        // Initialize flash loan fee (9 bps = 0.09%, matching V0.5 reference)
+        s.flashLoanFeeBps = 9;
 
         // Deploy USY with UUPS
         bytes memory usyInitData = abi.encodeWithSignature(
@@ -256,6 +272,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             underlyingAsset: address(0), // USY is the anchor
             oracleSource: address(0), // Fixed $1 price
             maxSupply: 0, // Unlimited for stablecoin
+            maxFlashLoanAmount: type(uint256).max, // Unlimited flash loans for USY (can be updated later)
             isActive: true,
             createdAt: block.timestamp
         });
@@ -447,6 +464,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @param oracleSource Price feed source for the underlying asset
      * @param implementation YoloSyntheticAsset implementation address
      * @param maxSupply Maximum supply cap (0 for unlimited)
+     * @param maxFlashLoanAmount Maximum flash loan amount (0 for unlimited)
      * @return syntheticToken Address of deployed synthetic token proxy
      */
     function createSyntheticAsset(
@@ -456,7 +474,8 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         address underlyingAsset,
         address oracleSource,
         address implementation,
-        uint256 maxSupply
+        uint256 maxSupply,
+        uint256 maxFlashLoanAmount
     ) external onlyAssetsAdmin returns (address syntheticToken) {
         return s.createSyntheticAsset(
             poolManager,
@@ -468,7 +487,8 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             underlyingAsset,
             oracleSource,
             implementation,
-            maxSupply
+            maxSupply,
+            maxFlashLoanAmount
         );
     }
 
@@ -507,6 +527,18 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     function reactivateSyntheticAsset(address syntheticToken) external onlyAssetsAdmin {
         s.reactivateSyntheticAsset(syntheticToken);
+    }
+
+    /**
+     * @notice Updates max supply for a synthetic asset
+     * @dev Only callable by assets admin
+     *      Allows dynamic adjustment of supply cap
+     *      0 = unlimited supply
+     * @param syntheticToken Address of the synthetic token
+     * @param newMaxSupply New maximum supply (0 for unlimited)
+     */
+    function updateAssetMaxSupply(address syntheticToken, uint256 newMaxSupply) external onlyAssetsAdmin {
+        s.updateMaxSupply(syntheticToken, newMaxSupply);
     }
 
     // ============================================================
@@ -626,6 +658,59 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         if (_treasury == address(0)) revert YoloHook__InvalidAddress();
         s.treasury = _treasury;
         emit TreasuryUpdated(_treasury);
+    }
+
+    /**
+     * @notice Toggle privileged liquidator mode
+     * @dev Only callable by assets admin
+     *      When enabled, only addresses with PRIVILEGED_LIQUIDATOR_ROLE can liquidate
+     *      Enforces that at least one privileged liquidator exists before enabling
+     * @param enabled True to restrict liquidations to privileged liquidators only
+     */
+    function togglePrivilegedLiquidator(bool enabled) external onlyAssetsAdmin {
+        // If enabling, ensure at least one PRIVILEGED_LIQUIDATOR exists
+        if (enabled && ACL_MANAGER.getRoleMemberCount(PRIVILEGED_LIQUIDATOR_ROLE) == 0) {
+            revert YoloHook__NoPrivilegedLiquidators();
+        }
+        s.onlyPrivilegedLiquidator = enabled;
+        emit PrivilegedLiquidatorToggled(enabled);
+    }
+
+    /**
+     * @notice Updates anchor swap fee
+     * @dev Only callable by risk admin
+     *      Changes take effect immediately for new swaps
+     * @param newFeeBps New fee in basis points (0-10000, e.g., 4 = 0.04%)
+     */
+    function updateAnchorSwapFee(uint256 newFeeBps) external onlyRiskAdmin {
+        if (newFeeBps > 10000) revert YoloHook__InvalidConfiguration(); // Max 100%
+        s.anchorSwapFeeBps = newFeeBps;
+        emit AnchorSwapFeeUpdated(newFeeBps);
+    }
+
+    /**
+     * @notice Updates synthetic swap fee
+     * @dev Only callable by risk admin
+     *      Changes take effect immediately for new swaps
+     * @param newFeeBps New fee in basis points (0-10000)
+     */
+    function updateSyntheticSwapFee(uint256 newFeeBps) external onlyRiskAdmin {
+        if (newFeeBps > 10000) revert YoloHook__InvalidConfiguration(); // Max 100%
+        s.syntheticSwapFeeBps = newFeeBps;
+        emit SyntheticSwapFeeUpdated(newFeeBps);
+    }
+
+    /**
+     * @notice Updates anchor amplification coefficient
+     * @dev Only callable by risk admin
+     *      Changes take effect immediately for new swaps
+     *      Higher amplification = lower slippage for balanced pools
+     * @param newAmplification New amplification coefficient (must be > 0)
+     */
+    function updateAnchorAmplification(uint256 newAmplification) external onlyRiskAdmin {
+        if (newAmplification == 0) revert YoloHook__InvalidConfiguration();
+        s.anchorAmplificationCoefficient = newAmplification;
+        emit AnchorAmplificationUpdated(newAmplification);
     }
 
     // ============================================================
@@ -878,6 +963,161 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     function updateMinimumBorrowAmount(bytes32 pairId, uint256 newMinimumBorrowAmount) external onlyRiskAdmin {
         s.updateMinimumBorrowAmount(pairId, newMinimumBorrowAmount);
+    }
+
+    /**
+     * @notice Update caps for a lending pair
+     * @dev Only callable by risk admin
+     *      Allows dynamic adjustment of supply/mint caps
+     *      0 = paused (for both maxMintableCap and maxSupplyCap)
+     * @param syntheticAsset Synthetic asset address
+     * @param collateralAsset Collateral asset address
+     * @param newMaxMintableCap New maximum mintable cap (0 = pause minting)
+     * @param newMaxSupplyCap New maximum supply cap (0 = pause collateral deposits)
+     */
+    function updatePairCaps(
+        address syntheticAsset,
+        address collateralAsset,
+        uint256 newMaxMintableCap,
+        uint256 newMaxSupplyCap
+    ) external onlyRiskAdmin {
+        bytes32 pairId = keccak256(abi.encodePacked(syntheticAsset, collateralAsset));
+        LendingPairModule.updatePairCaps(s, pairId, newMaxMintableCap, newMaxSupplyCap);
+    }
+
+    /**
+     * @notice Update liquidation penalty for a lending pair
+     * @dev Only callable by risk admin
+     * @param syntheticAsset Synthetic asset address
+     * @param collateralAsset Collateral asset address
+     * @param newLiquidationPenalty New liquidation penalty in basis points
+     */
+    function updateLiquidationPenalty(address syntheticAsset, address collateralAsset, uint256 newLiquidationPenalty)
+        external
+        onlyRiskAdmin
+    {
+        bytes32 pairId = keccak256(abi.encodePacked(syntheticAsset, collateralAsset));
+        LendingPairModule.updateLiquidationPenalty(s, pairId, newLiquidationPenalty);
+    }
+
+    /**
+     * @notice Update expiry settings for a lending pair
+     * @dev Only callable by assets admin
+     * @param syntheticAsset Synthetic asset address
+     * @param collateralAsset Collateral asset address
+     * @param isExpirable Whether positions should expire
+     * @param expirePeriod Expiry period in seconds (ignored if isExpirable = false)
+     */
+    function updatePairExpiry(address syntheticAsset, address collateralAsset, bool isExpirable, uint256 expirePeriod)
+        external
+        onlyAssetsAdmin
+    {
+        bytes32 pairId = keccak256(abi.encodePacked(syntheticAsset, collateralAsset));
+        LendingPairModule.updatePairExpiry(s, pairId, isExpirable, expirePeriod);
+    }
+
+    // ============================================================
+    // FLASH LOAN OPERATIONS
+    // ============================================================
+
+    /**
+     * @notice Execute a flash loan for a single synthetic asset
+     * @dev EIP-3156 inspired interface adapted for YOLO Protocol
+     *      Mints synthetic asset → calls borrower callback → burns repayment
+     *      Fee is minted to treasury
+     * @param borrower Contract implementing IFlashBorrower
+     * @param token Synthetic asset to borrow
+     * @param amount Amount to borrow (in token decimals)
+     * @param data Arbitrary data passed to borrower callback
+     * @return success Whether flash loan succeeded
+     */
+    function flashLoan(address borrower, address token, uint256 amount, bytes calldata data)
+        external
+        whenNotPaused
+        nonReentrant
+        returns (bool success)
+    {
+        success = FlashLoanModule.flashLoan(s, borrower, token, amount, data);
+
+        // Emit event (library cannot emit events with proper context)
+        address[] memory tokens = new address[](1);
+        tokens[0] = token;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = amount;
+        uint256[] memory fees = new uint256[](1);
+        fees[0] = (amount * s.flashLoanFeeBps) / 10000;
+
+        emit FlashLoanExecuted(borrower, msg.sender, tokens, amounts, fees);
+    }
+
+    /**
+     * @notice Execute a flash loan for multiple synthetic assets
+     * @dev Mints all assets → calls borrower callback → burns all repayments
+     *      Fees are minted to treasury
+     * @param borrower Contract implementing IFlashBorrower
+     * @param tokens Array of synthetic assets to borrow
+     * @param amounts Array of amounts to borrow (in token decimals)
+     * @param data Arbitrary data passed to borrower callback
+     * @return success Whether flash loan succeeded
+     */
+    function flashLoanBatch(
+        address borrower,
+        address[] calldata tokens,
+        uint256[] calldata amounts,
+        bytes calldata data
+    ) external whenNotPaused nonReentrant returns (bool success) {
+        success = FlashLoanModule.flashLoanBatch(s, borrower, tokens, amounts, data);
+
+        // Calculate fees for event
+        uint256[] memory fees = new uint256[](tokens.length);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            fees[i] = (amounts[i] * s.flashLoanFeeBps) / 10000;
+        }
+
+        // Emit event (library cannot emit events with proper context)
+        emit FlashLoanExecuted(borrower, msg.sender, tokens, amounts, fees);
+    }
+
+    /**
+     * @notice Update flash loan fee
+     * @dev Only callable by risk admin
+     * @param newFeeBps New flash loan fee in basis points (0-10000, e.g., 9 = 0.09%)
+     */
+    function updateFlashLoanFee(uint256 newFeeBps) external onlyRiskAdmin {
+        if (newFeeBps > 10000) revert YoloHook__InvalidConfiguration(); // Max 100%
+        s.flashLoanFeeBps = newFeeBps;
+    }
+
+    /**
+     * @notice Update maximum flash loan amount for a synthetic asset
+     * @dev Only callable by risk admin
+     *      0 = flash loans disabled
+     *      >0 = specific cap
+     *      type(uint256).max = unlimited
+     * @param syntheticToken Address of the synthetic token
+     * @param newMaxFlashLoanAmount New maximum flash loan amount
+     */
+    function updateMaxFlashLoanAmount(address syntheticToken, uint256 newMaxFlashLoanAmount) external onlyRiskAdmin {
+        FlashLoanModule.updateMaxFlashLoanAmount(s, syntheticToken, newMaxFlashLoanAmount);
+    }
+
+    /**
+     * @notice Preview flash loan fee for a single asset
+     * @param token Synthetic asset address
+     * @param amount Amount to borrow
+     * @return fee Fee amount in token decimals
+     */
+    function previewFlashLoanFee(address token, uint256 amount) external view returns (uint256 fee) {
+        return FlashLoanModule.previewFlashLoanFee(s, token, amount);
+    }
+
+    /**
+     * @notice Get maximum flash loan amount for an asset
+     * @param token Synthetic asset address
+     * @return maxAmount Maximum flash loan amount (0 = disabled, >0 = cap, type(uint256).max = unlimited)
+     */
+    function maxFlashLoan(address token) external view returns (uint256 maxAmount) {
+        return FlashLoanModule.maxFlashLoan(s, token);
     }
 
     // ============================================================

@@ -87,7 +87,8 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
             address(weth), // underlying
             address(weth), // oracle source
             address(syntheticAssetImpl),
-            0 // no max supply
+            0, // no max supply
+            0 // no flash loan cap
         );
 
         vm.stopPrank();
@@ -123,7 +124,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
         vm.prank(user1);
         vm.expectRevert(YoloHook.YoloHook__CallerNotAuthorized.selector);
         yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
     }
 
@@ -136,12 +137,12 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
 
         // Create yETH
         address yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
 
         // Create yBTC
         address yBTC = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic BTC", "yBTC", 8, address(wbtc), address(wbtc), address(syntheticAssetImpl), 0
+            "Yolo Synthetic BTC", "yBTC", 8, address(wbtc), address(wbtc), address(syntheticAssetImpl), 0, 0
         );
 
         vm.stopPrank();
@@ -166,7 +167,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
         vm.startPrank(assetsAdmin);
 
         address yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
 
         // Deactivate asset
@@ -187,7 +188,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
         vm.startPrank(assetsAdmin);
 
         address yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
 
         // Deactivate then reactivate
@@ -226,7 +227,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
 
         // Create synthetic asset
         address yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
 
         // Whitelist collateral
@@ -276,7 +277,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
         vm.startPrank(assetsAdmin);
 
         address yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
 
         yoloHook.whitelistCollateral(address(usdc));
@@ -315,7 +316,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
         vm.startPrank(assetsAdmin);
 
         address yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
 
         // Whitelist multiple collaterals
@@ -376,7 +377,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
         vm.startPrank(assetsAdmin);
 
         address yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
 
         yoloHook.whitelistCollateral(address(usdc));
@@ -423,7 +424,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
         vm.startPrank(assetsAdmin);
 
         address yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
 
         yoloHook.whitelistCollateral(address(usdc));
@@ -488,7 +489,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
         vm.startPrank(assetsAdmin);
 
         address yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
 
         // Deploy new implementation
@@ -551,7 +552,8 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
             address(weth),
             address(weth),
             address(syntheticAssetImpl),
-            1000000e18 // 1M max supply
+            1000000e18, // 1M max supply
+            0 // no flash loan cap
         );
 
         // Verify max supply
@@ -568,11 +570,11 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
 
         // Create multiple synthetic assets
         address yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0, 0
         );
 
         address yBTC = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic BTC", "yBTC", 8, address(wbtc), address(wbtc), address(syntheticAssetImpl), 0
+            "Yolo Synthetic BTC", "yBTC", 8, address(wbtc), address(wbtc), address(syntheticAssetImpl), 0, 0
         );
 
         // Whitelist collaterals

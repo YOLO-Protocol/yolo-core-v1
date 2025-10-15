@@ -78,6 +78,29 @@ library LendingPairModule {
     event MinimumBorrowAmountUpdated(bytes32 indexed pairId, uint256 newMinimumBorrowAmount);
 
     /**
+     * @notice Emitted when pair caps are updated
+     * @param pairId Unique identifier for the pair
+     * @param newMaxMintableCap New maximum mintable cap
+     * @param newMaxSupplyCap New maximum supply cap
+     */
+    event PairCapsUpdated(bytes32 indexed pairId, uint256 newMaxMintableCap, uint256 newMaxSupplyCap);
+
+    /**
+     * @notice Emitted when liquidation penalty is updated
+     * @param pairId Unique identifier for the pair
+     * @param newLiquidationPenalty New liquidation penalty
+     */
+    event LiquidationPenaltyUpdated(bytes32 indexed pairId, uint256 newLiquidationPenalty);
+
+    /**
+     * @notice Emitted when pair expiry settings are updated
+     * @param pairId Unique identifier for the pair
+     * @param isExpirable Whether positions expire
+     * @param expirePeriod Expiry period in seconds
+     */
+    event PairExpiryUpdated(bytes32 indexed pairId, bool isExpirable, uint256 expirePeriod);
+
+    /**
      * @notice Emitted when a borrow occurs
      */
     event Borrowed(
@@ -372,6 +395,59 @@ library LendingPairModule {
         s._pairConfigs[pairId].minimumBorrowAmount = newMinimumBorrowAmount;
 
         emit MinimumBorrowAmountUpdated(pairId, newMinimumBorrowAmount);
+    }
+
+    /**
+     * @notice Updates caps for a lending pair
+     * @dev Only callable by risk admin via YoloHook
+     *      Allows dynamic adjustment of supply/mint caps without recreating pair
+     *      0 = paused (for both maxMintableCap and maxSupplyCap)
+     * @param s Reference to AppStorage
+     * @param pairId Unique identifier for the pair
+     * @param newMaxMintableCap New maximum mintable cap (0 = pause minting)
+     * @param newMaxSupplyCap New maximum supply cap (0 = pause collateral deposits)
+     */
+    function updatePairCaps(AppStorage storage s, bytes32 pairId, uint256 newMaxMintableCap, uint256 newMaxSupplyCap)
+        external
+    {
+        if (s._pairConfigs[pairId].createdAt == 0) revert LendingPairModule__PairNotFound();
+
+        s._pairConfigs[pairId].maxMintableCap = newMaxMintableCap;
+        s._pairConfigs[pairId].maxSupplyCap = newMaxSupplyCap;
+
+        emit PairCapsUpdated(pairId, newMaxMintableCap, newMaxSupplyCap);
+    }
+
+    /**
+     * @notice Updates liquidation penalty for a lending pair
+     * @dev Only callable by risk admin via YoloHook
+     * @param s Reference to AppStorage
+     * @param pairId Unique identifier for the pair
+     * @param newLiquidationPenalty New liquidation penalty in basis points
+     */
+    function updateLiquidationPenalty(AppStorage storage s, bytes32 pairId, uint256 newLiquidationPenalty) external {
+        if (s._pairConfigs[pairId].createdAt == 0) revert LendingPairModule__PairNotFound();
+
+        s._pairConfigs[pairId].liquidationPenalty = newLiquidationPenalty;
+
+        emit LiquidationPenaltyUpdated(pairId, newLiquidationPenalty);
+    }
+
+    /**
+     * @notice Updates expiry settings for a lending pair
+     * @dev Only callable by assets admin via YoloHook
+     * @param s Reference to AppStorage
+     * @param pairId Unique identifier for the pair
+     * @param isExpirable Whether positions should expire
+     * @param expirePeriod Expiry period in seconds (ignored if isExpirable = false)
+     */
+    function updatePairExpiry(AppStorage storage s, bytes32 pairId, bool isExpirable, uint256 expirePeriod) external {
+        if (s._pairConfigs[pairId].createdAt == 0) revert LendingPairModule__PairNotFound();
+
+        s._pairConfigs[pairId].isExpirable = isExpirable;
+        s._pairConfigs[pairId].expirePeriod = expirePeriod;
+
+        emit PairExpiryUpdated(pairId, isExpirable, expirePeriod);
     }
 
     // ============================================================

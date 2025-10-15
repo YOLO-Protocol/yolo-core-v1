@@ -39,6 +39,10 @@ struct AppStorage {
     uint256 usdcScaleUp;
     /// @notice Pause state (managed via ACLManager PAUSER_ROLE)
     bool _paused;
+    /// @notice If true, only addresses with PRIVILEGED_LIQUIDATOR role can liquidate
+    bool onlyPrivilegedLiquidator;
+    /// @notice ACL Manager instance for role-based access control
+    address ACL_MANAGER;
     // ============================================================
     // SYNTHETIC ASSETS REGISTRY
     // ============================================================
@@ -104,6 +108,12 @@ struct AppStorage {
     uint256 anchorSwapFeeBps;
     /// @notice Synthetic pool swap fee in basis points (0-10000)
     uint256 syntheticSwapFeeBps;
+    // ============================================================
+    // FLASH LOAN CONFIGURATION
+    // ============================================================
+
+    /// @notice Flash loan fee in basis points (0-10000, e.g., 9 = 0.09%)
+    uint256 flashLoanFeeBps;
 }
 
 /**
@@ -197,5 +207,17 @@ abstract contract YoloHookStorage {
         uint256 reserveUSY,
         uint256 reserveUSDC,
         uint256 feeAmount
+    );
+
+    /**
+     * @notice Emitted when a flash loan is executed
+     * @param borrower Address receiving the flash loan
+     * @param initiator Address that initiated the flash loan
+     * @param assets Array of asset addresses borrowed
+     * @param amounts Array of amounts borrowed (in token decimals)
+     * @param fees Array of fees paid (in token decimals)
+     */
+    event FlashLoanExecuted(
+        address indexed borrower, address indexed initiator, address[] assets, uint256[] amounts, uint256[] fees
     );
 }

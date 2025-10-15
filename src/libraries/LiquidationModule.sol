@@ -8,6 +8,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
+import {IACLManager} from "../interfaces/IACLManager.sol";
 
 /**
  * @title LiquidationModule
@@ -56,6 +57,7 @@ library LiquidationModule {
     error LiquidationModule__InvalidPosition();
     error LiquidationModule__InsufficientRepayment();
     error LiquidationModule__InvalidLiquidator();
+    error LiquidationModule__NotPrivilegedLiquidator();
 
     // ============================================================
     // CONSTANTS
@@ -88,6 +90,13 @@ library LiquidationModule {
         address receiver,
         bytes calldata params
     ) external {
+        // Check privileged liquidator restriction
+        if (s.onlyPrivilegedLiquidator) {
+            if (!IACLManager(s.ACL_MANAGER).hasRole(keccak256("PRIVILEGED_LIQUIDATOR"), msg.sender)) {
+                revert LiquidationModule__NotPrivilegedLiquidator();
+            }
+        }
+
         // Get position and config
         DataTypes.UserPosition storage position = s.positions[user][collateral][yoloAsset];
         bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
@@ -140,6 +149,13 @@ library LiquidationModule {
     function liquidate(AppStorage storage s, address user, address collateral, address yoloAsset, uint256 repayAmount)
         external
     {
+        // Check privileged liquidator restriction
+        if (s.onlyPrivilegedLiquidator) {
+            if (!IACLManager(s.ACL_MANAGER).hasRole(keccak256("PRIVILEGED_LIQUIDATOR"), msg.sender)) {
+                revert LiquidationModule__NotPrivilegedLiquidator();
+            }
+        }
+
         // Get position and config
         DataTypes.UserPosition storage position = s.positions[user][collateral][yoloAsset];
         bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));

@@ -22,6 +22,7 @@ library DataTypes {
      * @param underlyingAsset Reference asset for price oracle (e.g., WETH for yETH)
      * @param oracleSource Price feed source for the underlying asset
      * @param maxSupply Maximum supply cap (0 = unlimited)
+     * @param maxFlashLoanAmount Maximum amount that can be flash loaned (0 = unlimited)
      * @param isActive Whether the asset is active for trading
      * @param createdAt Timestamp when asset was created
      */
@@ -30,6 +31,7 @@ library DataTypes {
         address underlyingAsset;
         address oracleSource;
         uint256 maxSupply;
+        uint256 maxFlashLoanAmount;
         bool isActive;
         uint256 createdAt;
     }
