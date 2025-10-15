@@ -108,6 +108,10 @@ struct AppStorage {
     uint256 anchorSwapFeeBps;
     /// @notice Synthetic pool swap fee in basis points (0-10000)
     uint256 syntheticSwapFeeBps;
+    /// @notice Pending synthetic asset to burn (settled next unlock)
+    address pendingSyntheticToken;
+    /// @notice Pending synthetic amount awaiting burn
+    uint256 pendingSyntheticAmount;
     // ============================================================
     // FLASH LOAN CONFIGURATION
     // ============================================================
@@ -154,6 +158,8 @@ abstract contract YoloHookStorage {
     error InvalidSwapAmount();
     error SyntheticSwapNotImplemented();
     error UnknownPool();
+    error NoPendingSyntheticBurn();
+    error UnknownUnlockAction();
 
     // ============================================================
     // EVENTS
@@ -207,6 +213,30 @@ abstract contract YoloHookStorage {
         uint256 reserveUSY,
         uint256 reserveUSDC,
         uint256 feeAmount
+    );
+
+    /**
+     * @notice Emitted when a synthetic swap is executed
+     * @param poolId Pool identifier
+     * @param sender Address initiating the swap
+     * @param tokenIn Synthetic token paid by trader
+     * @param tokenOut Synthetic token received by trader
+     * @param grossInput Total amount specified by trader (before fee)
+     * @param netInput Net amount after fee (tracked as pending burn)
+     * @param amountOut Output amount minted to the pool
+     * @param feeAmount Fee captured in input token
+     * @param exactInput True if swap was exact-in, false for exact-out
+     */
+    event SyntheticSwap(
+        bytes32 indexed poolId,
+        address indexed sender,
+        address indexed tokenIn,
+        address tokenOut,
+        uint256 grossInput,
+        uint256 netInput,
+        uint256 amountOut,
+        uint256 feeAmount,
+        bool exactInput
     );
 
     /**

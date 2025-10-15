@@ -19,6 +19,7 @@ import {LiquidationModule} from "../libraries/LiquidationModule.sol";
 import {FlashLoanModule} from "../libraries/FlashLoanModule.sol";
 import {StablecoinModule} from "../libraries/StablecoinModule.sol";
 import {SwapModule} from "../libraries/SwapModule.sol";
+import {SyntheticSwapModule} from "../libraries/SyntheticSwapModule.sol";
 import {BootstrapModule} from "../libraries/BootstrapModule.sol";
 import {DecimalNormalization} from "../libraries/DecimalNormalization.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
@@ -339,6 +340,15 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     function totalAnchorReserveUSDC() external view returns (uint256) {
         return s.totalAnchorReserveUSDC;
+    }
+
+    /**
+     * @notice Get pending synthetic burn state
+     * @return token Synthetic asset awaiting burn
+     * @return amount Amount of synthetic asset pending burn
+     */
+    function getPendingSyntheticBurn() external view returns (address token, uint256 amount) {
+        return (s.pendingSyntheticToken, s.pendingSyntheticAmount);
     }
 
     // ========================
@@ -981,6 +991,21 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     /**
+     * @notice Burn any pending synthetic balances accumulated from earlier swaps
+     * @dev Anyone can trigger the burn; uses PoolManager.unlock to convert claims into real tokens
+     */
+    function burnPendingSynthetic() external whenNotPaused nonReentrant {
+        if (s.pendingSyntheticToken == address(0) || s.pendingSyntheticAmount == 0) {
+            revert NoPendingSyntheticBurn();
+        }
+
+        bytes memory callbackData =
+            abi.encode(DataTypes.CallbackData({action: DataTypes.UnlockAction.SWAP, data: bytes("")}));
+
+        poolManager.unlock(callbackData);
+    }
+
+    /**
      * @notice Update flash loan fee
      * @dev Only callable by risk admin
      * @param newFeeBps New flash loan fee in basis points (0-10000, e.g., 9 = 0.09%)
@@ -1094,8 +1119,20 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         // Only PoolManager can call
         if (msg.sender != address(poolManager)) revert YoloHook__CallerNotAuthorized();
 
-        // Delegate to StablecoinModule library
-        return StablecoinModule.handleUnlockCallback(s, poolManager, data);
+        DataTypes.CallbackData memory callback = abi.decode(data, (DataTypes.CallbackData));
+
+        if (
+            callback.action == DataTypes.UnlockAction.ADD_LIQUIDITY
+                || callback.action == DataTypes.UnlockAction.REMOVE_LIQUIDITY
+        ) {
+            return StablecoinModule.handleUnlockCallback(s, poolManager, data);
+        }
+
+        if (callback.action == DataTypes.UnlockAction.SWAP) {
+            return SyntheticSwapModule.handleUnlockCallback(s, poolManager, callback.data);
+        }
+
+        revert UnknownUnlockAction();
     }
 
     // ============================================================
@@ -1189,8 +1226,22 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         if (poolConfig.isAnchorPool) {
             return _handleAnchorSwap(key, params, sender);
         } else if (poolConfig.isSyntheticPool) {
-            // Synthetic swaps not implemented yet
-            revert SyntheticSwapNotImplemented();
+            SyntheticSwapModule.SyntheticSwapResult memory result =
+                SyntheticSwapModule.executeSyntheticSwap(s, poolManager, key, params);
+
+            emit SyntheticSwap(
+                poolId,
+                sender,
+                result.tokenIn,
+                result.tokenOut,
+                result.grossInput,
+                result.netInput,
+                result.amountOut,
+                result.feeAmount,
+                result.exactInput
+            );
+
+            return (result.selector, result.delta, result.lpFeeOverride);
         } else {
             revert UnknownPool();
         }
@@ -1211,7 +1262,6 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         SwapModule.AnchorSwapResult memory result = SwapModule.executeAnchorSwap(s, poolManager, key, params);
-        BeforeSwapDelta delta = toBeforeSwapDelta(result.delta0, result.delta1);
         emit AnchorSwap(
             PoolId.unwrap(key.toId()),
             sender,
