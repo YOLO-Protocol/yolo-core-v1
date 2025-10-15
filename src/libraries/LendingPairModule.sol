@@ -130,6 +130,22 @@ library LendingPairModule {
         address indexed user, address indexed collateral, address indexed yoloAsset, uint256 interestPaid
     );
 
+    function getPositionDebt(AppStorage storage s, address user, address collateral, address yoloAsset)
+        external
+        view
+        returns (uint256)
+    {
+        DataTypes.UserPosition storage position = s.positions[user][collateral][yoloAsset];
+        bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
+        DataTypes.PairConfiguration storage config = s._pairConfigs[pairId];
+
+        uint256 timeDelta = block.timestamp - config.lastUpdateTimestamp;
+        uint256 effectiveIndex =
+            InterestRateMath.calculateEffectiveIndex(config.liquidityIndexRay, config.borrowRate, timeDelta);
+
+        return InterestRateMath.calculateActualDebt(position.normalizedDebtRay, effectiveIndex);
+    }
+
     // ============================================================
     // ERRORS
     // ============================================================
