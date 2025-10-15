@@ -12,6 +12,7 @@ import {BeforeSwapDelta, toBeforeSwapDelta} from "@uniswap/v4-core/src/types/Bef
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 
 /**
  * @title SwapModule
@@ -38,6 +39,15 @@ library SwapModule {
     error SwapModule__InvalidAmount();
     error SwapModule__InsufficientLiquidity();
     error SwapModule__InsufficientOutput();
+
+    struct AnchorSwapResult {
+        bytes4 selector;
+        BeforeSwapDelta delta;
+        uint24 lpFeeOverride;
+        int128 delta0;
+        int128 delta1;
+        uint256 feeAmount;
+    }
 
     // ============================================================
     // SWAP DELTA CALCULATION
@@ -217,24 +227,19 @@ library SwapModule {
 
     /**
      * @notice Handle anchor pool swap execution
-     * @dev Extracted from YoloHook for code size reduction
-     *      Performs full swap settlement with PoolManager and reserve updates
+     * @dev Performs full swap settlement with PoolManager and reserve updates
      * @param s AppStorage reference
      * @param poolManager PoolManager instance
      * @param key PoolKey identifying the anchor pool
      * @param params Swap parameters
-     * @param sender Address initiating the swap
-     * @return selector Function selector
-     * @return delta BeforeSwapDelta specifying token flows
-     * @return lpFeeOverride Always 0 (fees handled in hook)
+     * @return result Struct containing swap deltas, selector, and fee information for event emission
      */
-    function handleAnchorSwap(
+    function executeAnchorSwap(
         AppStorage storage s,
         IPoolManager poolManager,
         PoolKey calldata key,
-        SwapParams calldata params,
-        address sender
-    ) external returns (bytes4 selector, BeforeSwapDelta delta, uint24 lpFeeOverride) {
+        SwapParams calldata params
+    ) external returns (AnchorSwapResult memory result) {
         (uint256 grossIn, uint256 amountOut, uint256 feeAmount) =
             calculateAnchorSwapDelta(s, key, params.zeroForOne, params.amountSpecified);
 
@@ -272,17 +277,36 @@ library SwapModule {
         int128 delta0;
         int128 delta1;
 
-        if (exactIn) {
-            delta0 = int128(uint128(grossIn));
-            delta1 = -int128(uint128(amountOut));
+        if (params.zeroForOne) {
+            if (exactIn) {
+                delta0 = int128(uint128(grossIn));
+                delta1 = -int128(uint128(amountOut));
+            } else {
+                delta0 = -int128(uint128(amountOut));
+                delta1 = int128(uint128(grossIn));
+            }
         } else {
-            delta0 = -int128(uint128(amountOut));
-            delta1 = int128(uint128(grossIn));
+            if (exactIn) {
+                delta0 = -int128(uint128(amountOut));
+                delta1 = int128(uint128(grossIn));
+            } else {
+                delta0 = int128(uint128(grossIn));
+                delta1 = -int128(uint128(amountOut));
+            }
         }
 
-        // Note: Event emission must be done in YoloHook context, not library
-        // Library cannot emit events with proper address context
+        int128 deltaSpecified = params.zeroForOne ? delta0 : delta1;
+        int128 deltaUnspecified = params.zeroForOne ? delta1 : delta0;
+        result.selector = IHooks.beforeSwap.selector;
+        result.delta = toBeforeSwapDelta(deltaSpecified, deltaUnspecified);
+        result.lpFeeOverride = 0;
+        result.delta0 = delta0;
+        result.delta1 = delta1;
+        result.feeAmount = feeAmount;
+    }
 
-        return (bytes4(0x0), toBeforeSwapDelta(delta0, delta1), 0);
+    function afterSwapCleanup(AppStorage storage s) external {
+        s._pendingRehypoUSDC = 0;
+        s._pendingDehypoUSDC = 0;
     }
 }
