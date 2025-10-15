@@ -35,7 +35,7 @@ struct AppStorage {
     /// @notice USDC decimals (chain-dependent - can be 6 or 18)
     uint8 usdcDecimals;
     /// @notice Scale factor to convert USDC to 18 decimals: 10^(18-usdcDecimals)
-    /// @dev Mirrors V0.5 USDC_SCALE_UP pattern for consistent decimal handling
+    /// @dev Used for consistent decimal normalization across all calculations
     uint256 usdcScaleUp;
     /// @notice Pause state (managed via ACLManager PAUSER_ROLE)
     bool _paused;
@@ -91,7 +91,7 @@ struct AppStorage {
     /// @notice Anchor pool reserves for StableSwap math
     uint256 totalAnchorReserveUSY;
     uint256 totalAnchorReserveUSDC;
-    /// @notice Pending rehypothecation/dehypothecation amounts (v0.5 pattern)
+    /// @notice Pending rehypothecation/dehypothecation amounts for future use
     uint256 _pendingRehypoUSDC;
     uint256 _pendingDehypoUSDC;
     // ============================================================

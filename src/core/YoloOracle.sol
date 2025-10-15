@@ -8,8 +8,8 @@ import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
  * @title YoloOracle
  * @author alvin@yolo.wtf
  * @notice Unified price aggregator for YOLO Protocol V1
- * @dev Based on V0.5 design with ACL integration and gas optimizations
- *      - ACL-based access control instead of Ownable
+ * @dev ACL-based access control with gas optimizations
+ *      - Role-based access control via ACL Manager
  *      - Immutable storage for gas efficiency
  *      - Simple single-source oracle mapping (complexity handled by adapters)
  */

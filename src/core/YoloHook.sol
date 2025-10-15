@@ -224,7 +224,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         s.usdc = _usdc;
         s.treasury = _treasury;
         s.usdcDecimals = IERC20Metadata(_usdc).decimals();
-        s.usdcScaleUp = 10 ** (18 - s.usdcDecimals); // V0.5 USDC_SCALE_UP pattern
+        s.usdcScaleUp = 10 ** (18 - s.usdcDecimals); // Scale factor for USDC decimal normalization
 
         // Store swap configuration
         s.anchorAmplificationCoefficient = _anchorAmplificationCoefficient;
@@ -403,7 +403,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         (uint256 calculatedAmountIn, uint256 calculatedAmountOut, uint256 calculatedFeeAmount) =
             SwapModule.calculateAnchorSwapDelta(s, poolConfig.poolKey, params.zeroForOne, params.amountSpecified);
 
-        // V0.5 pattern: Tests expect 18 decimal outputs
+        // Scale outputs to 18 decimals for consistency
         // Determine if output is USDC (needs scaling) or USY (already 18 decimals)
         bool isToken0USY = Currency.unwrap(poolConfig.poolKey.currency0) == s.usy;
         bool outputIsUSY = zeroForOne ? !isToken0USY : isToken0USY;
@@ -1214,7 +1214,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Handle anchor pool swaps (USY-USDC StableSwap)
-     * @dev V0.5 pattern: Handle all settlement in hook, return zero deltas
+     * @dev Hook handles all settlement logic and returns calculated deltas
      * @param key PoolKey identifying the anchor pool
      * @param params Swap parameters
      * @param sender Address initiating the swap
@@ -1237,7 +1237,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         Currency currencyIn = params.zeroForOne ? key.currency0 : key.currency1;
         Currency currencyOut = params.zeroForOne ? key.currency1 : key.currency0;
 
-        // Settlement follows v0.5 pattern
+        // Settle token flows via PoolManager
         if (netIn > 0) {
             currencyIn.take(poolManager, address(this), netIn, true);
         }
@@ -1248,7 +1248,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             currencyOut.settle(poolManager, address(this), amountOut, true);
         }
 
-        // Update reserves immediately (authoritative in v0.5)
+        // Update anchor pool reserves
         if (usdcToUsy) {
             s.totalAnchorReserveUSDC += netIn;
             s.totalAnchorReserveUSY -= amountOut;
@@ -1286,7 +1286,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Handle afterSwap hook
-     * @dev V0.5 pattern: All swap logic handled in beforeSwap, this is just a no-op
+     * @dev All swap logic handled in beforeSwap, this cleans up pending markers
      * @param sender Address initiating the swap
      * @param key PoolKey identifying the pool
      * @param params Swap parameters
