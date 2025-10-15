@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {AppStorage} from "../core/YoloHookStorage.sol";
+import {AppStorage, YoloHookStorage} from "../core/YoloHookStorage.sol";
 import {DataTypes} from "./DataTypes.sol";
 import {DecimalNormalization} from "./DecimalNormalization.sol";
 import {StakedYoloUSD} from "../tokenization/StakedYoloUSD.sol";
@@ -45,6 +45,79 @@ library StablecoinModule {
     error ImbalancedDeposit();
     error InsufficientLiquidity();
     error InsufficientOutput();
+
+    // ============================================================
+    // EXTERNAL ENTRYPOINTS
+    // ============================================================
+
+    function addLiquidity(
+        AppStorage storage s,
+        IPoolManager poolManager,
+        address sender,
+        uint256 maxUsyAmount,
+        uint256 maxUsdcAmount,
+        uint256 minSUSYReceive,
+        address receiver
+    ) external returns (bool isBootstrap, uint256 usyUsed, uint256 usdcUsed, uint256 sUSYMinted) {
+        if (maxUsyAmount == 0 || maxUsdcAmount == 0) revert YoloHookStorage.InvalidAmount();
+        if (receiver == address(0)) revert YoloHookStorage.InvalidAddress();
+        if (s.sUSY == address(0)) revert YoloHookStorage.sUSYNotInitialized();
+
+        isBootstrap = StakedYoloUSD(s.sUSY).totalSupply() == 0;
+
+        bytes memory callbackData = abi.encode(
+            DataTypes.CallbackData({
+                action: DataTypes.UnlockAction.ADD_LIQUIDITY,
+                data: abi.encode(
+                    DataTypes.AddLiquidityData({
+                        sender: sender,
+                        receiver: receiver,
+                        maxUsyIn: maxUsyAmount,
+                        maxUsdcIn: maxUsdcAmount,
+                        minSUSY: minSUSYReceive
+                    })
+                )
+            })
+        );
+
+        bytes memory result = poolManager.unlock(callbackData);
+        (usyUsed, usdcUsed, sUSYMinted) = abi.decode(result, (uint256, uint256, uint256));
+    }
+
+    function removeLiquidity(
+        AppStorage storage s,
+        IPoolManager poolManager,
+        address sender,
+        uint256 sUSYAmount,
+        uint256 minUsyOut,
+        uint256 minUsdcOut,
+        address receiver
+    ) external returns (uint256 usyOut, uint256 usdcOut) {
+        if (sUSYAmount == 0) revert YoloHookStorage.InvalidAmount();
+        if (receiver == address(0)) revert YoloHookStorage.InvalidAddress();
+        if (s.sUSY == address(0)) revert YoloHookStorage.sUSYNotInitialized();
+
+        StakedYoloUSD sUSYContract = StakedYoloUSD(s.sUSY);
+        if (sUSYContract.balanceOf(sender) < sUSYAmount) revert YoloHookStorage.InsufficientBalance();
+
+        bytes memory callbackData = abi.encode(
+            DataTypes.CallbackData({
+                action: DataTypes.UnlockAction.REMOVE_LIQUIDITY,
+                data: abi.encode(
+                    DataTypes.RemoveLiquidityData({
+                        sender: sender,
+                        receiver: receiver,
+                        sUSYAmount: sUSYAmount,
+                        minUsyOut: minUsyOut,
+                        minUsdcOut: minUsdcOut
+                    })
+                )
+            })
+        );
+
+        bytes memory result = poolManager.unlock(callbackData);
+        (usyOut, usdcOut) = abi.decode(result, (uint256, uint256));
+    }
 
     // ============================================================
     // UNLOCK CALLBACK ROUTING
