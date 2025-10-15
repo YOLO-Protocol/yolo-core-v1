@@ -43,6 +43,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
 
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
+    address public treasury = makeAddr("treasury");
 
     // ============================================================
     // POOL STATE
@@ -89,12 +90,13 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
 
         // Deploy YoloHook proxy with initialization
         bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,address,address,address,uint256,uint256,uint256)",
+            "initialize(address,address,address,address,address,address,uint256,uint256,uint256)",
             address(oracle),
             address(usdc),
             usyImpl,
             sUSYImpl,
             ylpVault,
+            treasury,
             100, // A=100 for StableSwap
             SWAP_FEE_BPS, // 0.1% swap fee
             SWAP_FEE_BPS // 0.1% synthetic swap fee

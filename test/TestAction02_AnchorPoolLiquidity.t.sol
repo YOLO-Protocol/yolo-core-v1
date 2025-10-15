@@ -35,6 +35,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
     // ============================================================
 
     address public admin = makeAddr("admin");
+    address public treasury = makeAddr("treasury");
     address public user1 = makeAddr("user1");
     address public user2 = makeAddr("user2");
 
@@ -90,12 +91,13 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
         deployCodeTo("YoloHook.sol:YoloHook", abi.encode(address(manager), address(aclManager)), hookImplAddress);
 
         bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,address,address,address,uint256,uint256,uint256)",
+            "initialize(address,address,address,address,address,address,uint256,uint256,uint256)",
             address(oracle),
             address(usdc),
             address(usyImpl),
             address(sUSYImpl),
             address(ylpVault),
+            treasury,
             100, // anchorAmplificationCoefficient (A=100 for stablecoins)
             10, // anchorSwapFeeBps (0.1% = 10 bps)
             10 // syntheticSwapFeeBps (0.1% = 10 bps)

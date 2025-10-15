@@ -43,6 +43,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
     address public assetsAdmin = makeAddr("assetsAdmin");
     address public riskAdmin = makeAddr("riskAdmin");
     address public pauser = makeAddr("pauser");
+    address public treasury = makeAddr("treasury");
     address public user1 = makeAddr("user1");
     address public user2 = makeAddr("user2");
 
@@ -109,12 +110,13 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
         // Deploy ERC1967Proxy (UUPS) at specific address using deployCodeTo
         // Pass initialize calldata in constructor to avoid admin restrictions
         bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,address,address,address,uint256,uint256,uint256)",
+            "initialize(address,address,address,address,address,address,uint256,uint256,uint256)",
             address(oracle),
             address(usdc),
             address(usyImpl),
             address(sUSYImpl),
             address(ylpVault),
+            treasury,
             100, // anchorAmplificationCoefficient (A=100 for stablecoins)
             10, // anchorSwapFeeBps (0.1% = 10 bps)
             10 // syntheticSwapFeeBps (0.1% = 10 bps)
@@ -311,7 +313,12 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
             8000, // 80% LTV
             8500, // 85% liquidation threshold
             500, // 5% liquidation bonus
-            300 // 3% borrow rate
+            500, // 5% liquidation penalty
+            300, // 3% borrow rate
+            type(uint256).max, // unlimited mint cap
+            type(uint256).max, // unlimited supply cap
+            false, // not expirable
+            0 // no expiry period
         );
 
         vm.stopPrank();
@@ -346,7 +353,21 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
         yoloHook.whitelistCollateral(address(usdc));
 
         // Configure with deposit/debt tokens
-        yoloHook.configureLendingPair(yETH, address(usdc), depositToken, debtToken, 8000, 8500, 500, 300);
+        yoloHook.configureLendingPair(
+            yETH,
+            address(usdc),
+            depositToken,
+            debtToken,
+            8000,
+            8500,
+            500,
+            500,
+            300,
+            type(uint256).max,
+            type(uint256).max,
+            false,
+            0
+        );
 
         vm.stopPrank();
 
@@ -372,8 +393,36 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
         yoloHook.whitelistCollateral(address(weth));
 
         // Configure multiple pairs
-        yoloHook.configureLendingPair(yETH, address(usdc), address(0), address(0), 8000, 8500, 500, 300);
-        yoloHook.configureLendingPair(yETH, address(weth), address(0), address(0), 7500, 8000, 500, 250);
+        yoloHook.configureLendingPair(
+            yETH,
+            address(usdc),
+            address(0),
+            address(0),
+            8000,
+            8500,
+            500,
+            500,
+            300,
+            type(uint256).max,
+            type(uint256).max,
+            false,
+            0
+        );
+        yoloHook.configureLendingPair(
+            yETH,
+            address(weth),
+            address(0),
+            address(0),
+            7500,
+            8000,
+            500,
+            500,
+            250,
+            type(uint256).max,
+            type(uint256).max,
+            false,
+            0
+        );
 
         vm.stopPrank();
 
@@ -399,8 +448,21 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
         );
 
         yoloHook.whitelistCollateral(address(usdc));
-        bytes32 pairId =
-            yoloHook.configureLendingPair(yETH, address(usdc), address(0), address(0), 8000, 8500, 500, 300);
+        bytes32 pairId = yoloHook.configureLendingPair(
+            yETH,
+            address(usdc),
+            address(0),
+            address(0),
+            8000,
+            8500,
+            500,
+            500,
+            300,
+            type(uint256).max,
+            type(uint256).max,
+            false,
+            0
+        );
 
         vm.stopPrank();
 
@@ -432,8 +494,21 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
         );
 
         yoloHook.whitelistCollateral(address(usdc));
-        bytes32 pairId =
-            yoloHook.configureLendingPair(yETH, address(usdc), address(0), address(0), 8000, 8500, 500, 300);
+        bytes32 pairId = yoloHook.configureLendingPair(
+            yETH,
+            address(usdc),
+            address(0),
+            address(0),
+            8000,
+            8500,
+            500,
+            500,
+            300,
+            type(uint256).max,
+            type(uint256).max,
+            false,
+            0
+        );
 
         vm.stopPrank();
 
@@ -571,9 +646,51 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
         yoloHook.whitelistCollateral(address(weth));
 
         // Configure multiple pairs
-        yoloHook.configureLendingPair(yETH, address(usdc), address(0), address(0), 8000, 8500, 500, 300);
-        yoloHook.configureLendingPair(yETH, address(weth), address(0), address(0), 7500, 8000, 500, 250);
-        yoloHook.configureLendingPair(yBTC, address(usdc), address(0), address(0), 7000, 7500, 500, 400);
+        yoloHook.configureLendingPair(
+            yETH,
+            address(usdc),
+            address(0),
+            address(0),
+            8000,
+            8500,
+            500,
+            500,
+            300,
+            type(uint256).max,
+            type(uint256).max,
+            false,
+            0
+        );
+        yoloHook.configureLendingPair(
+            yETH,
+            address(weth),
+            address(0),
+            address(0),
+            7500,
+            8000,
+            500,
+            500,
+            250,
+            type(uint256).max,
+            type(uint256).max,
+            false,
+            0
+        );
+        yoloHook.configureLendingPair(
+            yBTC,
+            address(usdc),
+            address(0),
+            address(0),
+            7000,
+            7500,
+            500,
+            500,
+            400,
+            type(uint256).max,
+            type(uint256).max,
+            false,
+            0
+        );
 
         vm.stopPrank();
 
