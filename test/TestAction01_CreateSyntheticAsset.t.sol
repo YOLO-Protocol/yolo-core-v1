@@ -98,7 +98,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
         // Hook proxy: shifted pattern (ALL_HOOK_MASK << 1) + 1
         address hookProxyAddress = address(uint160(Hooks.ALL_HOOK_MASK << 1) + 1);
 
-        // Deploy YoloHook implementation at specific address using deployCodeTo (V0.5 pattern)
+        // Deploy YoloHook implementation at specific address using deployCodeTo
         // Use the real PoolManager from base contract
         deployCodeTo(
             "YoloHook.sol:YoloHook",
