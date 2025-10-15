@@ -40,6 +40,7 @@ library DataTypes {
 
     /**
      * @notice Configuration for lending pairs (collateral-synthetic relationships)
+     * @dev Structure supports compound interest via liquidity index pattern
      * @param syntheticAsset The synthetic asset being borrowed (e.g., yETH)
      * @param collateralAsset The collateral asset (e.g., USDC, WETH)
      * @param depositToken Optional receipt token for deposits (can be address(0))
@@ -47,7 +48,14 @@ library DataTypes {
      * @param ltv Loan-to-Value ratio (in basis points, e.g., 8000 = 80%)
      * @param liquidationThreshold Liquidation threshold (in basis points, e.g., 8500 = 85%)
      * @param liquidationBonus Liquidation bonus (in basis points, e.g., 500 = 5%)
+     * @param liquidationPenalty Liquidation penalty for seized collateral (in basis points)
      * @param borrowRate Annual borrow rate (in basis points, e.g., 300 = 3%)
+     * @param liquidityIndexRay Global liquidity index for compound interest (RAY precision - 27 decimals)
+     * @param lastUpdateTimestamp Last time the liquidity index was updated
+     * @param maxMintableCap Maximum mintable cap for the synthetic asset
+     * @param maxSupplyCap Maximum supply cap for the collateral asset
+     * @param isExpirable Whether positions expire
+     * @param expirePeriod Expiry period in seconds
      * @param isActive Whether the pair is active
      * @param createdAt Timestamp when pair was created
      */
@@ -59,7 +67,14 @@ library DataTypes {
         uint256 ltv;
         uint256 liquidationThreshold;
         uint256 liquidationBonus;
+        uint256 liquidationPenalty;
         uint256 borrowRate;
+        uint256 liquidityIndexRay;
+        uint256 lastUpdateTimestamp;
+        uint256 maxMintableCap;
+        uint256 maxSupplyCap;
+        bool isExpirable;
+        uint256 expirePeriod;
         bool isActive;
         uint256 createdAt;
     }
@@ -69,17 +84,40 @@ library DataTypes {
     // ============================================================
 
     /**
+     * @notice Key structure for enumerating user positions
+     * @param collateral Collateral asset address
+     * @param yoloAsset Synthetic asset address
+     */
+    struct UserPositionKey {
+        address collateral;
+        address yoloAsset;
+    }
+
+    /**
      * @notice User position data for a specific lending pair
-     * @param collateralAmount Amount of collateral deposited
-     * @param debtAmount Amount of synthetic asset borrowed
-     * @param lastUpdateTimestamp Last time position was updated
-     * @param accumulatedInterest Accumulated interest since last update
+     * @dev Tracks both principal and total debt separately for accurate interest calculations
+     * @param borrower Address of the borrower
+     * @param collateral Collateral asset address
+     * @param yoloAsset Synthetic asset address
+     * @param collateralSuppliedAmount Amount of collateral deposited (native decimals)
+     * @param normalizedPrincipalRay Principal amount in RAY precision (27 decimals)
+     * @param normalizedDebtRay Total debt (principal + interest) in RAY precision (27 decimals)
+     * @param userLiquidityIndexRay User's entry liquidity index (RAY precision)
+     * @param storedInterestRate Interest rate at position creation/renewal (basis points)
+     * @param lastUpdatedTimeStamp Last time position was updated
+     * @param expiryTimestamp Position expiry timestamp (0 if non-expirable)
      */
     struct UserPosition {
-        uint256 collateralAmount;
-        uint256 debtAmount;
-        uint256 lastUpdateTimestamp;
-        uint256 accumulatedInterest;
+        address borrower;
+        address collateral;
+        address yoloAsset;
+        uint256 collateralSuppliedAmount;
+        uint256 normalizedPrincipalRay;
+        uint256 normalizedDebtRay;
+        uint256 userLiquidityIndexRay;
+        uint256 storedInterestRate;
+        uint256 lastUpdatedTimeStamp;
+        uint256 expiryTimestamp;
     }
 
     // ============================================================
