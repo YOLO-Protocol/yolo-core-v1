@@ -1,49 +1,33 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Base01_DeployUniswapV4Pool} from "./base/Base01_DeployUniswapV4Pool.t.sol";
+import {Base02_DeployYoloHook} from "./base/Base02_DeployYoloHook.t.sol";
 import {YoloHook} from "../src/core/YoloHook.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
-import {StakedYoloUSD} from "../src/tokenization/StakedYoloUSD.sol";
-import {ACLManager} from "../src/access/ACLManager.sol";
-import {IACLManager} from "../src/interfaces/IACLManager.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IYoloOracle} from "../src/interfaces/IYoloOracle.sol";
 import {DataTypes} from "../src/libraries/DataTypes.sol";
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {MockYoloOracle} from "../src/mocks/MockYoloOracle.sol";
-import {MockYLPVault} from "../src/mocks/MockYLPVault.sol";
 
 /**
  * @title TestAction01_CreateSyntheticAsset
  * @notice Comprehensive test suite for synthetic asset creation and pairing
  * @dev Tests YoloHook's asset creation, management, and lending pair configuration
- *      Uses deployCodeTo to deploy YoloHook at valid hook address matching Uniswap V4 requirements
- *      Inherits from Base01_DeployUniswapV4Pool to get real PoolManager deployment
  */
-contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
+contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
     // ============================================================
     // CONTRACTS
     // ============================================================
 
-    YoloHook public yoloHookImpl;
-    YoloHook public yoloHook;
-    ACLManager public aclManager;
-    // PoolManager inherited from Base01_DeployUniswapV4Pool
-    MockYoloOracle public oracle;
-    MockYLPVault public ylpVault;
     YoloSyntheticAsset public syntheticAssetImpl;
 
     // ============================================================
     // TEST ACCOUNTS
     // ============================================================
 
-    address public admin = makeAddr("admin");
     address public assetsAdmin = makeAddr("assetsAdmin");
     address public riskAdmin = makeAddr("riskAdmin");
     address public pauser = makeAddr("pauser");
-    address public treasury = makeAddr("treasury");
     address public user1 = makeAddr("user1");
     address public user2 = makeAddr("user2");
 
@@ -51,83 +35,27 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
     // MOCK ASSETS
     // ============================================================
 
-    MockERC20 public usdc;
     MockERC20 public weth;
     MockERC20 public wbtc;
-    address public usy;
-    address public sUSY;
-    YoloSyntheticAsset public usyImpl;
-    StakedYoloUSD public sUSYImpl;
 
     // ============================================================
     // SETUP
     // ============================================================
 
     function setUp() public override {
-        // Call parent setUp to deploy real PoolManager
+        super.setUp(); // Deploy YoloHook from Base02
 
-        super.setUp();
-
-        // Deploy mock infrastructure (PoolManager comes from base)
-        oracle = new MockYoloOracle();
-        ylpVault = new MockYLPVault();
-        usdc = new MockERC20("USD Coin", "USDC", 6);
+        // Deploy test-specific collateral
         weth = new MockERC20("Wrapped Ether", "WETH", 18);
         wbtc = new MockERC20("Wrapped Bitcoin", "WBTC", 8);
 
-        // Deploy ACL Manager (test contract becomes DEFAULT_ADMIN)
-        aclManager = new ACLManager(admin);
-
-        // Set up roles (test contract has DEFAULT_ADMIN_ROLE)
+        // Set up ACL roles for test
         aclManager.createRole("ASSETS_ADMIN", bytes32(0));
         aclManager.createRole("RISK_ADMIN", bytes32(0));
         aclManager.createRole("PAUSER", bytes32(0));
         aclManager.grantRole(keccak256("ASSETS_ADMIN"), assetsAdmin);
         aclManager.grantRole(keccak256("RISK_ADMIN"), riskAdmin);
         aclManager.grantRole(keccak256("PAUSER"), pauser);
-
-        // Deploy USY implementation
-        usyImpl = new YoloSyntheticAsset();
-
-        // Deploy sUSY implementation
-        sUSYImpl = new StakedYoloUSD(IACLManager(address(aclManager)));
-
-        // Precompute valid hook addresses following Uniswap V4 requirements
-        // Hook implementation: all permission bits must be set
-        address hookImplAddress = address(uint160(Hooks.ALL_HOOK_MASK));
-        // Hook proxy: shifted pattern (ALL_HOOK_MASK << 1) + 1
-        address hookProxyAddress = address(uint160(Hooks.ALL_HOOK_MASK << 1) + 1);
-
-        // Deploy YoloHook implementation at specific address using deployCodeTo
-        // Use the real PoolManager from base contract
-        deployCodeTo(
-            "YoloHook.sol:YoloHook",
-            abi.encode(address(manager), address(aclManager)), // manager from Base01_DeployUniswapV4Pool
-            hookImplAddress
-        );
-        yoloHookImpl = YoloHook(hookImplAddress);
-
-        // Deploy ERC1967Proxy (UUPS) at specific address using deployCodeTo
-        // Pass initialize calldata in constructor to avoid admin restrictions
-        bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,address,address,address,address,uint256,uint256,uint256)",
-            address(oracle),
-            address(usdc),
-            address(usyImpl),
-            address(sUSYImpl),
-            address(ylpVault),
-            treasury,
-            100, // anchorAmplificationCoefficient (A=100 for stablecoins)
-            10, // anchorSwapFeeBps (0.1% = 10 bps)
-            10 // syntheticSwapFeeBps (0.1% = 10 bps)
-        );
-
-        deployCodeTo("ERC1967Proxy.sol:ERC1967Proxy", abi.encode(hookImplAddress, initData), hookProxyAddress);
-        yoloHook = YoloHook(hookProxyAddress);
-
-        // Get USY and sUSY addresses from YoloHook (deployed during initialization)
-        usy = yoloHook.usy();
-        sUSY = yoloHook.sUSY();
 
         // Verify proxy setup
         assertEq(address(yoloHook.yoloOracle()), address(oracle), "Oracle mismatch");
@@ -136,7 +64,7 @@ contract TestAction01_CreateSyntheticAsset is Base01_DeployUniswapV4Pool {
         assertEq(yoloHook.usdcDecimals(), 6, "USDC decimals should be 6");
         assertEq(yoloHook.ylpVault(), address(ylpVault), "YLP vault mismatch");
 
-        // Deploy YoloSyntheticAsset implementation
+        // Deploy test-specific synthetic asset implementation
         syntheticAssetImpl = new YoloSyntheticAsset();
 
         // Set up oracle prices

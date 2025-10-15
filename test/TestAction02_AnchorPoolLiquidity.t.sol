@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Base01_DeployUniswapV4Pool} from "./base/Base01_DeployUniswapV4Pool.t.sol";
+import {Base02_DeployYoloHook} from "./base/Base02_DeployYoloHook.t.sol";
 import {YoloHook} from "../src/core/YoloHook.sol";
-import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
-import {StakedYoloUSD} from "../src/tokenization/StakedYoloUSD.sol";
-import {ACLManager} from "../src/access/ACLManager.sol";
-import {IACLManager} from "../src/interfaces/IACLManager.sol";
-import {MockERC20} from "../src/mocks/MockERC20.sol";
-import {MockYoloOracle} from "../src/mocks/MockYoloOracle.sol";
-import {MockYLPVault} from "../src/mocks/MockYLPVault.sol";
 import {DataTypes} from "../src/libraries/DataTypes.sol";
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
@@ -20,32 +12,13 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * @dev Tests addLiquidity/removeLiquidity with PoolManager unlock callbacks
  *      Verifies settle/take pattern, reserve updates, and sUSY mint/burn
  */
-contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
-    // ============================================================
-    // CONTRACTS
-    // ============================================================
-
-    YoloHook public yoloHook;
-    ACLManager public aclManager;
-    MockYoloOracle public oracle;
-    MockYLPVault public ylpVault;
-
+contract TestAction02_AnchorPoolLiquidity is Base02_DeployYoloHook {
     // ============================================================
     // TEST ACCOUNTS
     // ============================================================
 
-    address public admin = makeAddr("admin");
-    address public treasury = makeAddr("treasury");
     address public user1 = makeAddr("user1");
     address public user2 = makeAddr("user2");
-
-    // ============================================================
-    // TOKENS
-    // ============================================================
-
-    MockERC20 public usdc;
-    address public usy;
-    address public sUSY;
 
     // ============================================================
     // EVENTS (for expectEmit)
@@ -69,46 +42,7 @@ contract TestAction02_AnchorPoolLiquidity is Base01_DeployUniswapV4Pool {
     // ============================================================
 
     function setUp() public override {
-        super.setUp();
-
-        // Deploy mock infrastructure
-        oracle = new MockYoloOracle();
-        ylpVault = new MockYLPVault();
-        usdc = new MockERC20("USD Coin", "USDC", 6);
-
-        // Deploy ACL Manager
-        aclManager = new ACLManager(address(this));
-
-        // Deploy USY and sUSY implementations
-        YoloSyntheticAsset usyImpl = new YoloSyntheticAsset();
-        StakedYoloUSD sUSYImpl = new StakedYoloUSD(IACLManager(address(aclManager)));
-
-        // Precompute hook addresses
-        address hookImplAddress = address(uint160(Hooks.ALL_HOOK_MASK));
-        address hookProxyAddress = address(uint160(Hooks.ALL_HOOK_MASK << 1) + 1);
-
-        // Deploy YoloHook
-        deployCodeTo("YoloHook.sol:YoloHook", abi.encode(address(manager), address(aclManager)), hookImplAddress);
-
-        bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,address,address,address,address,uint256,uint256,uint256)",
-            address(oracle),
-            address(usdc),
-            address(usyImpl),
-            address(sUSYImpl),
-            address(ylpVault),
-            treasury,
-            100, // anchorAmplificationCoefficient (A=100 for stablecoins)
-            10, // anchorSwapFeeBps (0.1% = 10 bps)
-            10 // syntheticSwapFeeBps (0.1% = 10 bps)
-        );
-
-        deployCodeTo("ERC1967Proxy.sol:ERC1967Proxy", abi.encode(hookImplAddress, initData), hookProxyAddress);
-        yoloHook = YoloHook(hookProxyAddress);
-
-        // Get deployed token addresses
-        usy = yoloHook.usy();
-        sUSY = yoloHook.sUSY();
+        super.setUp(); // Deploy YoloHook from Base02
 
         // Mint test tokens to users
         usdc.mint(user1, 10000e6); // 10K USDC

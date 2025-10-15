@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Base01_DeployUniswapV4Pool} from "./base/Base01_DeployUniswapV4Pool.t.sol";
+import {Base02_DeployYoloHook} from "./base/Base02_DeployYoloHook.t.sol";
 import {YoloHook} from "../src/core/YoloHook.sol";
-import {ACLManager} from "../src/access/ACLManager.sol";
-import {MockYoloOracle} from "../src/mocks/MockYoloOracle.sol";
-import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -23,19 +19,9 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
  * @notice Comprehensive test suite for USY-USDC anchor pool swaps using StableSwap
  * @dev Tests exact-input swaps, fees, reserve updates, and StableSwap properties
  */
-contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
+contract TestAction03_AnchorPoolSwaps is Base02_DeployYoloHook {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
-
-    // ============================================================
-    // CONTRACTS (Additional to Base)
-    // ============================================================
-
-    YoloHook public yoloHook;
-    // swapRouter is inherited from Deployers
-    MockERC20 public usdc;
-    IERC20 public usy;
-    IERC20 public sUSY;
 
     // ============================================================
     // TEST ACCOUNTS
@@ -43,7 +29,6 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
 
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
-    address public treasury = makeAddr("treasury");
 
     // ============================================================
     // POOL STATE
@@ -65,51 +50,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
     // ============================================================
 
     function setUp() public override {
-        super.setUp(); // Call base setup to deploy PoolManager and routers
-
-        // Deploy ACL Manager
-        ACLManager aclManager = new ACLManager(address(this));
-
-        // Deploy mock USDC (6 decimals)
-        usdc = new MockERC20("USD Coin", "USDC", 6);
-
-        // Deploy MockYoloOracle for now (we'll switch to real oracle after hook is deployed)
-        MockYoloOracle oracle = new MockYoloOracle();
-        address ylpVault = makeAddr("ylpVault");
-
-        // Deploy USY and sUSY implementations
-        address usyImpl = deployCode("YoloSyntheticAsset.sol:YoloSyntheticAsset");
-        address sUSYImpl = deployCode("StakedYoloUSD.sol:StakedYoloUSD", abi.encode(address(aclManager)));
-
-        // Precompute hook addresses (using all hook flags)
-        address hookImplAddress = address(uint160(Hooks.ALL_HOOK_MASK));
-        address hookProxyAddress = address(uint160(Hooks.ALL_HOOK_MASK << 1) + 1);
-
-        // Deploy YoloHook implementation
-        deployCodeTo("YoloHook.sol:YoloHook", abi.encode(address(manager), address(aclManager)), hookImplAddress);
-
-        // Deploy YoloHook proxy with initialization
-        bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,address,address,address,address,uint256,uint256,uint256)",
-            address(oracle),
-            address(usdc),
-            usyImpl,
-            sUSYImpl,
-            ylpVault,
-            treasury,
-            100, // A=100 for StableSwap
-            SWAP_FEE_BPS, // 0.1% swap fee
-            SWAP_FEE_BPS // 0.1% synthetic swap fee
-        );
-
-        deployCodeTo("ERC1967Proxy.sol:ERC1967Proxy", abi.encode(hookImplAddress, initData), hookProxyAddress);
-        yoloHook = YoloHook(hookProxyAddress);
-
-        // Get deployed token addresses
-        usy = IERC20(yoloHook.usy());
-        sUSY = IERC20(address(0)); // Will get after first LP
-
-        // swapRouter is already deployed by Deployers base class
+        super.setUp(); // Deploy YoloHook from Base02
 
         // Get anchor pool configuration
         anchorPoolKey = _getAnchorPoolKey();
@@ -119,16 +60,16 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         // Approve tokens for router and manager (for swaps)
         vm.startPrank(alice);
         usdc.approve(address(swapRouter), type(uint256).max);
-        usy.approve(address(swapRouter), type(uint256).max);
+        IERC20(usy).approve(address(swapRouter), type(uint256).max);
         usdc.approve(address(manager), type(uint256).max);
-        usy.approve(address(manager), type(uint256).max);
+        IERC20(usy).approve(address(manager), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(bob);
         usdc.approve(address(swapRouter), type(uint256).max);
-        usy.approve(address(swapRouter), type(uint256).max);
+        IERC20(usy).approve(address(swapRouter), type(uint256).max);
         usdc.approve(address(manager), type(uint256).max);
-        usy.approve(address(manager), type(uint256).max);
+        IERC20(usy).approve(address(manager), type(uint256).max);
         vm.stopPrank();
 
         // Bootstrap liquidity as alice
@@ -143,7 +84,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         uint256 swapAmount = 1000e18; // 1K USY
 
         // Get alice's initial balances
-        uint256 aliceUSYBefore = usy.balanceOf(alice);
+        uint256 aliceUSYBefore = IERC20(usy).balanceOf(alice);
         uint256 aliceUSDCBefore = usdc.balanceOf(alice);
 
         // Execute swap
@@ -151,7 +92,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         BalanceDelta delta = _swapUSYForUSDC(swapAmount);
 
         // Verify balances changed
-        assertLt(usy.balanceOf(alice), aliceUSYBefore, "USY balance should decrease");
+        assertLt(IERC20(usy).balanceOf(alice), aliceUSYBefore, "USY balance should decrease");
         assertGt(usdc.balanceOf(alice), aliceUSDCBefore, "USDC balance should increase");
     }
 
@@ -159,7 +100,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         uint256 swapAmount = 1000e6; // 1K USDC (6 decimals)
 
         // Get alice's initial balances
-        uint256 aliceUSYBefore = usy.balanceOf(alice);
+        uint256 aliceUSYBefore = IERC20(usy).balanceOf(alice);
         uint256 aliceUSDCBefore = usdc.balanceOf(alice);
 
         // Execute swap
@@ -167,7 +108,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         BalanceDelta delta = _swapUSDCForUSY(swapAmount);
 
         // Verify balances changed
-        assertGt(usy.balanceOf(alice), aliceUSYBefore, "USY balance should increase");
+        assertGt(IERC20(usy).balanceOf(alice), aliceUSYBefore, "USY balance should increase");
         assertLt(usdc.balanceOf(alice), aliceUSDCBefore, "USDC balance should decrease");
     }
 
@@ -215,7 +156,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         uint256 swapAmount = 5000e18;
 
         // Swap USY -> USDC
-        uint256 usyBefore = usy.balanceOf(alice);
+        uint256 usyBefore = IERC20(usy).balanceOf(alice);
         uint256 usdcBefore = usdc.balanceOf(alice);
 
         vm.prank(alice);
@@ -227,7 +168,7 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         vm.prank(alice);
         _swapUSDCForUSY(usdcReceived);
 
-        uint256 usyAfter = usy.balanceOf(alice);
+        uint256 usyAfter = IERC20(usy).balanceOf(alice);
 
         // Should get back approximately the same amount (minus fees)
         // With 0.1% fee each way, expect ~0.2% total loss
@@ -413,9 +354,9 @@ contract TestAction03_AnchorPoolSwaps is Base01_DeployUniswapV4Pool {
         vm.startPrank(alice);
         // Approve both hook and manager (manager for settle, hook for transfer)
         usdc.approve(address(manager), type(uint256).max);
-        usy.approve(address(manager), type(uint256).max);
+        IERC20(usy).approve(address(manager), type(uint256).max);
         usdc.approve(address(yoloHook), type(uint256).max);
-        usy.approve(address(yoloHook), type(uint256).max);
+        IERC20(usy).approve(address(yoloHook), type(uint256).max);
 
         yoloHook.addLiquidity(INITIAL_LP_AMOUNT, INITIAL_LP_AMOUNT / 1e12, 0, alice);
         vm.stopPrank();

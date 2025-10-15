@@ -1,20 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Base01_DeployUniswapV4Pool} from "./base/Base01_DeployUniswapV4Pool.t.sol";
+import {Base02_DeployYoloHook} from "./base/Base02_DeployYoloHook.t.sol";
 import {YoloHook} from "../src/core/YoloHook.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
-import {StakedYoloUSD} from "../src/tokenization/StakedYoloUSD.sol";
-import {ACLManager} from "../src/access/ACLManager.sol";
-import {IACLManager} from "../src/interfaces/IACLManager.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {IYoloOracle} from "../src/interfaces/IYoloOracle.sol";
 import {DataTypes} from "../src/libraries/DataTypes.sol";
 import {InterestRateMath} from "../src/libraries/InterestRateMath.sol";
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
-import {MockYoloOracle} from "../src/mocks/MockYoloOracle.sol";
-import {MockYLPVault} from "../src/mocks/MockYLPVault.sol";
 
 /**
  * @title TestAction04_InterestAccrualAndDebtLifecycle
@@ -22,41 +14,24 @@ import {MockYLPVault} from "../src/mocks/MockYLPVault.sol";
  * @dev Tests interest calculations, debt normalization, repayments, renewals, and liquidations
  *      Validates RAY precision math, lazy index updates, and interest-first payment flow
  */
-contract TestAction04_InterestAccrualAndDebtLifecycle is Base01_DeployUniswapV4Pool {
-    // ============================================================
-    // CONTRACTS
-    // ============================================================
-
-    YoloHook public yoloHookImpl;
-    YoloHook public yoloHook;
-    ACLManager public aclManager;
-    MockYoloOracle public oracle;
-    MockYLPVault public ylpVault;
-    YoloSyntheticAsset public syntheticAssetImpl;
-
+contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
     // ============================================================
     // TEST ACCOUNTS
     // ============================================================
 
-    address public admin = makeAddr("admin");
     address public assetsAdmin = makeAddr("assetsAdmin");
     address public riskAdmin = makeAddr("riskAdmin");
     address public borrower1 = makeAddr("borrower1");
     address public borrower2 = makeAddr("borrower2");
     address public liquidator = makeAddr("liquidator");
-    address public treasury = makeAddr("treasury");
 
     // ============================================================
     // MOCK ASSETS
     // ============================================================
 
-    MockERC20 public usdc; // Collateral 1
     MockERC20 public weth; // Collateral 2
     address public yUSD; // Synthetic asset 1
     address public yETH; // Synthetic asset 2
-    address public sUSY;
-    YoloSyntheticAsset public usyImpl;
-    StakedYoloUSD public sUSYImpl;
 
     // ============================================================
     // PAIR IDS
@@ -82,68 +57,28 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base01_DeployUniswapV4P
     // ============================================================
 
     function setUp() public override {
-        // Call parent setUp to deploy real PoolManager
-        super.setUp();
+        super.setUp(); // Deploy YoloHook from Base02
 
-        // Deploy mock infrastructure
-        oracle = new MockYoloOracle();
-        ylpVault = new MockYLPVault();
-        usdc = new MockERC20("USD Coin", "USDC", 6);
+        // Deploy test-specific collateral
         weth = new MockERC20("Wrapped Ether", "WETH", 18);
 
         // Set oracle prices
         oracle.setAssetPrice(address(usdc), 1e8); // $1
         oracle.setAssetPrice(address(weth), 2000e8); // $2000
 
-        // Deploy ACL Manager
-        aclManager = new ACLManager(admin);
-
-        // Set up roles
+        // Set up ACL roles for test
         aclManager.createRole("ASSETS_ADMIN", bytes32(0));
         aclManager.createRole("RISK_ADMIN", bytes32(0));
         aclManager.grantRole(keccak256("ASSETS_ADMIN"), assetsAdmin);
         aclManager.grantRole(keccak256("RISK_ADMIN"), riskAdmin);
 
-        // Deploy synthetic asset implementation
-        syntheticAssetImpl = new YoloSyntheticAsset();
-
-        // Deploy sUSY implementation
-        sUSYImpl = new StakedYoloUSD(IACLManager(address(aclManager)));
-
-        // Precompute valid hook addresses
-        address hookImplAddress = address(uint160(Hooks.ALL_HOOK_MASK));
-        address hookProxyAddress = address(uint160(Hooks.ALL_HOOK_MASK << 1) + 1);
-
-        // Deploy YoloHook implementation at specific address using deployCodeTo
-        deployCodeTo("YoloHook.sol:YoloHook", abi.encode(address(manager), address(aclManager)), hookImplAddress);
-        yoloHookImpl = YoloHook(hookImplAddress);
-
-        // Deploy ERC1967Proxy (UUPS) at specific address using deployCodeTo
-        bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,address,address,address,address,uint256,uint256,uint256)",
-            address(oracle),
-            address(usdc),
-            address(syntheticAssetImpl),
-            address(sUSYImpl),
-            address(ylpVault),
-            treasury, // treasury address for interest payments
-            100, // anchorAmplificationCoefficient (A=100 for stablecoins)
-            10, // anchorSwapFeeBps (0.1% = 10 bps)
-            10 // syntheticSwapFeeBps (0.1% = 10 bps)
-        );
-
-        deployCodeTo("ERC1967Proxy.sol:ERC1967Proxy", abi.encode(hookImplAddress, initData), hookProxyAddress);
-        yoloHook = YoloHook(hookProxyAddress);
-
         // Create synthetic assets
         vm.startPrank(assetsAdmin);
 
-        yUSD = yoloHook.createSyntheticAsset(
-            "Yolo USD", "yUSD", 18, address(usdc), address(usdc), address(syntheticAssetImpl), 0
-        );
+        yUSD = yoloHook.createSyntheticAsset("Yolo USD", "yUSD", 18, address(usdc), address(usdc), address(usyImpl), 0);
 
         yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(syntheticAssetImpl), 0
+            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(usyImpl), 0
         );
 
         // Set oracle prices for synthetic assets
