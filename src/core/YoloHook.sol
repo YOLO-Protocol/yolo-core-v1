@@ -554,6 +554,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @param borrowRate Annual borrow rate in basis points
      * @param maxMintableCap Maximum mintable cap for synthetic asset
      * @param maxSupplyCap Maximum supply cap for collateral
+     * @param minimumBorrowAmount Minimum borrow amount per transaction (in synthetic asset decimals, 0 = no minimum)
      * @param isExpirable Whether positions expire
      * @param expirePeriod Expiry period in seconds
      * @return pairId Unique identifier for the pair
@@ -570,6 +571,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         uint256 borrowRate,
         uint256 maxMintableCap,
         uint256 maxSupplyCap,
+        uint256 minimumBorrowAmount,
         bool isExpirable,
         uint256 expirePeriod
     ) external onlyAssetsAdmin returns (bytes32 pairId) {
@@ -585,6 +587,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             borrowRate,
             maxMintableCap,
             maxSupplyCap,
+            minimumBorrowAmount,
             isExpirable,
             expirePeriod
         );
@@ -975,6 +978,17 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     function updateBorrowRate(bytes32 pairId, uint256 newBorrowRate) external onlyAssetsAdmin {
         s.updateBorrowRate(pairId, newBorrowRate);
+    }
+
+    /**
+     * @notice Update minimum borrow amount for a lending pair
+     * @dev Only callable by risk admin
+     *      Enables per-pair minimum tuning for different asset economics
+     * @param pairId Lending pair ID
+     * @param newMinimumBorrowAmount New minimum borrow amount (in synthetic asset decimals, 0 = no minimum)
+     */
+    function updateMinimumBorrowAmount(bytes32 pairId, uint256 newMinimumBorrowAmount) external onlyRiskAdmin {
+        s.updateMinimumBorrowAmount(pairId, newMinimumBorrowAmount);
     }
 
     // ============================================================
