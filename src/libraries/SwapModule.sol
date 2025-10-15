@@ -2,10 +2,16 @@
 pragma solidity ^0.8.26;
 
 import {AppStorage} from "../core/YoloHookStorage.sol";
+import {DataTypes} from "./DataTypes.sol";
 import {StableMath} from "./StableMath.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
+import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta, toBeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
+import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
 /**
  * @title SwapModule
@@ -15,6 +21,10 @@ import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
  *      Uses StableMath for StableSwap invariant calculations
  */
 library SwapModule {
+    using CurrencyLibrary for Currency;
+    using CurrencySettler for Currency;
+    using PoolIdLibrary for PoolKey;
+
     // ============================================================
     // CONSTANTS
     // ============================================================
@@ -159,5 +169,120 @@ library SwapModule {
             newReserve = reserve - uint128(delta);
         }
         return newReserve;
+    }
+
+    // ============================================================
+    // SWAP PREVIEW
+    // ============================================================
+
+    /**
+     * @notice Preview anchor pool swap output
+     * @dev Simulates a swap without executing it
+     *      Extracted from YoloHook for code size reduction
+     * @param s AppStorage reference
+     * @param anchorPoolKey Anchor pool ID
+     * @param zeroForOne Direction of swap (true = token0 -> token1)
+     * @param amountIn Input amount (in native decimals)
+     * @return amountOut Output amount (in 18 decimals normalized)
+     * @return feeAmount Fee amount (in 18 decimals normalized)
+     */
+    function previewAnchorSwap(AppStorage storage s, bytes32 anchorPoolKey, bool zeroForOne, uint256 amountIn)
+        external
+        view
+        returns (uint256 amountOut, uint256 feeAmount)
+    {
+        DataTypes.PoolConfiguration memory poolConfig = s._poolConfigs[anchorPoolKey];
+
+        // Calculate swap delta
+        (uint256 calculatedAmountIn, uint256 calculatedAmountOut, uint256 calculatedFeeAmount) =
+            calculateAnchorSwapDelta(s, poolConfig.poolKey, zeroForOne, -int256(amountIn));
+
+        // Scale outputs to 18 decimals for consistency
+        // Determine if output is USDC (needs scaling) or USY (already 18 decimals)
+        bool isToken0USY = Currency.unwrap(poolConfig.poolKey.currency0) == s.usy;
+        bool outputIsUSY = zeroForOne ? !isToken0USY : isToken0USY;
+
+        // Scale USDC output to 18 decimals
+        if (!outputIsUSY && s.usdcDecimals != 18) {
+            calculatedAmountOut = calculatedAmountOut * s.usdcScaleUp;
+            calculatedFeeAmount = calculatedFeeAmount * s.usdcScaleUp;
+        }
+
+        return (calculatedAmountOut, calculatedFeeAmount);
+    }
+
+    // ============================================================
+    // SWAP EXECUTION
+    // ============================================================
+
+    /**
+     * @notice Handle anchor pool swap execution
+     * @dev Extracted from YoloHook for code size reduction
+     *      Performs full swap settlement with PoolManager and reserve updates
+     * @param s AppStorage reference
+     * @param poolManager PoolManager instance
+     * @param key PoolKey identifying the anchor pool
+     * @param params Swap parameters
+     * @param sender Address initiating the swap
+     * @return selector Function selector
+     * @return delta BeforeSwapDelta specifying token flows
+     * @return lpFeeOverride Always 0 (fees handled in hook)
+     */
+    function handleAnchorSwap(
+        AppStorage storage s,
+        IPoolManager poolManager,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        address sender
+    ) external returns (bytes4 selector, BeforeSwapDelta delta, uint24 lpFeeOverride) {
+        (uint256 grossIn, uint256 amountOut, uint256 feeAmount) =
+            calculateAnchorSwapDelta(s, key, params.zeroForOne, params.amountSpecified);
+
+        uint256 netIn = grossIn - feeAmount;
+
+        bool isToken0USY = Currency.unwrap(key.currency0) == s.usy;
+        bool usdcToUsy = params.zeroForOne ? !isToken0USY : isToken0USY;
+
+        Currency currencyIn = params.zeroForOne ? key.currency0 : key.currency1;
+        Currency currencyOut = params.zeroForOne ? key.currency1 : key.currency0;
+
+        // Settle token flows via PoolManager
+        if (netIn > 0) {
+            currencyIn.take(poolManager, address(this), netIn, true);
+        }
+        if (feeAmount > 0) {
+            currencyIn.take(poolManager, address(this), feeAmount, false);
+        }
+        if (amountOut > 0) {
+            currencyOut.settle(poolManager, address(this), amountOut, true);
+        }
+
+        // Update anchor pool reserves
+        if (usdcToUsy) {
+            s.totalAnchorReserveUSDC += netIn;
+            s.totalAnchorReserveUSY -= amountOut;
+            s._pendingRehypoUSDC = netIn;
+        } else {
+            s.totalAnchorReserveUSY += netIn;
+            s.totalAnchorReserveUSDC -= amountOut;
+            s._pendingDehypoUSDC = amountOut;
+        }
+
+        bool exactIn = params.amountSpecified < 0;
+        int128 delta0;
+        int128 delta1;
+
+        if (exactIn) {
+            delta0 = int128(uint128(grossIn));
+            delta1 = -int128(uint128(amountOut));
+        } else {
+            delta0 = -int128(uint128(amountOut));
+            delta1 = int128(uint128(grossIn));
+        }
+
+        // Note: Event emission must be done in YoloHook context, not library
+        // Library cannot emit events with proper address context
+
+        return (bytes4(0x0), toBeforeSwapDelta(delta0, delta1), 0);
     }
 }
