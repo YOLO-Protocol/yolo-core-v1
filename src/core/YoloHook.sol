@@ -15,6 +15,8 @@ import {YoloHookStorage, AppStorage} from "./YoloHookStorage.sol";
 import {DataTypes} from "../libraries/DataTypes.sol";
 import {SyntheticAssetModule} from "../libraries/SyntheticAssetModule.sol";
 import {LendingPairModule} from "../libraries/LendingPairModule.sol";
+import {LiquidationModule} from "../libraries/LiquidationModule.sol";
+import {InterestRateMath} from "../libraries/InterestRateMath.sol";
 import {StablecoinModule} from "../libraries/StablecoinModule.sol";
 import {SwapModule} from "../libraries/SwapModule.sol";
 import {DecimalNormalization} from "../libraries/DecimalNormalization.sol";
@@ -87,6 +89,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     event Unpaused(address indexed account);
     event OracleUpdated(address indexed newOracle);
     event YLPVaultUpdated(address indexed newVault);
+    event TreasuryUpdated(address indexed newTreasury);
     event SyntheticAssetUpgraded(address indexed syntheticAsset, address indexed newImplementation);
 
     // ========================
@@ -190,6 +193,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @param _usdc USDC token address (varies by chain)
      * @param _usyImplementation USY implementation for UUPS deployment
      * @param _ylpVaultImplementation YLP vault implementation (placeholder for Phase 3)
+     * @param _treasury Treasury address for interest payments
      * @dev Can only be called once due to initializer modifier
      *      Deploys USY with UUPS and creates anchor pool (USY-USDC)
      *      Protocol starts in unpaused state
@@ -200,6 +204,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         address _usyImplementation,
         address _sUSYImplementation,
         address _ylpVaultImplementation,
+        address _treasury,
         uint256 _anchorAmplificationCoefficient,
         uint256 _anchorSwapFeeBps,
         uint256 _syntheticSwapFeeBps
@@ -209,13 +214,15 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         if (_usdc == address(0)) revert YoloHook__InvalidAddress();
         if (_usyImplementation == address(0)) revert YoloHook__InvalidAddress();
         if (_sUSYImplementation == address(0)) revert YoloHook__InvalidAddress();
+        if (_treasury == address(0)) revert YoloHook__InvalidAddress();
         if (_anchorAmplificationCoefficient == 0) revert YoloHook__InvalidConfiguration();
         if (_anchorSwapFeeBps > 10000) revert YoloHook__InvalidConfiguration(); // Max 100%
         if (_syntheticSwapFeeBps > 10000) revert YoloHook__InvalidConfiguration(); // Max 100%
 
-        // Store oracle, USDC address, and USDC decimals
+        // Store oracle, USDC address, treasury, and USDC decimals
         s.yoloOracle = _yoloOracle;
         s.usdc = _usdc;
+        s.treasury = _treasury;
         s.usdcDecimals = IERC20Metadata(_usdc).decimals();
         s.usdcScaleUp = 10 ** (18 - s.usdcDecimals); // V0.5 USDC_SCALE_UP pattern
 
@@ -543,7 +550,12 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @param ltv Loan-to-Value ratio in basis points
      * @param liquidationThreshold Liquidation threshold in basis points
      * @param liquidationBonus Liquidation bonus in basis points
+     * @param liquidationPenalty Liquidation penalty in basis points
      * @param borrowRate Annual borrow rate in basis points
+     * @param maxMintableCap Maximum mintable cap for synthetic asset
+     * @param maxSupplyCap Maximum supply cap for collateral
+     * @param isExpirable Whether positions expire
+     * @param expirePeriod Expiry period in seconds
      * @return pairId Unique identifier for the pair
      */
     function configureLendingPair(
@@ -554,7 +566,12 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         uint256 ltv,
         uint256 liquidationThreshold,
         uint256 liquidationBonus,
-        uint256 borrowRate
+        uint256 liquidationPenalty,
+        uint256 borrowRate,
+        uint256 maxMintableCap,
+        uint256 maxSupplyCap,
+        bool isExpirable,
+        uint256 expirePeriod
     ) external onlyAssetsAdmin returns (bytes32 pairId) {
         return s.configureLendingPair(
             syntheticAsset,
@@ -564,7 +581,12 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             ltv,
             liquidationThreshold,
             liquidationBonus,
-            borrowRate
+            liquidationPenalty,
+            borrowRate,
+            maxMintableCap,
+            maxSupplyCap,
+            isExpirable,
+            expirePeriod
         );
     }
 
@@ -616,6 +638,17 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         if (_ylpVault == address(0)) revert YoloHook__InvalidAddress();
         s.ylpVault = _ylpVault;
         emit YLPVaultUpdated(_ylpVault);
+    }
+
+    /**
+     * @notice Updates the treasury address
+     * @dev Only callable by assets admin
+     * @param _treasury New treasury address
+     */
+    function setTreasury(address _treasury) external onlyAssetsAdmin {
+        if (_treasury == address(0)) revert YoloHook__InvalidAddress();
+        s.treasury = _treasury;
+        emit TreasuryUpdated(_treasury);
     }
 
     // ============================================================
@@ -783,6 +816,165 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     function isYoloAsset(address syntheticToken) external view returns (bool) {
         return s._isYoloAsset[syntheticToken];
+    }
+
+    // ============================================================
+    // CDP OPERATIONS (LENDING PAIR MODULE)
+    // ============================================================
+
+    /**
+     * @notice Borrow synthetic assets against collateral
+     * @param yoloAsset Synthetic asset to borrow
+     * @param borrowAmount Amount to borrow (18 decimals)
+     * @param collateral Collateral asset
+     * @param collateralAmount Collateral to deposit (native decimals)
+     */
+    function borrow(address yoloAsset, uint256 borrowAmount, address collateral, uint256 collateralAmount)
+        external
+        whenNotPaused
+        nonReentrant
+    {
+        s.borrowSyntheticAsset(yoloAsset, borrowAmount, collateral, collateralAmount);
+    }
+
+    /**
+     * @notice Repay borrowed synthetic assets
+     * @param yoloAsset Synthetic asset to repay
+     * @param collateral Collateral asset
+     * @param repayAmount Amount to repay (18 decimals)
+     */
+    function repay(address yoloAsset, address collateral, uint256 repayAmount) external whenNotPaused nonReentrant {
+        s.repaySyntheticAsset(collateral, yoloAsset, repayAmount, true); // true = claim collateral if fully repaid
+    }
+
+    /**
+     * @notice Renew expirable position
+     * @param yoloAsset Synthetic asset
+     * @param collateral Collateral asset
+     */
+    function renewPosition(address yoloAsset, address collateral) external whenNotPaused nonReentrant {
+        s.renewPosition(collateral, yoloAsset);
+    }
+
+    /**
+     * @notice Add collateral to existing position
+     * @param yoloAsset Synthetic asset
+     * @param collateral Collateral asset
+     * @param amount Amount to deposit
+     */
+    function depositCollateral(address yoloAsset, address collateral, uint256 amount)
+        external
+        whenNotPaused
+        nonReentrant
+    {
+        s.depositCollateral(collateral, yoloAsset, amount);
+    }
+
+    /**
+     * @notice Liquidate undercollateralized or expired position
+     * @param user User to liquidate
+     * @param collateral Collateral asset
+     * @param yoloAsset Synthetic asset
+     * @param repayAmount Amount to repay
+     */
+    function liquidate(address user, address collateral, address yoloAsset, uint256 repayAmount)
+        external
+        whenNotPaused
+        nonReentrant
+    {
+        LiquidationModule.liquidate(s, user, collateral, yoloAsset, repayAmount);
+    }
+
+    /**
+     * @notice Get user position data
+     * @param user User address
+     * @param collateral Collateral asset
+     * @param yoloAsset Synthetic asset
+     * @return position User position struct
+     */
+    function getUserPosition(address user, address collateral, address yoloAsset)
+        external
+        view
+        returns (DataTypes.UserPosition memory)
+    {
+        return s.positions[user][collateral][yoloAsset];
+    }
+
+    /**
+     * @notice Get current debt for a position with accrued interest
+     * @param user User address
+     * @param collateral Collateral asset
+     * @param yoloAsset Synthetic asset
+     * @return Current debt amount (18 decimals)
+     */
+    function getPositionDebt(address user, address collateral, address yoloAsset) external view returns (uint256) {
+        DataTypes.UserPosition storage position = s.positions[user][collateral][yoloAsset];
+        bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
+        DataTypes.PairConfiguration storage config = s._pairConfigs[pairId];
+
+        // Calculate effective index with accrued interest
+        uint256 timeDelta = block.timestamp - config.lastUpdateTimestamp;
+        uint256 effectiveIndex =
+            InterestRateMath.calculateEffectiveIndex(config.liquidityIndexRay, config.borrowRate, timeDelta);
+
+        // Calculate debt
+        return InterestRateMath.calculateActualDebt(position.normalizedDebtRay, effectiveIndex);
+    }
+
+    /**
+     * @notice Get user account data across all positions
+     * @param user User address
+     * @return totalCollateralUSD Total collateral value (8 decimals)
+     * @return totalDebtUSD Total debt value (8 decimals)
+     * @return ltv Current LTV in basis points
+     */
+    function getUserAccountData(address user)
+        external
+        view
+        returns (uint256 totalCollateralUSD, uint256 totalDebtUSD, uint256 ltv)
+    {
+        DataTypes.UserPositionKey[] storage positionKeys = s.userPositionKeys[user];
+
+        for (uint256 i = 0; i < positionKeys.length; i++) {
+            address collateral = positionKeys[i].collateral;
+            address yoloAsset = positionKeys[i].yoloAsset;
+
+            DataTypes.UserPosition storage position = s.positions[user][collateral][yoloAsset];
+            if (position.collateralSuppliedAmount == 0) continue;
+
+            // Get prices
+            uint256 collateralPrice = s.yoloOracle.getAssetPrice(collateral);
+            uint256 yoloAssetPrice = s.yoloOracle.getAssetPrice(yoloAsset);
+
+            // Calculate collateral value
+            uint256 collateralDecimals = IERC20Metadata(collateral).decimals();
+            totalCollateralUSD += (position.collateralSuppliedAmount * collateralPrice) / (10 ** collateralDecimals);
+
+            // Calculate debt value with accrued interest
+            bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
+            DataTypes.PairConfiguration storage config = s._pairConfigs[pairId];
+            uint256 timeDelta = block.timestamp - config.lastUpdateTimestamp;
+            uint256 effectiveIndex =
+                InterestRateMath.calculateEffectiveIndex(config.liquidityIndexRay, config.borrowRate, timeDelta);
+            uint256 debt = InterestRateMath.calculateActualDebt(position.normalizedDebtRay, effectiveIndex);
+
+            uint256 yoloAssetDecimals = IERC20Metadata(yoloAsset).decimals();
+            totalDebtUSD += (debt * yoloAssetPrice) / (10 ** yoloAssetDecimals);
+        }
+
+        // Calculate LTV
+        if (totalCollateralUSD > 0) {
+            ltv = (totalDebtUSD * 10000) / totalCollateralUSD;
+        }
+    }
+
+    /**
+     * @notice Update borrow rate for a lending pair
+     * @param pairId Lending pair ID
+     * @param newBorrowRate New borrow rate in basis points
+     */
+    function updateBorrowRate(bytes32 pairId, uint256 newBorrowRate) external onlyAssetsAdmin {
+        s.updateBorrowRate(pairId, newBorrowRate);
     }
 
     // ============================================================

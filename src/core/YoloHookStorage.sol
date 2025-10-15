@@ -72,8 +72,12 @@ struct AppStorage {
     // USER POSITIONS
     // ============================================================
 
-    /// @notice User positions for lending pairs
-    mapping(bytes32 => mapping(address => DataTypes.UserPosition)) _userPositions;
+    /// @notice User positions triple-nested mapping: user => collateral => yoloAsset => position
+    mapping(address => mapping(address => mapping(address => DataTypes.UserPosition))) positions;
+    /// @notice Array of position keys for each user (for enumeration)
+    mapping(address => DataTypes.UserPositionKey[]) userPositionKeys;
+    /// @notice Treasury address for interest payments
+    address treasury;
     // ============================================================
     // POOL REGISTRY
     // ============================================================
