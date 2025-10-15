@@ -64,7 +64,7 @@ library FlashLoanModule {
      */
     function flashLoan(AppStorage storage s, address borrower, address token, uint256 amount, bytes calldata data)
         external
-        returns (bool success)
+        returns (bool success, uint256 fee)
     {
         // Validate inputs
         if (borrower == address(0)) revert FlashLoanModule__InvalidBorrower();
@@ -84,7 +84,6 @@ library FlashLoanModule {
         }
 
         // Calculate fee (zero for privileged flashloaners)
-        uint256 fee;
         if (IACLManager(s.ACL_MANAGER).hasRole(keccak256("PRIVILEGED_FLASHLOANER"), msg.sender)) {
             fee = 0; // Privileged flashloaners get zero fees
         } else {
@@ -116,8 +115,7 @@ library FlashLoanModule {
         if (fee > 0 && s.treasury != address(0)) {
             _mintSynthetic(s, token, s.treasury, fee);
         }
-
-        return true;
+        return (true, fee);
     }
 
     // ============================================================
@@ -141,7 +139,7 @@ library FlashLoanModule {
         address[] calldata tokens,
         uint256[] calldata amounts,
         bytes calldata data
-    ) external returns (bool success) {
+    ) external returns (bool success, uint256[] memory fees) {
         // Validate inputs
         if (borrower == address(0)) revert FlashLoanModule__InvalidBorrower();
         if (tokens.length == 0 || tokens.length != amounts.length) {
@@ -149,7 +147,7 @@ library FlashLoanModule {
         }
 
         uint256 length = tokens.length;
-        uint256[] memory fees = new uint256[](length);
+        fees = new uint256[](length);
         uint256[] memory balancesBefore = new uint256[](length);
 
         // Phase 1: Validate and mint all tokens
@@ -210,7 +208,7 @@ library FlashLoanModule {
             }
         }
 
-        return true;
+        return (true, fees);
     }
 
     // ============================================================
