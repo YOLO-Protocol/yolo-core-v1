@@ -842,4 +842,54 @@ library LendingPairModule {
 
         return (collateralValueUSD * PRECISION_DIVISOR) / debtValueUSD;
     }
+
+    /**
+     * @notice Get user account data across all positions
+     * @dev Extracted from YoloHook for code size reduction
+     *      Aggregates all collateral and debt values across different positions
+     * @param s Reference to AppStorage
+     * @param user User address
+     * @return totalCollateralUSD Total collateral value (8 decimals)
+     * @return totalDebtUSD Total debt value (8 decimals)
+     * @return ltv Current LTV in basis points
+     */
+    function getUserAccountData(AppStorage storage s, address user)
+        external
+        view
+        returns (uint256 totalCollateralUSD, uint256 totalDebtUSD, uint256 ltv)
+    {
+        DataTypes.UserPositionKey[] storage positionKeys = s.userPositionKeys[user];
+
+        for (uint256 i = 0; i < positionKeys.length; i++) {
+            address collateral = positionKeys[i].collateral;
+            address yoloAsset = positionKeys[i].yoloAsset;
+
+            DataTypes.UserPosition storage position = s.positions[user][collateral][yoloAsset];
+            if (position.collateralSuppliedAmount == 0) continue;
+
+            // Get prices
+            uint256 collateralPrice = s.yoloOracle.getAssetPrice(collateral);
+            uint256 yoloAssetPrice = s.yoloOracle.getAssetPrice(yoloAsset);
+
+            // Calculate collateral value
+            uint256 collateralDecimals = IERC20Metadata(collateral).decimals();
+            totalCollateralUSD += (position.collateralSuppliedAmount * collateralPrice) / (10 ** collateralDecimals);
+
+            // Calculate debt value with accrued interest
+            bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
+            DataTypes.PairConfiguration storage config = s._pairConfigs[pairId];
+            uint256 timeDelta = block.timestamp - config.lastUpdateTimestamp;
+            uint256 effectiveIndex =
+                InterestRateMath.calculateEffectiveIndex(config.liquidityIndexRay, config.borrowRate, timeDelta);
+            uint256 debt = InterestRateMath.calculateActualDebt(position.normalizedDebtRay, effectiveIndex);
+
+            uint256 yoloAssetDecimals = IERC20Metadata(yoloAsset).decimals();
+            totalDebtUSD += (debt * yoloAssetPrice) / (10 ** yoloAssetDecimals);
+        }
+
+        // Calculate LTV
+        if (totalCollateralUSD > 0) {
+            ltv = (totalDebtUSD * 10000) / totalCollateralUSD;
+        }
+    }
 }
