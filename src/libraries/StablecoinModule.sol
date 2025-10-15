@@ -280,4 +280,97 @@ library StablecoinModule {
 
         return abi.encode(usyOut, usdcOut);
     }
+
+    // ============================================================
+    // LIQUIDITY PREVIEW FUNCTIONS
+    // ============================================================
+
+    /**
+     * @notice Preview sUSY minted for adding liquidity
+     * @dev Extracted from YoloHook for code size reduction
+     *      Uses min-share formula to prevent dilution
+     *      Enforces balanced deposits within 1% tolerance
+     *      Bootstrap case subtracts MINIMUM_LIQUIDITY
+     * @param s AppStorage reference
+     * @param usyIn18 USY amount to deposit (18 decimals)
+     * @param usdcIn18 USDC amount to deposit (18 decimals normalized)
+     * @return sUSYToMint Expected sUSY tokens (18 decimals)
+     */
+    function previewAddLiquidity(AppStorage storage s, uint256 usyIn18, uint256 usdcIn18)
+        external
+        view
+        returns (uint256 sUSYToMint)
+    {
+        StakedYoloUSD sUSYContract = StakedYoloUSD(s.sUSY);
+        uint256 totalSupply = sUSYContract.totalSupply();
+
+        // Get normalized reserves
+        uint256 reserveUSY18 = s.totalAnchorReserveUSY;
+        uint256 reserveUSDC18 = s.totalAnchorReserveUSDC.to18(s.usdcDecimals);
+
+        if (totalSupply == 0) {
+            // Bootstrap: Enforce 1:1 ratio and subtract MINIMUM_LIQUIDITY
+            uint256 minAmount18 = usyIn18 < usdcIn18 ? usyIn18 : usdcIn18;
+            uint256 totalValue18 = minAmount18 + minAmount18;
+
+            if (totalValue18 <= MINIMUM_LIQUIDITY) return 0; // Would revert
+            sUSYToMint = totalValue18 - MINIMUM_LIQUIDITY;
+        } else {
+            // Calculate optimal amounts maintaining pool ratio
+            uint256 optimalUsyIn18 = (usdcIn18 * reserveUSY18) / reserveUSDC18;
+            uint256 usyToUse;
+            uint256 usdcToUse;
+
+            if (optimalUsyIn18 <= usyIn18) {
+                usdcToUse = usdcIn18;
+                usyToUse = optimalUsyIn18;
+            } else {
+                uint256 optimalUsdcIn18 = (usyIn18 * reserveUSDC18) / reserveUSY18;
+                usyToUse = usyIn18;
+                usdcToUse = optimalUsdcIn18;
+            }
+
+            // Min-share formula
+            uint256 shareUSY = (usyToUse * totalSupply) / reserveUSY18;
+            uint256 shareUSDC = (usdcToUse * totalSupply) / reserveUSDC18;
+
+            // Check balance tolerance (1% max imbalance)
+            uint256 diff = shareUSY > shareUSDC ? shareUSY - shareUSDC : shareUSDC - shareUSY;
+            uint256 maxShare = shareUSY > shareUSDC ? shareUSY : shareUSDC;
+
+            // Return 0 if imbalance > 1% (would revert)
+            if ((diff * 10000) / maxShare > 100) return 0;
+
+            // Take minimum (round down to favor pool)
+            sUSYToMint = shareUSY < shareUSDC ? shareUSY : shareUSDC;
+        }
+    }
+
+    /**
+     * @notice Preview token amounts for removing liquidity
+     * @dev Extracted from YoloHook for code size reduction
+     *      Proportional redemption based on sUSY share
+     *      Rounds down to favor pool
+     *      All outputs normalized to 18 decimals
+     * @param s AppStorage reference
+     * @param sUSYAmount sUSY to burn
+     * @return usyOut18 USY to receive (18 decimals)
+     * @return usdcOut18 USDC to receive (18 decimals normalized)
+     */
+    function previewRemoveLiquidity(AppStorage storage s, uint256 sUSYAmount)
+        external
+        view
+        returns (uint256 usyOut18, uint256 usdcOut18)
+    {
+        StakedYoloUSD sUSYContract = StakedYoloUSD(s.sUSY);
+        uint256 totalSupply = sUSYContract.totalSupply();
+
+        // Get normalized reserves
+        uint256 reserveUSY18 = s.totalAnchorReserveUSY;
+        uint256 reserveUSDC18 = s.totalAnchorReserveUSDC.to18(s.usdcDecimals);
+
+        // Proportional redemption (round down to favor pool)
+        usyOut18 = (reserveUSY18 * sUSYAmount) / totalSupply;
+        usdcOut18 = (reserveUSDC18 * sUSYAmount) / totalSupply;
+    }
 }
