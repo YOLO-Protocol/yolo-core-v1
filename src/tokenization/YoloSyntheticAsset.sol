@@ -5,6 +5,7 @@ import "./base/MintableIncentivizedERC20Upgradeable.sol";
 import "./base/EIP712BaseUpgradeable.sol";
 import "../interfaces/IYoloSyntheticAsset.sol";
 import "../interfaces/IYoloOracle.sol";
+import "../interfaces/IYoloHook.sol";
 import "../interfaces/IYLPVault.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
@@ -147,8 +148,9 @@ contract YoloSyntheticAsset is
                 pnlUSY = -int256((lossNumerator + 1e8 - 1) / 1e8);
             }
 
-            // Settle P&L with YLP vault (no reentrancy into token)
-            IYLPVault(ylpVault).settlePnL(from, address(this), pnlUSY);
+            // If user loss, have hook fund YLP with USY before settlement
+            // Route settlement via YoloHook to enforce auth and funding semantics
+            IYoloHook(YOLO_HOOK).settlePnLFromSynthetic(from, pnlUSY);
 
             // Emit P&L settled event
             emit CostBasisUpdated(from, balance - amount, avgCost);
