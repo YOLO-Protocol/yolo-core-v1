@@ -300,4 +300,32 @@ contract MockYoloHook is IYoloHook {
         uint256 reserveUSDC18 = _usdcDecimals == 6 ? _reserveUSDC * 1e12 : _reserveUSDC;
         usdcOut18 = (sUSYAmount * reserveUSDC18) / totalSupply;
     }
+    // Added to satisfy extended interface in some contexts (no-op/defaults)
+
+    function usy() external pure returns (address) {
+        return address(0);
+    }
+
+    function usdc() external pure returns (address) {
+        return address(0);
+    }
+
+    function poolManagerAddress() external pure returns (address) {
+        return address(0);
+    }
+
+    function fundYLPWithUSY(uint256) external {}
+    function settlePnLFromSynthetic(address, int256) external {}
+
+    function addLiquidity(uint256, uint256, uint256, address) external pure returns (uint256, uint256, uint256) {
+        return (0, 0, 0);
+    }
+
+    function removeLiquidity(uint256, uint256, uint256, address) external pure returns (uint256, uint256) {
+        return (0, 0);
+    }
+
+    function isYoloAsset(address) external pure returns (bool) {
+        return true;
+    }
 }
