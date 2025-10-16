@@ -117,7 +117,8 @@ library BootstrapModule {
         });
 
         // Deploy sUSY receipt token
-        bytes memory sUSYInitData = abi.encodeWithSignature("initialize(address)", yoloHook);
+        bytes memory sUSYInitData =
+            abi.encodeWithSignature("initialize(address,address)", yoloHook, address(aclManager));
         address sUSYProxy = address(new ERC1967Proxy(sUSYImplementation, sUSYInitData));
         s.sUSY = sUSYProxy;
 
