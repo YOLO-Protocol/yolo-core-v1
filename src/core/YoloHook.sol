@@ -10,6 +10,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IACLManager} from "../interfaces/IACLManager.sol";
 import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
+import {IYLPVault} from "../interfaces/IYLPVault.sol";
 import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
 import {YoloHookStorage, AppStorage} from "./YoloHookStorage.sol";
 import {DataTypes} from "../libraries/DataTypes.sol";
@@ -99,6 +100,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     event SyntheticSwapFeeUpdated(uint256 newFeeBps);
     event AnchorAmplificationUpdated(uint256 newAmplification);
     event PrivilegedLiquidatorToggled(bool enabled);
+    event YLPFundedWithUSY(address indexed callerAsset, uint256 amount);
 
     // ========================
     // ERRORS
@@ -201,10 +203,15 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @param _yoloOracle Oracle module for price feeds
      * @param _usdc USDC token address (varies by chain)
      * @param _usyImplementation USY implementation for UUPS deployment
-     * @param _ylpVaultImplementation YLP vault implementation (placeholder for Phase 3)
+     * @param _sUSYImplementation sUSY implementation for UUPS deployment
+     * @param _ylpVaultImplementation YLP vault implementation for UUPS deployment
      * @param _treasury Treasury address for interest payments
+     * @param _anchorAmplificationCoefficient StableSwap amplification coefficient
+     * @param _anchorSwapFeeBps Anchor pool swap fee (bps)
+     * @param _syntheticSwapFeeBps Synthetic pool swap fee (bps)
      * @dev Can only be called once due to initializer modifier
-     *      Deploys USY with UUPS and creates anchor pool (USY-USDC)
+     *      Deploys USY, sUSY, and YLP with UUPS proxies
+     *      Creates anchor pool (USY-USDC)
      *      Protocol starts in unpaused state
      */
     function initialize(
@@ -712,6 +719,48 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     function usdcDecimals() external view returns (uint8) {
         return s.usdcDecimals;
+    }
+
+    /**
+     * @notice Get USDC token address
+     * @return usdc address
+     */
+    function usdc() external view returns (address) {
+        return s.usdc;
+    }
+
+    /**
+     * @notice Exposes PoolManager address for integrations (e.g., vault add/remove liquidity)
+     */
+    function poolManagerAddress() external view returns (address) {
+        return address(poolManager);
+    }
+
+    /**
+     * @notice Mint USY into the YLP vault to fund negative PnL settlements
+     * @dev Callable only by registered YOLO synthetic assets during burn settlement flows
+     *      Mints USY directly to the YLP vault (s.ylpVault)
+     * @param amount Amount of USY (18 decimals)
+     */
+    function fundYLPWithUSY(uint256 amount) external whenNotPaused {
+        if (!s._isYoloAsset[msg.sender]) revert YoloHook__NotYoloAsset();
+        if (amount == 0) revert YoloHook__InvalidConfiguration();
+        IYoloSyntheticAsset(s.usy).mint(s.ylpVault, amount);
+        emit YLPFundedWithUSY(msg.sender, amount);
+    }
+
+    /**
+     * @notice Synthetic asset calls this to settle PnL during burn
+     * @dev Enforces caller is a registered YOLO synthetic asset; funds YLP for losses
+     */
+    function settlePnLFromSynthetic(address user, int256 pnlUSY) external whenNotPaused {
+        if (!s._isYoloAsset[msg.sender]) revert YoloHook__NotYoloAsset();
+        if (pnlUSY < 0) {
+            uint256 gain = uint256(-pnlUSY);
+            IYoloSyntheticAsset(s.usy).mint(s.ylpVault, gain);
+            emit YLPFundedWithUSY(msg.sender, gain);
+        }
+        IYLPVault(s.ylpVault).settlePnL(user, msg.sender, pnlUSY);
     }
 
     /**
