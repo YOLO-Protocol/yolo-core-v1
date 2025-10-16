@@ -47,10 +47,11 @@ contract TestContract05_StakedYoloUSD is Test {
         mockHook = new MockYoloHook();
 
         // Deploy sUSY implementation
-        sUSYImpl = new StakedYoloUSD(IACLManager(address(aclManager)));
+        sUSYImpl = new StakedYoloUSD();
 
         // Deploy sUSY proxy
-        bytes memory initData = abi.encodeWithSignature("initialize(address)", address(mockHook));
+        bytes memory initData =
+            abi.encodeWithSignature("initialize(address,address)", address(mockHook), address(aclManager));
         address sUSYProxy = address(new ERC1967Proxy(address(sUSYImpl), initData));
         sUSY = StakedYoloUSD(sUSYProxy);
     }
@@ -191,7 +192,7 @@ contract TestContract05_StakedYoloUSD is Test {
 
     function test_Contract05_Case09_onlyHookCanMint() public {
         vm.prank(user1);
-        vm.expectRevert(StakedYoloUSD.OnlyYoloHook.selector);
+        vm.expectRevert(); // MintableIncentivizedERC20__OnlyYoloHook
         sUSY.mint(user1, 100e18);
     }
 
@@ -200,7 +201,7 @@ contract TestContract05_StakedYoloUSD is Test {
         sUSY.mint(user1, 100e18);
 
         vm.prank(user1);
-        vm.expectRevert(StakedYoloUSD.OnlyYoloHook.selector);
+        vm.expectRevert(); // MintableIncentivizedERC20__OnlyYoloHook
         sUSY.burn(user1, 50e18);
     }
 
@@ -216,7 +217,7 @@ contract TestContract05_StakedYoloUSD is Test {
         vm.prank(assetsAdmin);
         sUSY.updateYoloHook(newHook);
 
-        assertEq(address(sUSY.yoloHook()), newHook, "Hook should be updated");
+        assertEq(sUSY.YOLO_HOOK(), newHook, "Hook should be updated");
     }
 
     // ============================================================

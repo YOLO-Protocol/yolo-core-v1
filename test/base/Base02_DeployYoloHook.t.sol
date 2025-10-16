@@ -56,7 +56,7 @@ contract Base02_DeployYoloHook is Base01_DeployUniswapV4Pool {
 
         // Deploy implementations
         usyImpl = new YoloSyntheticAsset();
-        sUSYImpl = new StakedYoloUSD(IACLManager(address(aclManager)));
+        sUSYImpl = new StakedYoloUSD();
 
         // Compute hook addresses using Uniswap V4 pattern
         address hookImplAddress = address(uint160(Hooks.ALL_HOOK_MASK));
