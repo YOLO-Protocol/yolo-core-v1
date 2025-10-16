@@ -92,8 +92,8 @@ library SwapModule {
         // rIn/rOut are in native decimals, sIn/sOut are scale factors
         uint256 rIn = usdcToUsy ? reserveUSDC : reserveUSY;
         uint256 rOut = usdcToUsy ? reserveUSY : reserveUSDC;
-        uint256 sIn = usdcToUsy ? s.usdcScaleUp : 1;
-        uint256 sOut = usdcToUsy ? 1 : s.usdcScaleUp;
+        uint256 sIn = usdcToUsy ? s.USDC_SCALE_UP : 1;
+        uint256 sOut = usdcToUsy ? 1 : s.USDC_SCALE_UP;
 
         // Scale gross input to 18 decimals
         uint256 grossIn18 = amountIn * sIn;
@@ -214,8 +214,8 @@ library SwapModule {
 
         // Scale USDC output to 18 decimals
         if (!outputIsUSY && s.usdcDecimals != 18) {
-            calculatedAmountOut = calculatedAmountOut * s.usdcScaleUp;
-            calculatedFeeAmount = calculatedFeeAmount * s.usdcScaleUp;
+            calculatedAmountOut = calculatedAmountOut * s.USDC_SCALE_UP;
+            calculatedFeeAmount = calculatedFeeAmount * s.USDC_SCALE_UP;
         }
 
         return (calculatedAmountOut, calculatedFeeAmount);

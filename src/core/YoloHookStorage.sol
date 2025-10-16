@@ -36,7 +36,7 @@ struct AppStorage {
     uint8 usdcDecimals;
     /// @notice Scale factor to convert USDC to 18 decimals: 10^(18-usdcDecimals)
     /// @dev Used for consistent decimal normalization across all calculations
-    uint256 usdcScaleUp;
+    uint256 USDC_SCALE_UP;
     /// @notice Pause state (managed via ACLManager PAUSER_ROLE)
     bool _paused;
     /// @notice If true, only addresses with PRIVILEGED_LIQUIDATOR role can liquidate

@@ -60,7 +60,7 @@ library BootstrapModule {
         s.treasury = treasury;
         s.ACL_MANAGER = address(aclManager);
         s.usdcDecimals = IERC20Metadata(usdc).decimals();
-        s.usdcScaleUp = 10 ** (18 - s.usdcDecimals);
+        s.USDC_SCALE_UP = 10 ** (18 - s.usdcDecimals);
         s.anchorAmplificationCoefficient = anchorAmplificationCoefficient;
         s.anchorSwapFeeBps = anchorSwapFeeBps;
         s.syntheticSwapFeeBps = syntheticSwapFeeBps;
