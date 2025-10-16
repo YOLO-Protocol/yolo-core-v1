@@ -29,6 +29,8 @@ interface IYoloSyntheticAsset is IERC20, IERC20Metadata {
     // Cost basis queries
     function avgPriceX8(address user) external view returns (uint128);
     function averagePriceX8(address user) external view returns (uint128);
+    function getTotalCostBasisX8() external view returns (uint256);
+    function globalAveragePriceX8() external view returns (uint128);
 
     // Configuration getters
     function underlyingAsset() external view returns (address);

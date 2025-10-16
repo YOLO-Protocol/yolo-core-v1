@@ -33,6 +33,9 @@ contract YoloSyntheticAsset is
     // Cost basis tracking - using 8 decimals precision (1e8 = 1 USY)
     mapping(address => uint128) public avgPriceX8;
 
+    /// @notice Aggregated cost basis across all holders (price * quantity, 8+18 decimals)
+    uint256 internal totalCostBasisX8;
+
     // Synthetic asset configuration
     address public underlyingAsset; // Reference asset (e.g., WETH for yETH)
     IYoloOracle public yoloOracle; // YoloOracle for price feeds
@@ -159,6 +162,8 @@ contract YoloSyntheticAsset is
         }
         // For partial burns, average price remains unchanged
 
+        _updateGlobalCost(balance, avgCost, balance - amount, avgPriceX8[from]);
+
         // Execute burn
         _burn(from, amount);
     }
@@ -188,9 +193,11 @@ contract YoloSyntheticAsset is
             return;
         }
 
-        // Get pre-transfer balances
+        // Get pre-transfer balances and averages
         uint256 fromBalance = balanceOf(from);
         uint256 toBalance = balanceOf(to);
+        uint128 prevFromAvg = avgPriceX8[from];
+        uint128 prevToAvg = avgPriceX8[to];
 
         // Update recipient's weighted average
         if (toBalance == 0) {
@@ -216,6 +223,14 @@ contract YoloSyntheticAsset is
         if (toBalance == 0 || avgPriceX8[from] > 0) {
             emit CostBasisUpdated(to, toBalance + amount, avgPriceX8[to]);
         }
+
+        uint256 newFromBalance = fromBalance - amount;
+        uint128 newFromAvg = avgPriceX8[from];
+        uint256 newToBalance = toBalance + amount;
+        uint128 newToAvg = avgPriceX8[to];
+
+        _updateGlobalCost(fromBalance, prevFromAvg, newFromBalance, newFromAvg);
+        _updateGlobalCost(toBalance, prevToAvg, newToBalance, newToAvg);
 
         // Continue with parent logic
         super._beforeTokenTransfer(from, to, amount);
@@ -340,6 +355,7 @@ contract YoloSyntheticAsset is
 
         // Update cost basis with ceiling division
         uint256 currentBalance = balanceOf(to);
+        uint128 previousAvg = avgPriceX8[to];
         if (currentBalance > 0) {
             uint256 totalCost = uint256(avgPriceX8[to]) * currentBalance + priceX8 * amount;
             uint256 totalQuantity = currentBalance + amount;
@@ -347,6 +363,9 @@ contract YoloSyntheticAsset is
         } else {
             avgPriceX8[to] = uint128(priceX8);
         }
+
+        uint256 newBalance = currentBalance + amount;
+        _updateGlobalCost(currentBalance, previousAvg, newBalance, avgPriceX8[to]);
 
         emit CostBasisUpdated(to, currentBalance + amount, avgPriceX8[to]);
 
@@ -381,7 +400,43 @@ contract YoloSyntheticAsset is
     function _authorizeUpgrade(address newImplementation) internal override onlyYoloHook {}
 
     /**
+     * @notice Returns the total aggregated cost basis across all holders
+     * @return Total cost basis in X8 precision (sum of all avgPriceX8 * balance)
+     */
+    function getTotalCostBasisX8() external view returns (uint256) {
+        return totalCostBasisX8;
+    }
+
+    /**
+     * @notice Returns the global average creation price across all holders (8 decimals)
+     */
+    function globalAveragePriceX8() external view returns (uint128) {
+        uint256 supply = totalSupply();
+        if (supply == 0) {
+            return 0;
+        }
+        return uint128((totalCostBasisX8 + supply - 1) / supply);
+    }
+
+    function _updateGlobalCost(uint256 previousBalance, uint128 previousAvg, uint256 newBalance, uint128 newAvg)
+        internal
+    {
+        if (previousBalance == newBalance && previousAvg == newAvg) {
+            return;
+        }
+
+        uint256 prevCost = uint256(previousAvg) * previousBalance;
+        uint256 newCost = uint256(newAvg) * newBalance;
+
+        if (newCost >= prevCost) {
+            totalCostBasisX8 += newCost - prevCost;
+        } else {
+            totalCostBasisX8 -= prevCost - newCost;
+        }
+    }
+
+    /**
      * @dev Storage gap for future upgrades
      */
-    uint256[44] private __gap;
+    uint256[43] private __gap;
 }

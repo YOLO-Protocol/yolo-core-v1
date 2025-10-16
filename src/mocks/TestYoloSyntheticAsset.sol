@@ -24,6 +24,8 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
     // Cost basis tracking - using 8 decimals precision (1e8 = 1 USY)
     mapping(address => uint128) public avgPriceX8;
 
+    uint256 internal totalCostBasisX8;
+
     // Synthetic asset configuration
     address public underlyingAsset;
     IYoloOracle public yoloOracle;
@@ -96,6 +98,7 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
         uint256 currentBalance = balanceOf(to);
+        uint128 previousAvg = avgPriceX8[to];
         if (currentBalance > 0) {
             uint256 totalCost = uint256(avgPriceX8[to]) * currentBalance + priceX8 * amount;
             uint256 totalQuantity = currentBalance + amount;
@@ -103,6 +106,8 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         } else {
             avgPriceX8[to] = uint128(priceX8);
         }
+
+        _updateGlobalCost(currentBalance, previousAvg, currentBalance + amount, avgPriceX8[to]);
 
         emit CostBasisUpdated(to, currentBalance + amount, avgPriceX8[to]);
         _mint(to, amount);
@@ -136,6 +141,8 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
             emit CostBasisUpdated(from, 0, 0);
         }
 
+        _updateGlobalCost(balance, avgCost, balance - amount, avgPriceX8[from]);
+
         _burn(from, amount);
     }
 
@@ -156,6 +163,8 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
 
         uint256 fromBalance = balanceOf(from);
         uint256 toBalance = balanceOf(to);
+        uint128 prevFromAvg = avgPriceX8[from];
+        uint128 prevToAvg = avgPriceX8[to];
 
         if (toBalance == 0) {
             avgPriceX8[to] = avgPriceX8[from];
@@ -175,6 +184,14 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         if (toBalance == 0 || avgPriceX8[from] > 0) {
             emit CostBasisUpdated(to, toBalance + amount, avgPriceX8[to]);
         }
+
+        uint256 newFromBalance = fromBalance - amount;
+        uint128 newFromAvg = avgPriceX8[from];
+        uint256 newToBalance = toBalance + amount;
+        uint128 newToAvg = avgPriceX8[to];
+
+        _updateGlobalCost(fromBalance, prevFromAvg, newFromBalance, newFromAvg);
+        _updateGlobalCost(toBalance, prevToAvg, newToBalance, newToAvg);
 
         super._beforeTokenTransfer(from, to, amount);
     }
@@ -262,5 +279,34 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         }
     }
 
-    uint256[44] private __gap;
+    function getTotalCostBasisX8() external view returns (uint256) {
+        return totalCostBasisX8;
+    }
+
+    function globalAveragePriceX8() external view returns (uint128) {
+        uint256 supply = totalSupply();
+        if (supply == 0) {
+            return 0;
+        }
+        return uint128((totalCostBasisX8 + supply - 1) / supply);
+    }
+
+    function _updateGlobalCost(uint256 previousBalance, uint128 previousAvg, uint256 newBalance, uint128 newAvg)
+        internal
+    {
+        if (previousBalance == newBalance && previousAvg == newAvg) {
+            return;
+        }
+
+        uint256 prevCost = uint256(previousAvg) * previousBalance;
+        uint256 newCost = uint256(newAvg) * newBalance;
+
+        if (newCost >= prevCost) {
+            totalCostBasisX8 += newCost - prevCost;
+        } else {
+            totalCostBasisX8 -= prevCost - newCost;
+        }
+    }
+
+    uint256[43] private __gap;
 }
