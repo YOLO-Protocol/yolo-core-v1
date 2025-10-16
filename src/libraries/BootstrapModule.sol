@@ -33,7 +33,7 @@ library BootstrapModule {
      * @param usdc USDC token address
      * @param usyImplementation Yolo USD implementation address
      * @param sUSYImplementation sUSY implementation address
-     * @param ylpVaultImplementation Placeholder YLP vault implementation
+     * @param ylpVaultImplementation YLP vault implementation address
      * @param treasury Treasury address
      * @param anchorAmplificationCoefficient StableSwap amplification coefficient
      * @param anchorSwapFeeBps Anchor pool swap fee (bps)
@@ -122,8 +122,13 @@ library BootstrapModule {
         address sUSYProxy = address(new ERC1967Proxy(sUSYImplementation, sUSYInitData));
         s.sUSY = sUSYProxy;
 
-        // Initialize pause state & YLP placeholder
+        // Deploy YLP vault via UUPS proxy
+        bytes memory ylpInitData =
+            abi.encodeWithSignature("initialize(address,address,address)", yoloHook, usyProxy, address(aclManager));
+        address ylpProxy = address(new ERC1967Proxy(ylpVaultImplementation, ylpInitData));
+        s.ylpVault = ylpProxy;
+
+        // Initialize pause state
         s._paused = false;
-        s.ylpVault = ylpVaultImplementation;
     }
 }
