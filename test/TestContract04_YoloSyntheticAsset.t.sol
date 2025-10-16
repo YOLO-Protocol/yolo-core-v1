@@ -79,6 +79,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         assertEq(yETH.ylpVault(), address(ylpVault));
         assertEq(yETH.maxSupply(), 0);
         assertTrue(yETH.tradingEnabled());
+        assertEq(yETH.globalAveragePriceX8(), 0);
     }
 
     /**
@@ -436,6 +437,68 @@ contract TestContract04_YoloSyntheticAsset is Test {
     }
 
     /**
+     * @dev Test global average price tracks mints and burns
+     */
+    function test_Contract04_Case17_globalAverageTracksMintsAndBurns() public {
+        vm.prank(yoloHook);
+        yETH.mint(alice, 10e18);
+        assertEq(yETH.globalAveragePriceX8(), PRICE_100_USY);
+
+        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        vm.prank(yoloHook);
+        yETH.mint(bob, 5e18);
+
+        uint256 totalCost = 10e18 * PRICE_100_USY + 5e18 * PRICE_200_USY;
+        uint256 totalQty = 15e18;
+        uint128 expectedGlobal = uint128((totalCost + totalQty - 1) / totalQty);
+        assertEq(yETH.globalAveragePriceX8(), expectedGlobal);
+
+        vm.prank(yoloHook);
+        yETH.burn(alice, 5e18);
+
+        uint256 remainingCost = 5e18 * PRICE_100_USY + 5e18 * PRICE_200_USY;
+        uint256 remainingQty = 10e18;
+        uint128 expectedAfterBurn = uint128((remainingCost + remainingQty - 1) / remainingQty);
+        assertEq(yETH.globalAveragePriceX8(), expectedAfterBurn);
+
+        vm.prank(yoloHook);
+        yETH.burn(alice, 5e18);
+        vm.prank(yoloHook);
+        yETH.burn(bob, 5e18);
+
+        assertEq(yETH.totalSupply(), 0);
+        assertEq(yETH.globalAveragePriceX8(), 0);
+    }
+
+    /**
+     * @dev Test global average price is unaffected by transfers
+     */
+    function test_Contract04_Case18_globalAverageUnaffectedByTransfers() public {
+        vm.prank(yoloHook);
+        yETH.mint(alice, 10e18);
+
+        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        vm.prank(yoloHook);
+        yETH.mint(bob, 10e18);
+
+        uint128 initialGlobal = yETH.globalAveragePriceX8();
+
+        vm.prank(alice);
+        yETH.transfer(charlie, 4e18);
+        uint128 afterFirst = yETH.globalAveragePriceX8();
+        assertLe(_absDiff(afterFirst, initialGlobal), 1);
+
+        vm.prank(bob);
+        yETH.transfer(charlie, 3e18);
+        uint128 afterSecond = yETH.globalAveragePriceX8();
+        assertLe(_absDiff(afterSecond, initialGlobal), 1);
+    }
+
+    function _absDiff(uint128 a, uint128 b) internal pure returns (uint128) {
+        return a >= b ? a - b : b - a;
+    }
+
+    /**
      * @dev Test burn with zero cost basis (edge case)
      */
     function test_Contract04_Case15_burnEdgeCases() public {
@@ -481,5 +544,108 @@ contract TestContract04_YoloSyntheticAsset is Test {
         vm.prank(alice);
         vm.expectRevert();
         yETH.setYoloOracle(IYoloOracle(address(0xDEAD)));
+    }
+
+    /**
+     * @dev Test totalCostBasisX8 invariant: sum of individual costs equals global cost
+     */
+    function test_Contract04_Case19_globalCostInvariantAfterComplexOperations() public {
+        // Phase 1: Multiple users mint at different prices
+        vm.prank(yoloHook);
+        yETH.mint(alice, 10e18); // 10 @ 100 USY
+
+        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        vm.prank(yoloHook);
+        yETH.mint(bob, 5e18); // 5 @ 200 USY
+
+        yoloOracle.setAssetPrice(underlyingWETH, PRICE_300_USY);
+        vm.prank(yoloHook);
+        yETH.mint(charlie, 8e18); // 8 @ 300 USY
+
+        // Verify invariant after mints
+        _verifyGlobalCostInvariant();
+
+        // Phase 2: Transfers (should not change global cost)
+        vm.prank(alice);
+        yETH.transfer(bob, 3e18); // Alice: 7, Bob: 8
+
+        _verifyGlobalCostInvariant();
+
+        vm.prank(charlie);
+        yETH.transfer(alice, 2e18); // Charlie: 6, Alice: 9
+
+        _verifyGlobalCostInvariant();
+
+        // Phase 3: More mints at new price
+        yoloOracle.setAssetPrice(underlyingWETH, 250e8);
+        vm.prank(yoloHook);
+        yETH.mint(bob, 4e18); // Bob gets more
+
+        _verifyGlobalCostInvariant();
+
+        // Phase 4: Partial burns
+        yoloOracle.setAssetPrice(underlyingWETH, 180e8);
+        vm.prank(yoloHook);
+        yETH.burn(alice, 5e18); // Alice burns some
+
+        _verifyGlobalCostInvariant();
+
+        vm.prank(yoloHook);
+        yETH.burn(charlie, 3e18); // Charlie burns some
+
+        _verifyGlobalCostInvariant();
+
+        // Phase 5: More complex transfers
+        vm.prank(bob);
+        yETH.transfer(charlie, 2e18);
+
+        vm.prank(alice);
+        yETH.transfer(bob, 1e18);
+
+        _verifyGlobalCostInvariant();
+
+        // Final verification with complete burn of one user
+        uint256 aliceBalance = yETH.balanceOf(alice);
+        if (aliceBalance > 0) {
+            vm.prank(yoloHook);
+            yETH.burn(alice, aliceBalance); // Alice burns all
+        }
+
+        _verifyGlobalCostInvariant();
+    }
+
+    /**
+     * @dev Helper to verify global cost basis invariant
+     * Manual sum of (balance * avgPrice) should equal totalCostBasisX8
+     * Allows tolerance of 1 unit per holder due to ceiling division rounding
+     */
+    function _verifyGlobalCostInvariant() internal view {
+        address[] memory users = new address[](3);
+        users[0] = alice;
+        users[1] = bob;
+        users[2] = charlie;
+
+        uint256 manualSum = 0;
+        uint256 holderCount = 0;
+
+        for (uint256 i = 0; i < users.length; i++) {
+            uint256 balance = yETH.balanceOf(users[i]);
+            if (balance > 0) {
+                uint128 avgPrice = yETH.avgPriceX8(users[i]);
+                manualSum += balance * uint256(avgPrice);
+                holderCount++;
+            }
+        }
+
+        uint256 totalCostBasis = yETH.getTotalCostBasisX8();
+
+        // Allow tolerance: 1 unit per holder due to ceiling division
+        uint256 tolerance = holderCount;
+
+        uint256 diff = manualSum > totalCostBasis ? manualSum - totalCostBasis : totalCostBasis - manualSum;
+
+        assertLe(
+            diff, tolerance, "Global cost invariant violated: manual sum should approximately equal totalCostBasisX8"
+        );
     }
 }
