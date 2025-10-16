@@ -5,11 +5,11 @@ import {Base01_DeployUniswapV4Pool} from "./Base01_DeployUniswapV4Pool.t.sol";
 import {YoloHook} from "../../src/core/YoloHook.sol";
 import {YoloSyntheticAsset} from "../../src/tokenization/YoloSyntheticAsset.sol";
 import {StakedYoloUSD} from "../../src/tokenization/StakedYoloUSD.sol";
+import {YLP} from "../../src/tokenization/YLP.sol";
 import {ACLManager} from "../../src/access/ACLManager.sol";
 import {IACLManager} from "../../src/interfaces/IACLManager.sol";
 import {MockERC20} from "../../src/mocks/MockERC20.sol";
 import {MockYoloOracle} from "../../src/mocks/MockYoloOracle.sol";
-import {MockYLPVault} from "../../src/mocks/MockYLPVault.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 
 /**
@@ -27,12 +27,13 @@ contract Base02_DeployYoloHook is Base01_DeployUniswapV4Pool {
     YoloHook public yoloHookImpl;
     ACLManager public aclManager;
     MockYoloOracle public oracle;
-    MockYLPVault public ylpVault;
+    YLP public ylpImpl;
     MockERC20 public usdc;
     YoloSyntheticAsset public usyImpl;
     StakedYoloUSD public sUSYImpl;
     address public usy;
     address public sUSY;
+    address public ylpVault;
     address public treasury;
 
     // ============================================================
@@ -44,7 +45,6 @@ contract Base02_DeployYoloHook is Base01_DeployUniswapV4Pool {
 
         // Deploy mock infrastructure
         oracle = new MockYoloOracle();
-        ylpVault = new MockYLPVault();
         usdc = new MockERC20("USD Coin", "USDC", 6);
 
         // Get treasury address (customizable)
@@ -57,6 +57,7 @@ contract Base02_DeployYoloHook is Base01_DeployUniswapV4Pool {
         // Deploy implementations
         usyImpl = new YoloSyntheticAsset();
         sUSYImpl = new StakedYoloUSD();
+        ylpImpl = new YLP();
 
         // Compute hook addresses using Uniswap V4 pattern
         address hookImplAddress = address(uint160(Hooks.ALL_HOOK_MASK));
@@ -76,7 +77,7 @@ contract Base02_DeployYoloHook is Base01_DeployUniswapV4Pool {
             address(usdc),
             address(usyImpl),
             address(sUSYImpl),
-            address(ylpVault),
+            address(ylpImpl),
             treasury,
             anchorA,
             anchorFee,
@@ -90,6 +91,7 @@ contract Base02_DeployYoloHook is Base01_DeployUniswapV4Pool {
         // Get deployed token addresses
         usy = yoloHook.usy();
         sUSY = yoloHook.sUSY();
+        ylpVault = yoloHook.ylpVault();
     }
 
     // ============================================================
