@@ -40,7 +40,90 @@ contract MockYLPVault is IYLPVault {
         emit TradeRecorded(user, asset, notionalUSY, feeUSY);
     }
 
-    // Test helpers
+    // ============================================================
+    // ADMIN FUNCTIONS (Mock implementations)
+    // ============================================================
+
+    function setMinDepositAmount(uint256) external pure override {
+        // Mock: no-op
+    }
+
+    function setMaxDepositAmount(uint256) external pure override {
+        // Mock: no-op
+    }
+
+    function setMinWithdrawalAmount(uint256) external pure override {
+        // Mock: no-op
+    }
+
+    function setWithdrawalFeeBps(uint256) external pure override {
+        // Mock: no-op
+    }
+
+    // ============================================================
+    // SOLVER FUNCTIONS (Mock implementations)
+    // ============================================================
+
+    function sealEpoch(int256, uint256) external pure override returns (uint256, uint256, uint256) {
+        return (1, 1000000e18, 1e27); // Mock: epochId=1, NAV=1M, PPS=1.0
+    }
+
+    // ============================================================
+    // DEPOSIT/WITHDRAWAL QUEUE (Mock implementations)
+    // ============================================================
+
+    function requestDeposit(uint256, uint256, uint256) external pure override returns (uint256) {
+        return 0; // Mock: always return request ID 0
+    }
+
+    function requestWithdrawal(uint256, uint256, uint256) external pure override returns (uint256) {
+        return 0; // Mock: always return request ID 0
+    }
+
+    function executeDeposits(uint256[] calldata) external pure override {
+        // Mock: no-op
+    }
+
+    function executeWithdrawals(uint256[] calldata) external pure override {
+        // Mock: no-op
+    }
+
+    // ============================================================
+    // VIEW FUNCTIONS (Mock implementations)
+    // ============================================================
+
+    // No conversion helpers in USY vault mode
+
+    function getLastSnapshot() external view override returns (uint256, uint256, uint256, uint256) {
+        return (1, 1000000e18, 1e27, block.timestamp); // Mock: epochId=1, NAV=1M, PPS=1.0
+    }
+
+    function getDepositRequest(uint256) external pure override returns (IYLPVault.DepositRequest memory) {
+        return IYLPVault.DepositRequest({
+            user: address(0),
+            usyAmount: 0,
+            minYLPShares: 0,
+            maxSlippageBps: 0,
+            requestBlock: 0,
+            executed: false
+        });
+    }
+
+    function getWithdrawalRequest(uint256) external pure override returns (IYLPVault.WithdrawalRequest memory) {
+        return IYLPVault.WithdrawalRequest({
+            user: address(0),
+            ylpShares: 0,
+            minUSYOut: 0,
+            maxSlippageBps: 0,
+            requestBlock: 0,
+            executed: false
+        });
+    }
+
+    // ============================================================
+    // TEST HELPERS
+    // ============================================================
+
     function getSettlementCount() external view returns (uint256) {
         return settlements.length;
     }
