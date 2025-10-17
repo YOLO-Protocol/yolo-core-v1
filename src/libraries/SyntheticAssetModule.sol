@@ -114,13 +114,12 @@ library SyntheticAssetModule {
 
         // Encode initializer call
         bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,string,string,uint8,address,address,uint256)",
+            "initialize(address,address,string,string,uint8,address,uint256)",
             address(this), // yoloHook = address of YoloHook (this contract)
             address(aclManager),
             name,
             symbol,
             decimals,
-            address(s.yoloOracle),
             s.ylpVault,
             maxSupply
         );

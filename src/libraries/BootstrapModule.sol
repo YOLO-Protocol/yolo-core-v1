@@ -68,13 +68,12 @@ library BootstrapModule {
 
         // Deploy USY via UUPS proxy
         bytes memory usyInitData = abi.encodeWithSignature(
-            "initialize(address,address,string,string,uint8,address,address,uint256)",
+            "initialize(address,address,string,string,uint8,address,uint256)",
             yoloHook,
             address(aclManager),
             "Yolo USD",
             "USY",
             uint8(18),
-            address(yoloOracle),
             ylpVaultImplementation,
             uint256(0)
         );
