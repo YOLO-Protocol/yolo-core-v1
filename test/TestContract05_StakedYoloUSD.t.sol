@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Test, console2} from "forge-std/Test.sol";
 import {StakedYoloUSD} from "../src/tokenization/StakedYoloUSD.sol";
 import {IYoloHook} from "../src/interfaces/IYoloHook.sol";
+import {IYoloOracle} from "../src/interfaces/IYoloOracle.sol";
 import {ACLManager} from "../src/access/ACLManager.sol";
 import {IACLManager} from "../src/interfaces/IACLManager.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -304,6 +305,10 @@ contract MockYoloHook is IYoloHook {
 
     function usy() external pure returns (address) {
         return address(0);
+    }
+
+    function yoloOracle() external pure returns (IYoloOracle) {
+        return IYoloOracle(address(0));
     }
 
     function usdc() external pure returns (address) {

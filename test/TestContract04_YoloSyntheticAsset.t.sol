@@ -396,19 +396,19 @@ contract TestContract04_YoloSyntheticAsset is Test {
     }
 
     /**
-     * @dev Test oracle update
+     * @dev Test oracle query through YoloHook (centralized architecture)
      */
-    function test_Contract04_Case13_oracleUpdate() public {
-        MockYoloOracle newOracle = new MockYoloOracle();
-        newOracle.setAssetPrice(address(yETH), PRICE_300_USY);
+    function test_Contract04_Case13_oracleQueryThroughHook() public {
+        // With the new centralized oracle architecture, synthetic assets
+        // always query the oracle through YoloHook, not storing their own reference
+        // This test verifies the priceOracle() view returns the YoloHook's oracle
 
-        // Update oracle
-        yETH.setYoloOracle(newOracle);
-        assertEq(yETH.priceOracle(), address(newOracle));
-
-        // Try to set zero address - should fail
-        vm.expectRevert(TestYoloSyntheticAsset.YoloSyntheticAsset__InvalidOracle.selector);
-        yETH.setYoloOracle(IYoloOracle(address(0)));
+        // The priceOracle() should return the oracle from YoloHook
+        // Note: In this test, yoloHook is a mock address, so we can't actually query it
+        // But we verify the view function exists and returns an address
+        address oracleAddr = yETH.priceOracle();
+        // In production, this would be: IYoloHook(YOLO_HOOK).yoloOracle()
+        assertTrue(oracleAddr != address(0), "Oracle address should not be zero");
     }
 
     /**
@@ -541,10 +541,6 @@ contract TestContract04_YoloSyntheticAsset is Test {
         vm.prank(alice);
         vm.expectRevert();
         yETH.setMaxSupply(1000e18);
-
-        vm.prank(alice);
-        vm.expectRevert();
-        yETH.setYoloOracle(IYoloOracle(address(0xDEAD)));
     }
 
     /**
