@@ -800,6 +800,15 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         return s._isYoloAsset[syntheticToken];
     }
 
+    /**
+     * @notice Checks if address is a whitelisted collateral
+     * @param collateralAsset Address to check
+     * @return True if asset is whitelisted as collateral
+     */
+    function isWhitelistedCollateral(address collateralAsset) external view returns (bool) {
+        return LendingPairModule.isWhitelistedCollateral(s, collateralAsset);
+    }
+
     // ============================================================
     // CDP OPERATIONS (LENDING PAIR MODULE)
     // ============================================================
