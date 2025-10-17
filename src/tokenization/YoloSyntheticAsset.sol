@@ -38,7 +38,6 @@ contract YoloSyntheticAsset is
     uint256 internal totalCostBasisX8;
 
     // Synthetic asset configuration
-    address public underlyingAsset; // Reference asset (e.g., WETH for yETH)
     IYoloOracle public yoloOracle; // YoloOracle for price feeds
     address public ylpVault; // YLP vault for P&L settlement
     uint256 public maxSupply; // Optional supply cap (0 = unlimited)
@@ -59,7 +58,6 @@ contract YoloSyntheticAsset is
      * @param name_ Token name (e.g., "Yolo Synthetic ETH")
      * @param symbol_ Token symbol (e.g., "yETH")
      * @param decimals_ Token decimals (typically 18)
-     * @param _underlyingAsset Reference asset address
      * @param _yoloOracle YoloOracle contract address
      * @param _ylpVault YLP vault for P&L settlement
      * @param _maxSupply Maximum supply cap (0 for unlimited)
@@ -70,7 +68,6 @@ contract YoloSyntheticAsset is
         string memory name_,
         string memory symbol_,
         uint8 decimals_,
-        address _underlyingAsset,
         IYoloOracle _yoloOracle,
         address _ylpVault,
         uint256 _maxSupply
@@ -83,7 +80,6 @@ contract YoloSyntheticAsset is
         __EIP712Base_init(name_);
 
         // Set synthetic asset configuration
-        underlyingAsset = _underlyingAsset;
         yoloOracle = _yoloOracle;
         ylpVault = _ylpVault;
         maxSupply = _maxSupply;
@@ -130,7 +126,8 @@ contract YoloSyntheticAsset is
         uint128 avgCost = avgPriceX8[from];
 
         // Get current price for P&L calculation
-        uint256 currentPriceX8 = yoloOracle.getAssetPrice(underlyingAsset);
+        // Query oracle with this synthetic asset's address, not underlyingAsset
+        uint256 currentPriceX8 = yoloOracle.getAssetPrice(address(this));
         if (currentPriceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
         // Calculate and settle P&L if avgCost exists
@@ -352,7 +349,8 @@ contract YoloSyntheticAsset is
         }
 
         // Get current price from oracle
-        uint256 priceX8 = yoloOracle.getAssetPrice(underlyingAsset);
+        // Query oracle with this synthetic asset's address, not underlyingAsset
+        uint256 priceX8 = yoloOracle.getAssetPrice(address(this));
         if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
         // Update cost basis with ceiling division

@@ -33,7 +33,6 @@ interface IYoloSyntheticAsset is IERC20, IERC20Metadata {
     function globalAveragePriceX8() external view returns (uint128);
 
     // Configuration getters
-    function underlyingAsset() external view returns (address);
     function priceOracle() external view returns (address); // Returns address of YoloOracle
     function maxSupply() external view returns (uint256);
     function tradingEnabled() external view returns (bool);

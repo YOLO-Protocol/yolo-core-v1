@@ -27,7 +27,6 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
     uint256 internal totalCostBasisX8;
 
     // Synthetic asset configuration
-    address public underlyingAsset;
     IYoloOracle public yoloOracle;
     address public ylpVault;
     uint256 public maxSupply;
@@ -49,7 +48,6 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         string memory name_,
         string memory symbol_,
         uint8 decimals_,
-        address _underlyingAsset,
         IYoloOracle _yoloOracle,
         address _ylpVault,
         uint256 _maxSupply
@@ -60,7 +58,6 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         __MintableIncentivizedERC20_init(yoloHook, aclManager, name_, symbol_, decimals_);
         __EIP712Base_init(name_);
 
-        underlyingAsset = _underlyingAsset;
         yoloOracle = _yoloOracle;
         ylpVault = _ylpVault;
         maxSupply = _maxSupply;
@@ -94,7 +91,8 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
             if (newSupply > maxSupply) revert YoloSyntheticAsset__ExceedsMaxSupply();
         }
 
-        uint256 priceX8 = yoloOracle.getAssetPrice(underlyingAsset);
+        // Query oracle with this synthetic asset's address, not underlyingAsset
+        uint256 priceX8 = yoloOracle.getAssetPrice(address(this));
         if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
         uint256 currentBalance = balanceOf(to);
@@ -117,7 +115,8 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         uint256 balance = balanceOf(from);
         uint128 avgCost = avgPriceX8[from];
 
-        uint256 currentPriceX8 = yoloOracle.getAssetPrice(underlyingAsset);
+        // Query oracle with this synthetic asset's address, not underlyingAsset
+        uint256 currentPriceX8 = yoloOracle.getAssetPrice(address(this));
         if (currentPriceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
         if (avgCost > 0) {

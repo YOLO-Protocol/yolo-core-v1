@@ -391,11 +391,11 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @dev Only callable by assets admin
      *      Implementation address passed as parameter (Aave-style)
      *      YoloHook maintains upgrade control via _authorizeUpgrade
+     *      The synthetic asset's address is registered directly in YoloOracle
      * @param name Token name (e.g., "Yolo Synthetic ETH")
      * @param symbol Token symbol (e.g., "yETH")
      * @param decimals Token decimals (typically 18)
-     * @param underlyingAsset Reference asset for price oracle
-     * @param oracleSource Price feed source for the underlying asset
+     * @param oracleSource Price feed source for the synthetic asset
      * @param implementation YoloSyntheticAsset implementation address
      * @param maxSupply Maximum supply cap (0 for unlimited)
      * @param maxFlashLoanAmount Maximum flash loan amount (0 for unlimited)
@@ -405,7 +405,6 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         string calldata name,
         string calldata symbol,
         uint8 decimals,
-        address underlyingAsset,
         address oracleSource,
         address implementation,
         uint256 maxSupply,
@@ -418,7 +417,6 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             name,
             symbol,
             decimals,
-            underlyingAsset,
             oracleSource,
             implementation,
             maxSupply,

@@ -31,17 +31,13 @@ library SyntheticAssetModule {
     /**
      * @notice Emitted when a new synthetic asset is created
      * @param syntheticToken Address of the deployed synthetic token (proxy)
-     * @param underlyingAsset Reference asset for price feed
+     * @param oracleSource Price feed source for the synthetic asset
      * @param name Token name
      * @param symbol Token symbol
      * @param implementation Implementation contract used for deployment
      */
     event SyntheticAssetCreated(
-        address indexed syntheticToken,
-        address indexed underlyingAsset,
-        string name,
-        string symbol,
-        address implementation
+        address indexed syntheticToken, address indexed oracleSource, string name, string symbol, address implementation
     );
 
     /**
@@ -84,6 +80,7 @@ library SyntheticAssetModule {
      *      Implementation address passed as parameter (Aave-style)
      *      YoloHook maintains upgrade control via _authorizeUpgrade
      *      Automatically creates virtual synthetic pool (USY-yAsset) on PoolManager
+     *      The synthetic asset's address is registered directly in YoloOracle
      * @param s Reference to AppStorage
      * @param poolManager Uniswap V4 PoolManager for pool creation
      * @param yoloHook Address of YoloHook (used as hook address for pools)
@@ -91,8 +88,7 @@ library SyntheticAssetModule {
      * @param name Token name (e.g., "Yolo Synthetic ETH")
      * @param symbol Token symbol (e.g., "yETH")
      * @param decimals Token decimals (typically 18)
-     * @param underlyingAsset Reference asset for price oracle
-     * @param oracleSource Price feed source for the underlying asset
+     * @param oracleSource Price feed source for the synthetic asset
      * @param implementation YoloSyntheticAsset implementation address
      * @param maxSupply Maximum supply cap (0 for unlimited)
      * @param maxFlashLoanAmount Maximum flash loan amount (0 for unlimited)
@@ -106,7 +102,6 @@ library SyntheticAssetModule {
         string calldata name,
         string calldata symbol,
         uint8 decimals,
-        address underlyingAsset,
         address oracleSource,
         address implementation,
         uint256 maxSupply,
@@ -119,13 +114,12 @@ library SyntheticAssetModule {
 
         // Encode initializer call
         bytes memory initData = abi.encodeWithSignature(
-            "initialize(address,address,string,string,uint8,address,address,address,uint256)",
+            "initialize(address,address,string,string,uint8,address,address,uint256)",
             address(this), // yoloHook = address of YoloHook (this contract)
             address(aclManager),
             name,
             symbol,
             decimals,
-            underlyingAsset,
             address(s.yoloOracle),
             s.ylpVault,
             maxSupply
@@ -141,7 +135,6 @@ library SyntheticAssetModule {
         // Store configuration
         s._assetConfigs[syntheticToken] = DataTypes.AssetConfiguration({
             syntheticToken: syntheticToken,
-            underlyingAsset: underlyingAsset,
             oracleSource: oracleSource,
             maxSupply: maxSupply,
             maxFlashLoanAmount: maxFlashLoanAmount,
@@ -189,7 +182,7 @@ library SyntheticAssetModule {
         // Register synthetic asset to pool mapping
         s._syntheticAssetToPool[syntheticToken] = syntheticPoolId;
 
-        emit SyntheticAssetCreated(syntheticToken, underlyingAsset, name, symbol, implementation);
+        emit SyntheticAssetCreated(syntheticToken, oracleSource, name, symbol, implementation);
     }
 
     // ============================================================

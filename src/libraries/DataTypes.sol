@@ -19,8 +19,7 @@ library DataTypes {
     /**
      * @notice Configuration for synthetic assets (yETH, yNVDA, yGOLD, etc.)
      * @param syntheticToken Address of the synthetic asset token (UUPS proxy)
-     * @param underlyingAsset Reference asset for price oracle (e.g., WETH for yETH)
-     * @param oracleSource Price feed source for the underlying asset
+     * @param oracleSource Price feed source for the synthetic asset (registered with YoloOracle)
      * @param maxSupply Maximum supply cap (0 = unlimited)
      * @param maxFlashLoanAmount Maximum amount that can be flash loaned (0 = unlimited)
      * @param isActive Whether the asset is active for trading
@@ -28,7 +27,6 @@ library DataTypes {
      */
     struct AssetConfiguration {
         address syntheticToken;
-        address underlyingAsset;
         address oracleSource;
         uint256 maxSupply;
         uint256 maxFlashLoanAmount;

@@ -68,13 +68,12 @@ library BootstrapModule {
 
         // Deploy USY via UUPS proxy
         bytes memory usyInitData = abi.encodeWithSignature(
-            "initialize(address,address,string,string,uint8,address,address,address,uint256)",
+            "initialize(address,address,string,string,uint8,address,address,uint256)",
             yoloHook,
             address(aclManager),
             "Yolo USD",
             "USY",
             uint8(18),
-            address(0),
             address(yoloOracle),
             ylpVaultImplementation,
             uint256(0)
@@ -85,7 +84,6 @@ library BootstrapModule {
         s._yoloAssets.push(usyProxy);
         s._assetConfigs[usyProxy] = DataTypes.AssetConfiguration({
             syntheticToken: usyProxy,
-            underlyingAsset: address(0),
             oracleSource: address(0),
             maxSupply: 0,
             maxFlashLoanAmount: type(uint256).max,
