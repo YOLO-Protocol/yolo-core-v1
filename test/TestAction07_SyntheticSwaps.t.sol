@@ -68,9 +68,7 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
         aclManager.grantRole(keccak256("ASSETS_ADMIN"), assetsAdmin);
 
         vm.prank(assetsAdmin);
-        yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(usyImpl), 0, 0
-        );
+        yETH = yoloHook.createSyntheticAsset("Yolo Synthetic ETH", "yETH", 18, address(weth), address(usyImpl), 0, 0);
 
         oracle.setAssetPrice(yETH, 2000e8);
 
@@ -438,9 +436,7 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
         oracle.setAssetPrice(address(wbtc), 50_000e8);
 
         vm.prank(assetsAdmin);
-        yBTC = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic BTC", "yBTC", 8, address(wbtc), address(wbtc), address(usyImpl), 0, 0
-        );
+        yBTC = yoloHook.createSyntheticAsset("Yolo Synthetic BTC", "yBTC", 8, address(wbtc), address(usyImpl), 0, 0);
         oracle.setAssetPrice(yBTC, 50_000e8);
 
         // Create yGOLD (priced at $2,500)
@@ -449,7 +445,7 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
 
         vm.prank(assetsAdmin);
         yGOLD = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic GOLD", "yGOLD", 18, address(goldToken), address(goldToken), address(usyImpl), 0, 0
+            "Yolo Synthetic GOLD", "yGOLD", 18, address(goldToken), address(usyImpl), 0, 0
         );
         oracle.setAssetPrice(yGOLD, 2_500e8);
 

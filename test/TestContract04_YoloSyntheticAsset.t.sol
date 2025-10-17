@@ -56,11 +56,13 @@ contract TestContract04_YoloSyntheticAsset is Test {
             "Yolo Synthetic ETH",
             "yETH",
             18,
-            underlyingWETH,
             yoloOracle,
             address(ylpVault),
             0 // No max supply
         );
+
+        // Set oracle price for yETH synthetic asset address
+        yoloOracle.setAssetPrice(address(yETH), PRICE_100_USY);
 
         // Set incentives tracker
         yETH.setIncentivesTracker(incentivesController);
@@ -74,7 +76,6 @@ contract TestContract04_YoloSyntheticAsset is Test {
         assertEq(yETH.symbol(), "yETH");
         assertEq(yETH.decimals(), 18);
         assertEq(yETH.YOLO_HOOK(), yoloHook);
-        assertEq(yETH.underlyingAsset(), underlyingWETH);
         assertEq(yETH.priceOracle(), address(yoloOracle));
         assertEq(yETH.ylpVault(), address(ylpVault));
         assertEq(yETH.maxSupply(), 0);
@@ -106,7 +107,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         yETH.mint(alice, 10e18);
 
         // Update oracle price to 200 USY
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_200_USY);
 
         // Second mint: 10 tokens at 200 USY
         vm.prank(yoloHook);
@@ -127,7 +128,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         yETH.mint(alice, 10e18);
 
         // Update oracle price and mint to Bob
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_200_USY);
         vm.prank(yoloHook);
         yETH.mint(bob, 10e18);
 
@@ -178,7 +179,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         yETH.mint(alice, 10e18);
 
         // Price increases to 150 USY (profit scenario)
-        yoloOracle.setAssetPrice(underlyingWETH, 150e8);
+        yoloOracle.setAssetPrice(address(yETH), 150e8);
 
         // Burn all tokens - should trigger profit settlement
         vm.prank(yoloHook);
@@ -202,12 +203,12 @@ contract TestContract04_YoloSyntheticAsset is Test {
      */
     function test_Contract04_Case07_partialBurnKeepsCostBasisAndSettlesPartialPnL() public {
         // Mint at 200 USY
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_200_USY);
         vm.prank(yoloHook);
         yETH.mint(alice, 10e18);
 
         // Price drops to 150 USY (loss scenario)
-        yoloOracle.setAssetPrice(underlyingWETH, 150e8);
+        yoloOracle.setAssetPrice(address(yETH), 150e8);
 
         // Burn half - should trigger loss settlement
         vm.prank(yoloHook);
@@ -236,7 +237,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         yETH.mint(alice, 20e18);
 
         // Bob gets 10 tokens at 200 USY
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_200_USY);
         vm.prank(yoloHook);
         yETH.mint(bob, 10e18);
 
@@ -282,7 +283,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         yETH.transfer(bob, 5e18);
 
         // Mint and burn should still work
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_200_USY);
         vm.prank(yoloHook);
         yETH.mint(bob, 5e18);
 
@@ -310,12 +311,12 @@ contract TestContract04_YoloSyntheticAsset is Test {
         yETH.mint(alice, 60e18);
 
         // Update oracle and mint 40 more - should work (exactly at limit)
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_200_USY);
         vm.prank(yoloHook);
         yETH.mint(bob, 40e18);
 
         // Try to mint 1 more - should fail
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_300_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_300_USY);
         vm.prank(yoloHook);
         vm.expectRevert(TestYoloSyntheticAsset.YoloSyntheticAsset__ExceedsMaxSupply.selector);
         yETH.mint(charlie, 1e18);
@@ -340,7 +341,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         assertEq(yETH.avgPriceX8(alice), PRICE_100_USY);
 
         // Change oracle price and mint more
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_300_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_300_USY);
         vm.prank(yoloHook);
         yETH.mint(alice, 10e18);
 
@@ -399,7 +400,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
      */
     function test_Contract04_Case13_oracleUpdate() public {
         MockYoloOracle newOracle = new MockYoloOracle();
-        newOracle.setAssetPrice(underlyingWETH, PRICE_300_USY);
+        newOracle.setAssetPrice(address(yETH), PRICE_300_USY);
 
         // Update oracle
         yETH.setYoloOracle(newOracle);
@@ -444,7 +445,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         yETH.mint(alice, 10e18);
         assertEq(yETH.globalAveragePriceX8(), PRICE_100_USY);
 
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_200_USY);
         vm.prank(yoloHook);
         yETH.mint(bob, 5e18);
 
@@ -477,7 +478,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         vm.prank(yoloHook);
         yETH.mint(alice, 10e18);
 
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_200_USY);
         vm.prank(yoloHook);
         yETH.mint(bob, 10e18);
 
@@ -554,11 +555,11 @@ contract TestContract04_YoloSyntheticAsset is Test {
         vm.prank(yoloHook);
         yETH.mint(alice, 10e18); // 10 @ 100 USY
 
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_200_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_200_USY);
         vm.prank(yoloHook);
         yETH.mint(bob, 5e18); // 5 @ 200 USY
 
-        yoloOracle.setAssetPrice(underlyingWETH, PRICE_300_USY);
+        yoloOracle.setAssetPrice(address(yETH), PRICE_300_USY);
         vm.prank(yoloHook);
         yETH.mint(charlie, 8e18); // 8 @ 300 USY
 
@@ -577,14 +578,14 @@ contract TestContract04_YoloSyntheticAsset is Test {
         _verifyGlobalCostInvariant();
 
         // Phase 3: More mints at new price
-        yoloOracle.setAssetPrice(underlyingWETH, 250e8);
+        yoloOracle.setAssetPrice(address(yETH), 250e8);
         vm.prank(yoloHook);
         yETH.mint(bob, 4e18); // Bob gets more
 
         _verifyGlobalCostInvariant();
 
         // Phase 4: Partial burns
-        yoloOracle.setAssetPrice(underlyingWETH, 180e8);
+        yoloOracle.setAssetPrice(address(yETH), 180e8);
         vm.prank(yoloHook);
         yETH.burn(alice, 5e18); // Alice burns some
 

@@ -72,7 +72,6 @@ contract TestAction05_FlashLoans is Base02_DeployYoloHook {
             "yETH",
             18,
             address(weth),
-            address(weth),
             address(syntheticAssetImpl),
             0, // no max supply
             type(uint256).max // unlimited flash loans
@@ -83,12 +82,15 @@ contract TestAction05_FlashLoans is Base02_DeployYoloHook {
             "yBTC",
             8,
             address(wbtc),
-            address(wbtc),
             address(syntheticAssetImpl),
             0, // no max supply
             type(uint256).max // unlimited flash loans
         );
         vm.stopPrank();
+
+        // Set oracle prices for synthetic assets
+        oracle.setAssetPrice(yETH, 2000e8); // $2000 per yETH
+        oracle.setAssetPrice(yBTC, 40000e8); // $40000 per yBTC
 
         // Whitelist USDC as collateral
         vm.prank(assetsAdmin);
@@ -471,19 +473,19 @@ contract TestAction05_FlashLoans is Base02_DeployYoloHook {
     // ============================================================
 
     function _fundFlashBorrowerWithYETH(address borrower, uint256 amount) internal {
-        usdc.mint(borrower, 100000e6);
+        usdc.mint(borrower, 200000e6); // Generous amount for flash loan tests
         vm.startPrank(borrower);
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yETH, amount, address(usdc), 50000e6);
+        yoloHook.borrow(yETH, amount, address(usdc), 160000e6); // 50 yETH * $2000 = $100k, need $125k at 80% LTV
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
     }
 
     function _fundFlashBorrowerWithYBTC(address borrower, uint256 amount) internal {
-        usdc.mint(borrower, 500000e6);
+        usdc.mint(borrower, 400000e6); // Generous amount for flash loan tests
         vm.startPrank(borrower);
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yBTC, amount, address(usdc), 100000e6);
+        yoloHook.borrow(yBTC, amount, address(usdc), 320000e6); // 5 yBTC * $40k = $200k, need $250k at 80% LTV
         YoloSyntheticAsset(yBTC).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
     }

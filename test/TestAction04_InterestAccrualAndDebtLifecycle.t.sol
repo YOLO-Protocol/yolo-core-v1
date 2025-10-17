@@ -75,12 +75,9 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         // Create synthetic assets
         vm.startPrank(assetsAdmin);
 
-        yUSD =
-            yoloHook.createSyntheticAsset("Yolo USD", "yUSD", 18, address(usdc), address(usdc), address(usyImpl), 0, 0);
+        yUSD = yoloHook.createSyntheticAsset("Yolo USD", "yUSD", 18, address(usdc), address(usyImpl), 0, 0);
 
-        yETH = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic ETH", "yETH", 18, address(weth), address(weth), address(usyImpl), 0, 0
-        );
+        yETH = yoloHook.createSyntheticAsset("Yolo Synthetic ETH", "yETH", 18, address(weth), address(usyImpl), 0, 0);
 
         // Set oracle prices for synthetic assets
         oracle.setAssetPrice(yUSD, 1e8); // $1
