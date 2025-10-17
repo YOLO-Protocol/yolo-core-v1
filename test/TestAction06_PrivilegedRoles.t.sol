@@ -80,7 +80,6 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
             "yETH",
             18,
             address(weth),
-            address(weth),
             address(syntheticAssetImpl),
             0, // no max supply
             type(uint256).max // unlimited flash loans
@@ -92,12 +91,14 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
             "yBTC",
             8,
             address(wbtc),
-            address(wbtc),
             address(syntheticAssetImpl),
             0, // no max supply
             type(uint256).max // unlimited flash loans
         );
         vm.stopPrank();
+
+        // Set oracle prices for synthetic assets (yETH uses default ~$2-3 range for liquidation tests)
+        oracle.setAssetPrice(yBTC, 40000e8); // $40000 per yBTC
 
         // Whitelist USDC as collateral
         vm.prank(assetsAdmin);
@@ -143,8 +144,13 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
 
         // Fund accounts with USDC
         usdc.mint(borrower, 10000e6);
-        usdc.mint(regularUser, 10000e6);
-        usdc.mint(privilegedLiquidator, 10000e6);
+        usdc.mint(regularUser, 10000e6); // Need $250 for borrowing 100 yETH at $2
+        usdc.mint(privilegedLiquidator, 10000e6); // Need $250 for borrowing 100 yETH at $2
+
+        // Fund YLP vault with USY for liquidation payouts
+        // When liquidations burn synthetic assets with positive PnL, YLP needs USY to pay traders
+        vm.prank(address(yoloHook));
+        YoloSyntheticAsset(usy).mint(ylpVault, 10000e18); // 10,000 USY for liquidation settlements
 
         // Give test accounts yETH by having them borrow against USDC
         // This provides them with yETH for liquidation tests
@@ -157,6 +163,9 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
      * @dev Since we can't mint synthetic assets directly, we borrow them through the protocol
      */
     function _mintYETHForTesting(address recipient, uint256 amount) internal {
+        // Set yETH price to $2 for testing
+        oracle.setAssetPrice(yETH, 2e8);
+
         vm.startPrank(recipient);
 
         // Approve USDC
@@ -228,7 +237,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         // Regular user should be able to liquidate (privileged mode is OFF by default)
         vm.startPrank(regularUser);
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
-        yoloHook.liquidate(borrower, address(usdc), yETH, 1e18);
+        yoloHook.liquidate(borrower, address(usdc), yETH, 1e18); // Liquidate 1 yETH (debt is 800 yETH)
         vm.stopPrank();
     }
 
@@ -247,7 +256,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         // Privileged liquidator should succeed (already has yETH from setup)
         vm.startPrank(privilegedLiquidator);
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
-        yoloHook.liquidate(borrower, address(usdc), yETH, 1e18);
+        yoloHook.liquidate(borrower, address(usdc), yETH, 1e18); // Liquidate 1 yETH (debt is 800 yETH)
         vm.stopPrank();
     }
 
@@ -267,7 +276,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         vm.startPrank(regularUser);
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.expectRevert(); // Will revert with LiquidationModule__NotPrivilegedLiquidator
-        yoloHook.liquidate(borrower, address(usdc), yETH, 1e18);
+        yoloHook.liquidate(borrower, address(usdc), yETH, 1e18); // Liquidate 1 yETH (debt is 800 yETH)
         vm.stopPrank();
     }
 
@@ -280,10 +289,12 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         MockFlashBorrower flashBorrower = new MockFlashBorrower();
 
         // Fund flash borrower by having it borrow yETH
+        // 50e18 yETH at $2 = $100, need $125 collateral at 80% LTV
+        oracle.setAssetPrice(yETH, 2e8); // $2 per yETH for flash loan tests
         usdc.mint(address(flashBorrower), 10000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yETH, 50e18, address(usdc), 1000e6); // Borrow enough for flash loan test
+        yoloHook.borrow(yETH, 50e18, address(usdc), 150e6); // 50 yETH * $2 = $100, need $125 at 80% LTV
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
@@ -309,10 +320,12 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         uint256 expectedFee = (borrowAmount * 9) / 10000; // 9 bps
 
         // Fund flash borrower by having it borrow yETH (need principal + fee)
+        oracle.setAssetPrice(yETH, 2e8); // $2 per yETH for flash loan tests
+        uint256 totalAmount = borrowAmount + expectedFee;
         usdc.mint(address(flashBorrower), 10000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yETH, borrowAmount + expectedFee, address(usdc), 1000e6);
+        yoloHook.borrow(yETH, totalAmount, address(usdc), 30e6); // ~10 yETH * $2 = $20, need $25 at 80% LTV
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
@@ -334,18 +347,21 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         uint256 borrowAmountYBTC = 1e8; // yBTC has 8 decimals
 
         // Fund flash borrower with yETH
+        oracle.setAssetPrice(yETH, 2e8); // $2 per yETH for flash loan tests
+        uint256 yethAmount = borrowAmountYETH * 2;
         usdc.mint(address(flashBorrower), 20000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yETH, borrowAmountYETH * 2, address(usdc), 2000e6);
+        yoloHook.borrow(yETH, yethAmount, address(usdc), 50e6); // 20 yETH * $2 = $40, need $50 at 80% LTV
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
         // Fund flash borrower with yBTC
-        usdc.mint(address(flashBorrower), 100000e6);
+        uint256 ybtcAmount = borrowAmountYBTC * 2;
+        usdc.mint(address(flashBorrower), 150000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yBTC, borrowAmountYBTC * 2, address(usdc), 50000e6);
+        yoloHook.borrow(yBTC, ybtcAmount, address(usdc), 100000e6); // 2 yBTC * $40k = $80k, need $100k at 80% LTV
         YoloSyntheticAsset(yBTC).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
@@ -378,18 +394,21 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         uint256 expectedFeeYBTC = (borrowAmountYBTC * 9) / 10000; // 9 bps
 
         // Fund flash borrower with yETH (principal + fee)
+        oracle.setAssetPrice(yETH, 2e8); // $2 per yETH for flash loan tests
+        uint256 totalYETH = borrowAmountYETH + expectedFeeYETH;
         usdc.mint(address(flashBorrower), 20000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yETH, borrowAmountYETH + expectedFeeYETH, address(usdc), 2000e6);
+        yoloHook.borrow(yETH, totalYETH, address(usdc), 30e6); // ~10 yETH * $2 = $20, need $25 at 80% LTV
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
         // Fund flash borrower with yBTC (principal + fee)
-        usdc.mint(address(flashBorrower), 100000e6);
+        uint256 totalYBTC = borrowAmountYBTC + expectedFeeYBTC;
+        usdc.mint(address(flashBorrower), 150000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yBTC, borrowAmountYBTC + expectedFeeYBTC, address(usdc), 50000e6);
+        yoloHook.borrow(yBTC, totalYBTC, address(usdc), 60000e6); // ~1 yBTC * $40k = $40k, need $50k at 80% LTV
         YoloSyntheticAsset(yBTC).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
@@ -426,7 +445,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         // Regular user should now be able to liquidate
         vm.startPrank(regularUser);
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
-        yoloHook.liquidate(borrower, address(usdc), yETH, 1e18);
+        yoloHook.liquidate(borrower, address(usdc), yETH, 1e18); // Liquidate 1 yETH (debt is 800 yETH)
         vm.stopPrank();
     }
 
@@ -451,6 +470,9 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
      * @notice Create an undercollateralized position for liquidation testing
      */
     function _createUndercollateralizedPosition() internal {
+        // Set initial yETH price to $2
+        oracle.setAssetPrice(yETH, 2e8);
+
         // Borrower deposits USDC and borrows yETH
         vm.startPrank(borrower);
         usdc.approve(address(yoloHook), type(uint256).max);
@@ -462,11 +484,11 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         vm.stopPrank();
 
         // Crash yETH price to make position undercollateralized
-        // New price: $1 per yETH
-        // Debt value: $800
+        // New price: $3 per yETH
+        // Debt value: 800 * $3 = $2400
         // Collateral value: $2000
-        // But LTV threshold is 85% = $1700 max debt
-        // So we need debt > $1700
+        // Liquidation threshold is 85% of $2000 = $1700 max debt
+        // Since $2400 > $1700, position is undercollateralized
         oracle.setAssetPrice(yETH, 3e8); // $3 per yETH
             // Now debt = 800 * $3 = $2400 > $1700 threshold (85% of $2000)
     }
