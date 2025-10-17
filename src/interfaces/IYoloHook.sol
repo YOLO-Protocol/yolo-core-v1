@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {IYoloOracle} from "./IYoloOracle.sol";
+
 /**
  * @title IYoloHook
  * @author alvin@yolo.wtf
@@ -9,6 +11,10 @@ pragma solidity ^0.8.26;
 interface IYoloHook {
     /// @notice Get USY token address
     function usy() external view returns (address);
+
+    /// @notice Get YoloOracle address (centralized oracle for all synthetic assets)
+    function yoloOracle() external view returns (IYoloOracle);
+
     /// @notice Get current anchor pool reserves (raw values)
     /// @return reserveUSY USY reserves (18 decimals)
     /// @return reserveUSDC USDC reserves (native decimals - chain dependent)

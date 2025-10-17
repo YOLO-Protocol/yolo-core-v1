@@ -25,7 +25,6 @@ contract YoloSyntheticAsset is
     IYoloSyntheticAsset
 {
     // Custom errors
-    error YoloSyntheticAsset__InvalidOracle();
     error YoloSyntheticAsset__InvalidAddress();
     error YoloSyntheticAsset__TradingDisabled();
     error YoloSyntheticAsset__ExceedsMaxSupply();
@@ -38,7 +37,6 @@ contract YoloSyntheticAsset is
     uint256 internal totalCostBasisX8;
 
     // Synthetic asset configuration
-    IYoloOracle public yoloOracle; // YoloOracle for price feeds
     address public ylpVault; // YLP vault for P&L settlement
     uint256 public maxSupply; // Optional supply cap (0 = unlimited)
     bool public tradingEnabled; // Circuit breaker for risk management
@@ -58,7 +56,6 @@ contract YoloSyntheticAsset is
      * @param name_ Token name (e.g., "Yolo Synthetic ETH")
      * @param symbol_ Token symbol (e.g., "yETH")
      * @param decimals_ Token decimals (typically 18)
-     * @param _yoloOracle YoloOracle contract address
      * @param _ylpVault YLP vault for P&L settlement
      * @param _maxSupply Maximum supply cap (0 for unlimited)
      */
@@ -68,11 +65,9 @@ contract YoloSyntheticAsset is
         string memory name_,
         string memory symbol_,
         uint8 decimals_,
-        IYoloOracle _yoloOracle,
         address _ylpVault,
         uint256 _maxSupply
     ) external initializer {
-        if (address(_yoloOracle) == address(0)) revert YoloSyntheticAsset__InvalidOracle();
         if (_ylpVault == address(0)) revert YoloSyntheticAsset__InvalidAddress();
 
         // Initialize parent contracts
@@ -80,7 +75,6 @@ contract YoloSyntheticAsset is
         __EIP712Base_init(name_);
 
         // Set synthetic asset configuration
-        yoloOracle = _yoloOracle;
         ylpVault = _ylpVault;
         maxSupply = _maxSupply;
         tradingEnabled = true;
@@ -125,9 +119,9 @@ contract YoloSyntheticAsset is
         uint256 balance = balanceOf(from);
         uint128 avgCost = avgPriceX8[from];
 
-        // Get current price for P&L calculation
+        // Get current price for P&L calculation via YoloHook (centralized oracle)
         // Query oracle with this synthetic asset's address, not underlyingAsset
-        uint256 currentPriceX8 = yoloOracle.getAssetPrice(address(this));
+        uint256 currentPriceX8 = IYoloHook(YOLO_HOOK).yoloOracle().getAssetPrice(address(this));
         if (currentPriceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
         // Calculate and settle P&L if avgCost exists
@@ -246,10 +240,10 @@ contract YoloSyntheticAsset is
 
     /**
      * @notice Returns the price oracle address for compatibility
-     * @return Address of the YoloOracle
+     * @return Address of the YoloOracle (queried through YoloHook)
      */
     function priceOracle() external view override returns (address) {
-        return address(yoloOracle);
+        return address(IYoloHook(YOLO_HOOK).yoloOracle());
     }
 
     /**
@@ -276,20 +270,6 @@ contract YoloSyntheticAsset is
         }
         maxSupply = _maxSupply;
         emit MaxSupplyUpdated(_maxSupply);
-    }
-
-    /**
-     * @notice Updates the YoloOracle
-     * @dev Only callable by risk admin
-     * @param _yoloOracle New YoloOracle address
-     */
-    function setYoloOracle(IYoloOracle _yoloOracle) external override {
-        if (address(_yoloOracle) == address(0)) revert YoloSyntheticAsset__InvalidOracle();
-        if (!ACL_MANAGER.hasRole(keccak256("RISK_ADMIN"), _msgSender())) {
-            revert IncentivizedERC20__OnlyIncentivesAdmin(); // Reuse error for consistency
-        }
-        yoloOracle = _yoloOracle;
-        emit OracleUpdated(address(_yoloOracle));
     }
 
     /**
@@ -348,9 +328,9 @@ contract YoloSyntheticAsset is
             if (newSupply > maxSupply) revert YoloSyntheticAsset__ExceedsMaxSupply();
         }
 
-        // Get current price from oracle
+        // Get current price from oracle via YoloHook (centralized oracle)
         // Query oracle with this synthetic asset's address, not underlyingAsset
-        uint256 priceX8 = yoloOracle.getAssetPrice(address(this));
+        uint256 priceX8 = IYoloHook(YOLO_HOOK).yoloOracle().getAssetPrice(address(this));
         if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
         // Update cost basis with ceiling division

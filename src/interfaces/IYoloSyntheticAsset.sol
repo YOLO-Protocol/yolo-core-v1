@@ -16,7 +16,6 @@ interface IYoloSyntheticAsset is IERC20, IERC20Metadata {
     event CostBasisUpdated(address indexed user, uint256 newBalance, uint128 newAvgPriceX8);
     event TradingStatusChanged(bool enabled);
     event MaxSupplyUpdated(uint256 newMaxSupply);
-    event OracleUpdated(address newOracle);
 
     // Mint/Burn functions (only callable by YoloHook)
     function mint(address to, uint256 amount) external;
@@ -40,7 +39,6 @@ interface IYoloSyntheticAsset is IERC20, IERC20Metadata {
     // Admin functions (role-based)
     function setTradingEnabled(bool enabled) external;
     function setMaxSupply(uint256 _maxSupply) external;
-    function setYoloOracle(IYoloOracle _yoloOracle) external;
 
     // EIP-2612 permit
     function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
