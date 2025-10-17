@@ -214,14 +214,6 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         maxSupply = _maxSupply;
     }
 
-    function setYoloOracle(IYoloOracle _yoloOracle) external override {
-        if (address(_yoloOracle) == address(0)) revert YoloSyntheticAsset__InvalidOracle();
-        if (!ACL_MANAGER.hasRole(keccak256("RISK_ADMIN"), _msgSender())) {
-            revert IncentivizedERC20__OnlyIncentivesAdmin();
-        }
-        yoloOracle = _yoloOracle;
-    }
-
     function priceOracle() external view override returns (address) {
         return address(yoloOracle);
     }
