@@ -116,49 +116,34 @@ contract YoloSyntheticAsset is
      * @param amount Amount to burn
      */
     function _settleAndBurn(address from, uint256 amount) internal {
-        uint256 balance = balanceOf(from);
-        uint128 avgCost = avgPriceX8[from];
+        uint256 prevBalance = balanceOf(from);
+        uint128 prevAvg = avgPriceX8[from];
 
-        // Get current price for P&L calculation via YoloHook (centralized oracle)
-        // Query oracle with this synthetic asset's address, not underlyingAsset
-        uint256 currentPriceX8 = IYoloHook(YOLO_HOOK).yoloOracle().getAssetPrice(address(this));
-        if (currentPriceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
+        // PnL settlement only for yAssets (not USY), non-protocol accounts with cost basis
+        if (_shouldTrackCostBasis() && !_isProtocolAccount(from) && prevAvg > 0) {
+            uint256 currentPriceX8 = IYoloHook(YOLO_HOOK).yoloOracle().getAssetPrice(address(this));
+            if (currentPriceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
-        // Calculate and settle P&L if avgCost exists
-        if (avgCost > 0) {
-            int256 deltaX8 = int256(currentPriceX8) - int256(uint256(avgCost));
-            int256 pnlUSY;
+            int256 deltaX8 = int256(currentPriceX8) - int256(uint256(prevAvg));
+            int256 pnlUSY = deltaX8 >= 0
+                ? int256((uint256(deltaX8) * amount) / 1e8) // FLOOR for profit
+                : -int256((uint256(-deltaX8) * amount + 1e8 - 1) / 1e8); // CEIL for loss
 
-            if (deltaX8 >= 0) {
-                // User profit: FLOOR payout (less to user)
-                uint256 profitNumerator = uint256(deltaX8) * amount;
-                pnlUSY = int256(profitNumerator / 1e8);
-            } else {
-                // User loss: CEIL charge (more from user)
-                uint256 lossNumerator = uint256(-deltaX8) * amount;
-                pnlUSY = -int256((lossNumerator + 1e8 - 1) / 1e8);
-            }
-
-            // If user loss, have hook fund YLP with USY before settlement
-            // Route settlement via YoloHook to enforce auth and funding semantics
             IYoloHook(YOLO_HOOK).settlePnLFromSynthetic(from, pnlUSY);
-
-            // Emit P&L settled event
-            emit CostBasisUpdated(from, balance - amount, avgCost);
         }
-        // If avgCost == 0 (edge case), no P&L settlement
 
-        // Clear average price if burning entire balance
-        if (balance == amount && avgCost > 0) {
-            avgPriceX8[from] = 0;
-            emit CostBasisUpdated(from, 0, 0);
-        }
-        // For partial burns, average price remains unchanged
-
-        _updateGlobalCost(balance, avgCost, balance - amount, avgPriceX8[from]);
-
-        // Execute burn
+        // 1) Burn FIRST (so parent hooks run on consistent state)
         _burn(from, amount);
+
+        // 2) Skip cost-basis tracking for protocol accounts or USY
+        if (_isProtocolAccount(from) || !_shouldTrackCostBasis()) return;
+
+        uint256 newBalance = prevBalance - amount;
+        uint128 newAvg = newBalance == 0 ? 0 : prevAvg;
+        avgPriceX8[from] = newAvg;
+
+        _updateGlobalCost(prevBalance, prevAvg, newBalance, newAvg);
+        emit CostBasisUpdated(from, newBalance, newAvg);
     }
 
     /**
@@ -174,7 +159,7 @@ contract YoloSyntheticAsset is
             revert YoloSyntheticAsset__TradingDisabled();
         }
 
-        // Skip cost basis updates for mint/burn
+        // Skip cost basis updates for mint/burn (handled in mint/burn functions)
         if (from == address(0) || to == address(0)) {
             super._beforeTokenTransfer(from, to, amount);
             return;
@@ -186,44 +171,114 @@ contract YoloSyntheticAsset is
             return;
         }
 
-        // Get pre-transfer balances and averages
-        uint256 fromBalance = balanceOf(from);
-        uint256 toBalance = balanceOf(to);
-        uint128 prevFromAvg = avgPriceX8[from];
-        uint128 prevToAvg = avgPriceX8[to];
-
-        // Update recipient's weighted average
-        if (toBalance == 0) {
-            // Recipient has no tokens - inherit sender's average
-            avgPriceX8[to] = avgPriceX8[from];
-        } else if (avgPriceX8[from] > 0) {
-            // Calculate new weighted average for recipient with ceiling division
-            uint256 carriedCost = uint256(avgPriceX8[from]) * amount;
-            uint256 existingCost = uint256(avgPriceX8[to]) * toBalance;
-            uint256 totalCost = existingCost + carriedCost;
-            uint256 totalQuantity = toBalance + amount;
-            // Ceiling division: (a + b - 1) / b
-            avgPriceX8[to] = uint128((totalCost + totalQuantity - 1) / totalQuantity);
+        // Fast-path for protocol ↔ protocol transfers (gas savings + no tracking needed)
+        if (_isProtocolAccount(from) && _isProtocolAccount(to)) {
+            super._beforeTokenTransfer(from, to, amount);
+            return;
         }
 
-        // Clear sender's average if transferring entire balance
-        if (fromBalance == amount && avgPriceX8[from] > 0) {
-            avgPriceX8[from] = 0;
-            emit CostBasisUpdated(from, 0, 0);
+        // ===== CASE 1: Protocol → User (Buy Flow) =====
+        // User receives synthetic assets from protocol at current oracle price
+        if (_isProtocolAccount(from) && !_isProtocolAccount(to)) {
+            // Only track cost basis for yAssets, not USY
+            if (_shouldTrackCostBasis()) {
+                uint256 toBalance = balanceOf(to);
+                uint128 prevToAvg = avgPriceX8[to];
+
+                // Get current oracle price for this synthetic asset
+                uint256 priceX8 = IYoloHook(YOLO_HOOK).yoloOracle().getAssetPrice(address(this));
+                if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
+
+                // Calculate new weighted average with ceiling division
+                uint128 newToAvg;
+                if (toBalance == 0) {
+                    newToAvg = uint128(priceX8);
+                } else {
+                    uint256 existingCost = uint256(prevToAvg) * toBalance;
+                    uint256 incomingCost = priceX8 * amount;
+                    uint256 totalCost = existingCost + incomingCost;
+                    uint256 totalQuantity = toBalance + amount;
+                    newToAvg = uint128((totalCost + totalQuantity - 1) / totalQuantity); // ceiling
+                }
+
+                avgPriceX8[to] = newToAvg;
+                _updateGlobalCost(toBalance, prevToAvg, toBalance + amount, newToAvg);
+                emit CostBasisUpdated(to, toBalance + amount, newToAvg);
+            }
+
+            super._beforeTokenTransfer(from, to, amount);
+            return;
         }
 
-        // Emit update event for recipient if their cost basis changed
-        if (toBalance == 0 || avgPriceX8[from] > 0) {
-            emit CostBasisUpdated(to, toBalance + amount, avgPriceX8[to]);
+        // ===== CASE 2: User → Protocol (Sell Flow) =====
+        // Settle P&L for user at current oracle price before protocol receives tokens
+        if (!_isProtocolAccount(from) && _isProtocolAccount(to)) {
+            uint256 fromBalance = balanceOf(from);
+            uint128 prevFromAvg = avgPriceX8[from];
+
+            // Realize P&L only for yAssets (not USY) with cost basis
+            if (_shouldTrackCostBasis() && prevFromAvg > 0) {
+                uint256 priceX8 = IYoloHook(YOLO_HOOK).yoloOracle().getAssetPrice(address(this));
+                if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
+
+                int256 deltaX8 = int256(priceX8) - int256(uint256(prevFromAvg));
+                // FLOOR for profit, CEIL for loss (matches burn logic)
+                int256 pnlUSY = deltaX8 >= 0
+                    ? int256((uint256(deltaX8) * amount) / 1e8)
+                    : -int256((uint256(-deltaX8) * amount + 1e8 - 1) / 1e8);
+
+                IYoloHook(YOLO_HOOK).settlePnLFromSynthetic(from, pnlUSY);
+            }
+
+            // Update/clear sender's average and global cost (only for yAssets)
+            uint256 newFromBalance = fromBalance - amount;
+            uint128 newFromAvg = (_shouldTrackCostBasis() && newFromBalance == 0) ? 0 : prevFromAvg;
+            if (_shouldTrackCostBasis() && newFromAvg != prevFromAvg) {
+                avgPriceX8[from] = newFromAvg;
+                emit CostBasisUpdated(from, newFromBalance, newFromAvg);
+            }
+            _updateGlobalCost(fromBalance, prevFromAvg, newFromBalance, newFromAvg);
+
+            super._beforeTokenTransfer(from, to, amount);
+            return;
         }
 
-        uint256 newFromBalance = fromBalance - amount;
-        uint128 newFromAvg = avgPriceX8[from];
-        uint256 newToBalance = toBalance + amount;
-        uint128 newToAvg = avgPriceX8[to];
+        // ===== CASE 3: User ↔ User (Normal Transfer) =====
+        // Only track cost basis for yAssets, not USY
+        if (_shouldTrackCostBasis()) {
+            uint256 fromBalance = balanceOf(from);
+            uint256 toBalance = balanceOf(to);
+            uint128 prevFromAvg = avgPriceX8[from];
+            uint128 prevToAvg = avgPriceX8[to];
 
-        _updateGlobalCost(fromBalance, prevFromAvg, newFromBalance, newFromAvg);
-        _updateGlobalCost(toBalance, prevToAvg, newToBalance, newToAvg);
+            // Update recipient's weighted average
+            if (toBalance == 0) {
+                // Recipient has no tokens - inherit sender's average
+                avgPriceX8[to] = avgPriceX8[from];
+            } else if (avgPriceX8[from] > 0) {
+                // Calculate new weighted average for recipient with ceiling division
+                uint256 carriedCost = uint256(avgPriceX8[from]) * amount;
+                uint256 existingCost = uint256(avgPriceX8[to]) * toBalance;
+                uint256 totalCost = existingCost + carriedCost;
+                uint256 totalQuantity = toBalance + amount;
+                // Ceiling division: (a + b - 1) / b
+                avgPriceX8[to] = uint128((totalCost + totalQuantity - 1) / totalQuantity);
+            }
+
+            // Clear sender's average if transferring entire balance
+            if (fromBalance == amount && avgPriceX8[from] > 0) {
+                avgPriceX8[from] = 0;
+                emit CostBasisUpdated(from, 0, 0);
+            }
+
+            // Emit update event for recipient if their cost basis changed
+            if (toBalance == 0 || avgPriceX8[from] > 0) {
+                emit CostBasisUpdated(to, toBalance + amount, avgPriceX8[to]);
+            }
+
+            _updateGlobalCost(fromBalance, prevFromAvg, fromBalance - amount, avgPriceX8[from]);
+            _updateGlobalCost(toBalance, prevToAvg, toBalance + amount, avgPriceX8[to]);
+        }
 
         // Continue with parent logic
         super._beforeTokenTransfer(from, to, amount);
@@ -328,29 +383,33 @@ contract YoloSyntheticAsset is
             if (newSupply > maxSupply) revert YoloSyntheticAsset__ExceedsMaxSupply();
         }
 
+        // 1) Mint FIRST (so parent hooks run on consistent state)
+        _mint(to, amount);
+
+        // 2) Skip cost-basis tracking for protocol accounts or USY (cash-like stable)
+        if (_isProtocolAccount(to) || !_shouldTrackCostBasis()) return;
+
         // Get current price from oracle via YoloHook (centralized oracle)
-        // Query oracle with this synthetic asset's address, not underlyingAsset
         uint256 priceX8 = IYoloHook(YOLO_HOOK).yoloOracle().getAssetPrice(address(this));
         if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
+        // Calculate previous balance (before the mint)
+        uint256 prevBalance = balanceOf(to) - amount;
+        uint128 prevAvg = avgPriceX8[to];
+
         // Update cost basis with ceiling division
-        uint256 currentBalance = balanceOf(to);
-        uint128 previousAvg = avgPriceX8[to];
-        if (currentBalance > 0) {
-            uint256 totalCost = uint256(avgPriceX8[to]) * currentBalance + priceX8 * amount;
-            uint256 totalQuantity = currentBalance + amount;
-            avgPriceX8[to] = uint128((totalCost + totalQuantity - 1) / totalQuantity);
+        uint128 newAvg;
+        if (prevBalance > 0) {
+            uint256 totalCost = uint256(prevAvg) * prevBalance + priceX8 * amount;
+            uint256 totalQuantity = prevBalance + amount;
+            newAvg = uint128((totalCost + totalQuantity - 1) / totalQuantity);
         } else {
-            avgPriceX8[to] = uint128(priceX8);
+            newAvg = uint128(priceX8);
         }
 
-        uint256 newBalance = currentBalance + amount;
-        _updateGlobalCost(currentBalance, previousAvg, newBalance, avgPriceX8[to]);
-
-        emit CostBasisUpdated(to, currentBalance + amount, avgPriceX8[to]);
-
-        // Execute mint
-        _mint(to, amount);
+        avgPriceX8[to] = newAvg;
+        _updateGlobalCost(prevBalance, prevAvg, prevBalance + amount, newAvg);
+        emit CostBasisUpdated(to, prevBalance + amount, newAvg);
     }
 
     function batchBurn(address[] calldata accounts, uint256[] calldata amounts)
@@ -413,6 +472,31 @@ contract YoloSyntheticAsset is
         } else {
             totalCostBasisX8 -= prevCost - newCost;
         }
+    }
+
+    /**
+     * @dev Checks if this token is USY (the anchor stable)
+     * @return True if this contract is USY
+     */
+    function _isUSYToken() internal view returns (bool) {
+        return address(this) == IYoloHook(YOLO_HOOK).usy();
+    }
+
+    /**
+     * @dev Checks if cost basis should be tracked for this token
+     * @return True if should track (yAssets), False if not (USY)
+     */
+    function _shouldTrackCostBasis() internal view returns (bool) {
+        // Track only for yAssets (yETH, yBTC, etc.), never for USY
+        return !_isUSYToken();
+    }
+
+    /**
+     * @dev Checks if address is a protocol account that shouldn't track cost basis
+     * @return True if protocol account (YoloHook, YLP vault, PoolManager)
+     */
+    function _isProtocolAccount(address account) internal view returns (bool) {
+        return account == YOLO_HOOK || account == ylpVault || account == IYoloHook(YOLO_HOOK).poolManagerAddress();
     }
 
     /**
