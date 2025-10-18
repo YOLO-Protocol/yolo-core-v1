@@ -100,23 +100,13 @@ contract MockYLPVault is IYLPVault {
 
     function getDepositRequest(uint256) external pure override returns (IYLPVault.DepositRequest memory) {
         return IYLPVault.DepositRequest({
-            user: address(0),
-            usyAmount: 0,
-            minYLPShares: 0,
-            maxSlippageBps: 0,
-            requestBlock: 0,
-            executed: false
+            user: address(0), usyAmount: 0, minYLPShares: 0, maxSlippageBps: 0, requestBlock: 0, executed: false
         });
     }
 
     function getWithdrawalRequest(uint256) external pure override returns (IYLPVault.WithdrawalRequest memory) {
         return IYLPVault.WithdrawalRequest({
-            user: address(0),
-            ylpShares: 0,
-            minUSYOut: 0,
-            maxSlippageBps: 0,
-            requestBlock: 0,
-            executed: false
+            user: address(0), ylpShares: 0, minUSYOut: 0, maxSlippageBps: 0, requestBlock: 0, executed: false
         });
     }
 

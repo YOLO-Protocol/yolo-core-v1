@@ -374,7 +374,7 @@ contract TestAction03_AnchorPoolSwaps is Base02_DeployYoloHook {
             zeroForOne: isToken0USY,
             amountSpecified: -int256(amountIn),
             sqrtPriceLimitX96: isToken0USY
-                ? TickMath.MIN_SQRT_PRICE + 1 // Price decreases when selling token0
+                ? TickMath.MIN_SQRT_PRICE + 1  // Price decreases when selling token0
                 : TickMath.MAX_SQRT_PRICE - 1 // Price increases when selling token1
         });
 
@@ -389,7 +389,7 @@ contract TestAction03_AnchorPoolSwaps is Base02_DeployYoloHook {
             zeroForOne: !isToken0USY,
             amountSpecified: -int256(amountIn),
             sqrtPriceLimitX96: !isToken0USY
-                ? TickMath.MIN_SQRT_PRICE + 1 // Price decreases when selling token0
+                ? TickMath.MIN_SQRT_PRICE + 1  // Price decreases when selling token0
                 : TickMath.MAX_SQRT_PRICE - 1 // Price increases when selling token1
         });
 

@@ -373,11 +373,7 @@ contract TestAction02_AnchorPoolLiquidity is Base02_DeployYoloHook {
                 action: DataTypes.UnlockAction.ADD_LIQUIDITY,
                 data: abi.encode(
                     DataTypes.AddLiquidityData({
-                        sender: user1,
-                        receiver: user1,
-                        maxUsyIn: 1000e18,
-                        maxUsdcIn: 1000e6,
-                        minSUSY: 0
+                        sender: user1, receiver: user1, maxUsyIn: 1000e18, maxUsdcIn: 1000e6, minSUSY: 0
                     })
                 )
             })

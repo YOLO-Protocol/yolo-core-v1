@@ -363,7 +363,9 @@ library LendingPairModule {
         uint256 liquidationThreshold,
         uint256 liquidationBonus
     ) external {
-        if (s._pairConfigs[pairId].createdAt == 0) revert LendingPairModule__PairNotFound();
+        if (s._pairConfigs[pairId].createdAt == 0) {
+            revert LendingPairModule__PairNotFound();
+        }
         if (ltv > MAX_LTV) revert LendingPairModule__InvalidLTV();
         if (liquidationThreshold > MAX_LIQUIDATION_THRESHOLD || liquidationThreshold <= ltv) {
             revert LendingPairModule__InvalidLiquidationThreshold();
@@ -799,9 +801,11 @@ library LendingPairModule {
      * @param config Reference to pair configuration
      * @param rate Interest rate in basis points
      */
-    function _updateGlobalLiquidityIndex(AppStorage storage s, DataTypes.PairConfiguration storage config, uint256 rate)
-        internal
-    {
+    function _updateGlobalLiquidityIndex(
+        AppStorage storage s,
+        DataTypes.PairConfiguration storage config,
+        uint256 rate
+    ) internal {
         uint256 timeDelta = block.timestamp - config.lastUpdateTimestamp;
         if (timeDelta == 0) return;
 

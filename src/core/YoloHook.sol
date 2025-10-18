@@ -29,7 +29,9 @@ import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol
 import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {
-    BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta
+    BeforeSwapDelta,
+    BeforeSwapDeltaLibrary,
+    toBeforeSwapDelta
 } from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
@@ -662,11 +664,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @param syntheticToken Address of the synthetic token
      * @return Configuration struct
      */
-    function getAssetConfiguration(address syntheticToken)
-        external
-        view
-        returns (DataTypes.AssetConfiguration memory)
-    {
+    function getAssetConfiguration(address syntheticToken) external view returns (DataTypes.AssetConfiguration memory) {
         return s._assetConfigs[syntheticToken];
     }
 
@@ -1126,8 +1124,9 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         nonReentrant
         returns (uint256 usyUsed, uint256 usdcUsed, uint256 sUSYMinted)
     {
-        (bool isBootstrap, uint256 usyUsedLocal, uint256 usdcUsedLocal, uint256 sUSYMintedLocal) = StablecoinModule
-            .addLiquidity(s, poolManager, msg.sender, maxUsyAmount, maxUsdcAmount, minSUSYReceive, receiver);
+        (bool isBootstrap, uint256 usyUsedLocal, uint256 usdcUsedLocal, uint256 sUSYMintedLocal) = StablecoinModule.addLiquidity(
+            s, poolManager, msg.sender, maxUsyAmount, maxUsdcAmount, minSUSYReceive, receiver
+        );
 
         usyUsed = usyUsedLocal;
         usdcUsed = usdcUsedLocal;

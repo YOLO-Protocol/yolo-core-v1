@@ -123,7 +123,11 @@ library InterestRateMath {
         uint256 normalizedPrincipalRay,
         uint256 userLiquidityIndexRay,
         uint256 /* currentLiquidityIndexRay */
-    ) internal pure returns (uint256 currentPrincipal) {
+    )
+        internal
+        pure
+        returns (uint256 currentPrincipal)
+    {
         if (normalizedPrincipalRay == 0 || userLiquidityIndexRay == 0) return 0;
         // Principal is constant - multiply by user's STORED index and divide by RAY
         // normalizedPrincipal was stored as: (actual * RAY) / userIndex

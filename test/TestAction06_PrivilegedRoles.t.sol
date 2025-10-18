@@ -490,7 +490,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         // Liquidation threshold is 85% of $2000 = $1700 max debt
         // Since $2400 > $1700, position is undercollateralized
         oracle.setAssetPrice(yETH, 3e8); // $3 per yETH
-            // Now debt = 800 * $3 = $2400 > $1700 threshold (85% of $2000)
+        // Now debt = 800 * $3 = $2400 > $1700 threshold (85% of $2000)
     }
 }
 

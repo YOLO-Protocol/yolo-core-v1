@@ -157,7 +157,6 @@ library DataTypes {
         REMOVE_LIQUIDITY, // 1: Remove liquidity from anchor pool
         SWAP, // 2: Synthetic swap follow-up actions (pending burn)
         FLASH_LOAN // 3: Flash loan operations (reserved)
-
     }
 
     /**

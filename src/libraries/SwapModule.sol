@@ -64,11 +64,12 @@ library SwapModule {
      * @return amountOut Output amount in native decimals
      * @return feeAmount Fee collected in output token (native decimals)
      */
-    function calculateAnchorSwapDelta(AppStorage storage s, PoolKey memory key, bool zeroForOne, int256 amountSpecified)
-        internal
-        view
-        returns (uint256 amountIn, uint256 amountOut, uint256 feeAmount)
-    {
+    function calculateAnchorSwapDelta(
+        AppStorage storage s,
+        PoolKey memory key,
+        bool zeroForOne,
+        int256 amountSpecified
+    ) internal view returns (uint256 amountIn, uint256 amountOut, uint256 feeAmount) {
         // V4 convention: exact input swaps have negative amountSpecified
         if (amountSpecified >= 0) revert SwapModule__InvalidAmount();
 

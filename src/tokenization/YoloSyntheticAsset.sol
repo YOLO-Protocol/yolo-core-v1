@@ -126,7 +126,7 @@ contract YoloSyntheticAsset is
 
             int256 deltaX8 = int256(currentPriceX8) - int256(uint256(prevAvg));
             int256 pnlUSY = deltaX8 >= 0
-                ? int256((uint256(deltaX8) * amount) / 1e8) // FLOOR for profit
+                ? int256((uint256(deltaX8) * amount) / 1e8)  // FLOOR for profit
                 : -int256((uint256(-deltaX8) * amount + 1e8 - 1) / 1e8); // CEIL for loss
 
             IYoloHook(YOLO_HOOK).settlePnLFromSynthetic(from, pnlUSY);

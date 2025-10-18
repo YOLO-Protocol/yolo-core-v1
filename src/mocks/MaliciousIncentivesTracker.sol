@@ -32,8 +32,9 @@ contract MaliciousIncentivesTracker is IIncentivesTracker {
             // Attempt to reenter by minting (will fail due to onlyYoloHook)
             // or by triggering another transfer
             try token.transfer(user, 0) {
-                // If this succeeds, reentrancy protection failed
-            } catch {
+            // If this succeeds, reentrancy protection failed
+            }
+                catch {
                 // Expected to fail due to reentrancy guard
             }
         }

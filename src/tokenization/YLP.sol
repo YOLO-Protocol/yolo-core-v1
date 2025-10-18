@@ -143,8 +143,8 @@ contract YLP is
         mapping(uint256 => uint256) withdrawalRequestEpoch; // Map requestId → epochId submitted
         // Epoch configuration (TBD: time-based vs block-based)
         uint256 epochLength; // Epoch duration (blocks or seconds - TBD)
-            // Buffer management (Phase 2)
-            // Emergency state (Phase 4)
+        // Buffer management (Phase 2)
+        // Emergency state (Phase 4)
     }
 
     // keccak256(abi.encode(uint256(keccak256("yolo.storage.YLP")) - 1)) & ~bytes32(uint256(0xff))

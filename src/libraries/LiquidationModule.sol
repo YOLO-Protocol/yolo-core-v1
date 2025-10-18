@@ -123,9 +123,8 @@ library LiquidationModule {
         IERC20(collateral).safeTransfer(receiver, collateralToSeize);
 
         // Execute callback
-        IFlashLiquidationReceiver(receiver).executeFlashLiquidation(
-            collateral, collateralToSeize, yoloAsset, repayAmount, params
-        );
+        IFlashLiquidationReceiver(receiver)
+            .executeFlashLiquidation(collateral, collateralToSeize, yoloAsset, repayAmount, params);
 
         // Verify repayment
         uint256 finalBalance = IYoloSyntheticAsset(yoloAsset).balanceOf(address(this));
@@ -281,9 +280,11 @@ library LiquidationModule {
      * @param config Reference to pair configuration
      * @param rate Interest rate in basis points
      */
-    function _updateGlobalLiquidityIndex(AppStorage storage s, DataTypes.PairConfiguration storage config, uint256 rate)
-        internal
-    {
+    function _updateGlobalLiquidityIndex(
+        AppStorage storage s,
+        DataTypes.PairConfiguration storage config,
+        uint256 rate
+    ) internal {
         uint256 timeDelta = block.timestamp - config.lastUpdateTimestamp;
         if (timeDelta == 0) return;
 
