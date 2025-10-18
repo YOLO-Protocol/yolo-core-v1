@@ -810,6 +810,332 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
     }
 
     // ============================================================
+    // PHASE 1: PNL FUZZING - MULTI-ASSET CHAOS
+    // ============================================================
+
+    /**
+     * @notice Fuzz: Multi-asset random sequences with alternating profit/loss
+     * @dev Randomly selects between yETH and yBTC, applies random price movements,
+     *      and verifies cumulative NAV changes match settlement outcomes
+     * @param seed Random seed for deterministic randomness
+     */
+    function testFuzz_Action08_Case09_MultiAssetChaos(uint256 seed) public {
+        // Bound to reasonable number of trades for gas limits
+        uint8 numTrades = uint8((seed % 8) + 3); // 3-10 trades
+
+        uint256 ylpUSYInitial = IERC20(usy).balanceOf(address(ylp));
+        int256 cumulativePnL = 0;
+
+        for (uint256 i = 0; i < numTrades; i++) {
+            // Pseudo-random asset selection (0 = yETH, 1 = yBTC)
+            uint256 assetChoice = uint256(keccak256(abi.encode(seed, i, "asset"))) % 2;
+
+            // Random trade size: 5K to 80K USY
+            uint256 tradeSize = ((uint256(keccak256(abi.encode(seed, i, "size"))) % 75_000e18) + 5_000e18);
+
+            // Select asset and pool
+            address synthetic = assetChoice == 0 ? yETH : yBTC;
+            PoolKey memory poolKey = assetChoice == 0 ? yETHPoolKey : yBTCPoolKey;
+            bool isToken0USY = assetChoice == 0 ? isToken0USY_ETH : isToken0USY_BTC;
+
+            // Open position
+            vm.prank(trader1);
+            _swapUSYForSynthetic(poolKey, isToken0USY, tradeSize);
+            vm.prank(trader1);
+            yoloHook.burnPendingSynthetic();
+
+            uint256 syntheticBalance = IERC20(synthetic).balanceOf(trader1);
+            if (syntheticBalance == 0) continue; // Skip if swap failed
+
+            uint256 entryPrice = yoloOracleReal.getAssetPrice(synthetic);
+
+            // Random price change: -80% to +200% (extreme stress test)
+            int256 priceChangeBps = int256(uint256(keccak256(abi.encode(seed, i, "price"))) % 28000) - 8000;
+            uint256 newPrice = uint256(int256(entryPrice) + (int256(entryPrice) * priceChangeBps) / 10000);
+
+            // Apply price change with safety bounds
+            if (newPrice > 100 && newPrice < 500000e8) {
+                if (assetChoice == 0) {
+                    wethOracle.updateAnswer(int256(newPrice));
+                    yETHOracle.updateAnswer(int256(newPrice));
+                } else {
+                    wbtcOracle.updateAnswer(int256(newPrice));
+                    yBTCOracle.updateAnswer(int256(newPrice));
+                }
+
+                // Calculate expected PnL
+                int256 pnl = (int256(newPrice) - int256(entryPrice)) * int256(syntheticBalance) / 1e8;
+                cumulativePnL += pnl;
+
+                // Close position
+                vm.prank(trader1);
+                _swapSyntheticForUSY(poolKey, isToken0USY, syntheticBalance);
+                vm.prank(trader1);
+                yoloHook.burnPendingSynthetic();
+            }
+        }
+
+        uint256 ylpUSYFinal = IERC20(usy).balanceOf(address(ylp));
+        int256 actualYLPChange = int256(ylpUSYFinal) - int256(ylpUSYInitial);
+
+        // INVARIANT: YLP change should be opposite of cumulative trader PnL
+        // Allow tolerance proportional to number of trades and trade sizes
+        uint256 tolerance = uint256(numTrades) * 200e18;
+        assertApproxEqAbs(actualYLPChange, -cumulativePnL, tolerance, "Multi-asset cumulative PnL mismatch");
+    }
+
+    /**
+     * @notice Fuzz: Partial close chaos with multiple random partial closes
+     * @dev Opens position, then performs 2-5 partial closes with random percentages,
+     *      verifying cost basis remains consistent throughout
+     * @param seed Random seed
+     */
+    function testFuzz_Action08_Case10_PartialCloseChaos(uint256 seed) public {
+        // Number of partial closes: 2-5
+        uint8 numPartialCloses = uint8((seed % 4) + 2);
+
+        // Open large position
+        uint256 initialAmount = 50_000e18;
+        vm.prank(trader1);
+        _swapUSYForSynthetic(yETHPoolKey, isToken0USY_ETH, initialAmount);
+        vm.prank(trader1);
+        yoloHook.burnPendingSynthetic();
+
+        uint256 totalYETH = IERC20(yETH).balanceOf(trader1);
+        if (totalYETH == 0) return; // Skip if initial swap failed
+
+        uint256 entryPrice = yoloOracleReal.getAssetPrice(yETH);
+        YoloSyntheticAsset yethToken = YoloSyntheticAsset(yETH);
+
+        // Price rises for profit scenario
+        uint256 newPrice = 4200e8;
+        wethOracle.updateAnswer(int256(newPrice));
+        yETHOracle.updateAnswer(int256(newPrice));
+
+        uint256 remainingBalance = totalYETH;
+        uint256 ylpUSYBefore = IERC20(usy).balanceOf(address(ylp));
+        uint256 totalExpectedProfit = 0;
+
+        // Perform multiple partial closes
+        for (uint256 i = 0; i < numPartialCloses && remainingBalance > 100; i++) {
+            // Random percentage: 10% to 40% of remaining
+            uint256 closePercent = (uint256(keccak256(abi.encode(seed, i, "percent"))) % 31) + 10;
+            uint256 closeAmount = (remainingBalance * closePercent) / 100;
+
+            if (closeAmount == 0) closeAmount = remainingBalance; // Close all if too small
+
+            // Calculate expected profit for this partial close
+            uint256 expectedProfit = ((newPrice - entryPrice) * closeAmount) / 1e8;
+            totalExpectedProfit += expectedProfit;
+
+            // Execute partial close
+            vm.prank(trader1);
+            _swapSyntheticForUSY(yETHPoolKey, isToken0USY_ETH, closeAmount);
+            vm.prank(trader1);
+            yoloHook.burnPendingSynthetic();
+
+            remainingBalance = yethToken.balanceOf(trader1);
+
+            // INVARIANT: Cost basis must remain unchanged after partial close
+            if (remainingBalance > 0) {
+                uint128 avgCostAfterClose = yethToken.avgPriceX8(trader1);
+                assertEq(avgCostAfterClose, uint128(entryPrice), "Cost basis changed during partial close");
+            }
+        }
+
+        uint256 ylpUSYAfter = IERC20(usy).balanceOf(address(ylp));
+        uint256 actualYLPLoss = ylpUSYBefore - ylpUSYAfter;
+
+        // Verify total YLP loss matches cumulative partial close profits
+        assertApproxEqAbs(actualYLPLoss, totalExpectedProfit, 200e18, "Partial close cumulative profit mismatch");
+    }
+
+    /**
+     * @notice Fuzz: Zero-sum settlement verification with simultaneous opposite positions
+     * @dev Trader1 profits while Trader2 loses on same asset, verifies net settlement is zero-sum
+     * @param ethPriceChangeBps Price change for yETH in basis points (-5000 to +10000)
+     * @param btcPriceChangeBps Price change for yBTC in basis points (-5000 to +10000)
+     */
+    function testFuzz_Action08_Case11_ZeroSumSettlement(int16 ethPriceChangeBps, int16 btcPriceChangeBps) public {
+        // Constrain price changes to reasonable bounds
+        vm.assume(ethPriceChangeBps >= -5000 && ethPriceChangeBps <= 10000);
+        vm.assume(btcPriceChangeBps >= -5000 && btcPriceChangeBps <= 10000);
+
+        uint256 ylpUSYInitial = IERC20(usy).balanceOf(address(ylp));
+
+        // Trader1 opens yETH position
+        uint256 trader1AmountETH = 30_000e18;
+        vm.prank(trader1);
+        _swapUSYForSynthetic(yETHPoolKey, isToken0USY_ETH, trader1AmountETH);
+        vm.prank(trader1);
+        yoloHook.burnPendingSynthetic();
+        uint256 trader1YETH = IERC20(yETH).balanceOf(trader1);
+        uint256 ethEntryPrice = yoloOracleReal.getAssetPrice(yETH);
+
+        // Trader2 opens yBTC position
+        uint256 trader2AmountBTC = 80_000e18;
+        vm.prank(trader2);
+        _swapUSYForSynthetic(yBTCPoolKey, isToken0USY_BTC, trader2AmountBTC);
+        vm.prank(trader2);
+        yoloHook.burnPendingSynthetic();
+        uint256 trader2YBTC = IERC20(yBTC).balanceOf(trader2);
+        uint256 btcEntryPrice = yoloOracleReal.getAssetPrice(yBTC);
+
+        // Apply fuzzed price changes
+        uint256 newETHPrice = uint256(int256(ethEntryPrice) + (int256(ethEntryPrice) * ethPriceChangeBps) / 10000);
+        uint256 newBTCPrice = uint256(int256(btcEntryPrice) + (int256(btcEntryPrice) * btcPriceChangeBps) / 10000);
+
+        if (newETHPrice > 0 && newETHPrice < 20000e8) {
+            wethOracle.updateAnswer(int256(newETHPrice));
+            yETHOracle.updateAnswer(int256(newETHPrice));
+        }
+
+        if (newBTCPrice > 0 && newBTCPrice < 300000e8) {
+            wbtcOracle.updateAnswer(int256(newBTCPrice));
+            yBTCOracle.updateAnswer(int256(newBTCPrice));
+        }
+
+        // Calculate expected PnL for both traders
+        int256 trader1PnL = (int256(newETHPrice) - int256(ethEntryPrice)) * int256(trader1YETH) / 1e8;
+        int256 trader2PnL = (int256(newBTCPrice) - int256(btcEntryPrice)) * int256(trader2YBTC) / 1e8;
+        int256 totalTraderPnL = trader1PnL + trader2PnL;
+
+        // Close both positions
+        if (trader1YETH > 0) {
+            vm.prank(trader1);
+            _swapSyntheticForUSY(yETHPoolKey, isToken0USY_ETH, trader1YETH);
+            vm.prank(trader1);
+            yoloHook.burnPendingSynthetic();
+        }
+
+        if (trader2YBTC > 0) {
+            vm.prank(trader2);
+            _swapSyntheticForUSY(yBTCPoolKey, isToken0USY_BTC, trader2YBTC);
+            vm.prank(trader2);
+            yoloHook.burnPendingSynthetic();
+        }
+
+        uint256 ylpUSYFinal = IERC20(usy).balanceOf(address(ylp));
+        int256 ylpPnL = int256(ylpUSYFinal) - int256(ylpUSYInitial);
+
+        // INVARIANT: Zero-sum - YLP's PnL should be opposite of total trader PnL
+        assertApproxEqAbs(ylpPnL, -totalTraderPnL, 300e18, "Zero-sum settlement violated");
+    }
+
+    /**
+     * @notice Fuzz: Extreme price shock scenarios (-80% to +200%)
+     * @dev Tests protocol resilience under catastrophic price movements
+     * @param priceShockBps Price shock in basis points (-8000 to +20000)
+     */
+    function testFuzz_Action08_Case12_ExtremePriceShocks(int16 priceShockBps) public {
+        // Constrain to extreme but not impossible ranges
+        vm.assume(priceShockBps >= -8000 && priceShockBps <= 20000); // -80% to +200%
+
+        uint256 ylpUSYBefore = IERC20(usy).balanceOf(address(ylp));
+
+        // Open position
+        uint256 tradeAmount = 40_000e18;
+        vm.prank(trader1);
+        _swapUSYForSynthetic(yETHPoolKey, isToken0USY_ETH, tradeAmount);
+        vm.prank(trader1);
+        yoloHook.burnPendingSynthetic();
+
+        uint256 yethBalance = IERC20(yETH).balanceOf(trader1);
+        if (yethBalance == 0) return;
+
+        uint256 entryPrice = yoloOracleReal.getAssetPrice(yETH);
+
+        // Apply extreme price shock
+        uint256 shockedPrice = uint256(int256(entryPrice) + (int256(entryPrice) * priceShockBps) / 10000);
+
+        // Safety bounds
+        if (shockedPrice > 100 && shockedPrice < 50000e8) {
+            wethOracle.updateAnswer(int256(shockedPrice));
+            yETHOracle.updateAnswer(int256(shockedPrice));
+
+            // Close position
+            vm.prank(trader1);
+            _swapSyntheticForUSY(yETHPoolKey, isToken0USY_ETH, yethBalance);
+            vm.prank(trader1);
+            yoloHook.burnPendingSynthetic();
+
+            uint256 ylpUSYAfter = IERC20(usy).balanceOf(address(ylp));
+
+            // INVARIANT: NAV must never go negative even under extreme shocks
+            assertGt(ylpUSYAfter, 0, "YLP balance went to zero after extreme shock");
+
+            // Calculate expected PnL
+            int256 expectedPnL = (int256(shockedPrice) - int256(entryPrice)) * int256(yethBalance) / 1e8;
+            int256 actualYLPChange = int256(ylpUSYAfter) - int256(ylpUSYBefore);
+
+            // Verify settlement occurred correctly
+            assertApproxEqAbs(actualYLPChange, -expectedPnL, 300e18, "Extreme shock settlement mismatch");
+        }
+    }
+
+    /**
+     * @notice Fuzz: Alternating profit/loss sequence on same position
+     * @dev Opens position, makes profit, adds more, makes loss, verifies cost basis tracking
+     * @param seed Random seed for price movements
+     */
+    function testFuzz_Action08_Case13_AlternatingPnLSequence(uint256 seed) public {
+        uint256 ylpUSYInitial = IERC20(usy).balanceOf(address(ylp));
+
+        // First trade: Open position
+        uint256 firstTrade = 20_000e18;
+        vm.prank(trader1);
+        _swapUSYForSynthetic(yETHPoolKey, isToken0USY_ETH, firstTrade);
+        vm.prank(trader1);
+        yoloHook.burnPendingSynthetic();
+
+        uint256 balance1 = IERC20(yETH).balanceOf(trader1);
+        if (balance1 == 0) return;
+        uint256 price1 = yoloOracleReal.getAssetPrice(yETH);
+
+        // Price moves up (profit zone)
+        uint256 price2 = price1 + (price1 * (uint256(keccak256(abi.encode(seed, "up"))) % 2000)) / 10000; // +0-20%
+        wethOracle.updateAnswer(int256(price2));
+        yETHOracle.updateAnswer(int256(price2));
+
+        // Add to position at higher price
+        uint256 secondTrade = 15_000e18;
+        vm.prank(trader1);
+        _swapUSYForSynthetic(yETHPoolKey, isToken0USY_ETH, secondTrade);
+        vm.prank(trader1);
+        yoloHook.burnPendingSynthetic();
+
+        uint256 balance2 = IERC20(yETH).balanceOf(trader1);
+        YoloSyntheticAsset yethToken = YoloSyntheticAsset(yETH);
+        uint128 avgCost2 = yethToken.avgPriceX8(trader1);
+
+        // Weighted average cost should be between price1 and price2
+        assertGe(avgCost2, uint128(price1), "Avg cost below first entry");
+        assertLe(avgCost2, uint128(price2), "Avg cost above second entry");
+
+        // Price crashes (loss zone)
+        uint256 price3 = price1 - (price1 * (uint256(keccak256(abi.encode(seed, "down"))) % 3000)) / 10000; // -0-30%
+        if (price3 > 100) {
+            wethOracle.updateAnswer(int256(price3));
+            yETHOracle.updateAnswer(int256(price3));
+
+            // Close entire position at loss
+            vm.prank(trader1);
+            _swapSyntheticForUSY(yETHPoolKey, isToken0USY_ETH, balance2);
+            vm.prank(trader1);
+            yoloHook.burnPendingSynthetic();
+
+            uint256 ylpUSYFinal = IERC20(usy).balanceOf(address(ylp));
+            int256 actualYLPChange = int256(ylpUSYFinal) - int256(ylpUSYInitial);
+
+            // Calculate expected PnL based on weighted average cost
+            int256 expectedPnL = (int256(price3) - int256(uint256(avgCost2))) * int256(balance2) / 1e8;
+
+            // Verify YLP captured the opposite of trader's PnL
+            assertApproxEqAbs(actualYLPChange, -expectedPnL, 200e18, "Alternating PnL settlement mismatch");
+        }
+    }
+
+    // ============================================================
     // HELPER FUNCTIONS
     // ============================================================
 
