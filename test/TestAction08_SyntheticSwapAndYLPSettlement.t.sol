@@ -28,7 +28,6 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
     uint256 constant SYNTHETIC_FEE_BPS = 10; // 0.10%
 
     // Test accounts
-    address public riskAdmin;
     address public solver;
     address public lpProvider;
     address public trader1;
@@ -49,7 +48,6 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         super.setUp();
 
         // Setup test accounts
-        riskAdmin = makeAddr("riskAdmin");
         solver = makeAddr("solver");
         lpProvider = makeAddr("lpProvider");
         trader1 = makeAddr("trader1");
@@ -58,11 +56,13 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Setup YLP
         ylp = YLP(ylpVault);
-        aclManager.grantRole(ylp.YLP_SOLVER_ROLE(), solver);
-        aclManager.grantRole(ylp.RISK_ADMIN_ROLE(), riskAdmin);
 
-        // Set minBlockLag to 0 for easier testing
-        vm.prank(riskAdmin);
+        // Create and grant YLP_SOLVER role
+        bytes32 ylpSolverRole = ylp.YLP_SOLVER_ROLE();
+        aclManager.createRole("YLP_SOLVER", bytes32(0));
+        aclManager.grantRole(ylpSolverRole, solver);
+
+        // Set minBlockLag to 0 for easier testing (address(this) has RISK_ADMIN from Base03)
         ylp.setMinBlockLag(0);
 
         // Setup pool keys
@@ -72,9 +72,9 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         yBTCPoolKey = _getSyntheticPoolKey(yBTC);
         isToken0USY_BTC = Currency.unwrap(yBTCPoolKey.currency0) == usy;
 
-        // Fund test accounts
+        // Fund test accounts (trader1 needs 800K for auto-pause test)
         deal(usy, lpProvider, 1_000_000e18);
-        deal(usy, trader1, 500_000e18);
+        deal(usy, trader1, 1_000_000e18);
         deal(usy, trader2, 500_000e18);
         deal(usy, trader3, 500_000e18);
 
@@ -114,6 +114,7 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
     function test_Action08_Case01_traderProfitYLPLoss() public {
         // Step 1: LP provides liquidity to YLP
         uint256 lpDeposit = 100_000e18;
+        uint256 preFundedUSY = 1_000_000e18; // Base03 pre-funds YLP with 1M USY
         vm.prank(lpProvider);
         ylp.requestDeposit(lpDeposit, 0, 500);
 
@@ -121,7 +122,7 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         vm.roll(block.number + 10);
         vm.prank(solver);
         (uint256 epochId, uint256 navBefore,) = ylp.sealEpoch(0, block.number);
-        assertEq(navBefore, lpDeposit, "Initial NAV should equal deposit");
+        assertEq(navBefore, preFundedUSY + lpDeposit, "Initial NAV should equal pre-funding + deposit");
 
         uint256[] memory depositIds = new uint256[](1);
         depositIds[0] = 0;
@@ -129,7 +130,7 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         ylp.executeDeposits(depositIds);
 
         uint256 ylpSharesBefore = ylp.balanceOf(lpProvider);
-        assertEq(ylpSharesBefore, lpDeposit, "LP should receive shares 1:1");
+        assertEq(ylpSharesBefore, lpDeposit, "LP should receive shares 1:1 on first deposit");
 
         // Step 2: Trader buys yETH at current price
         uint256 initialPrice = yoloOracleReal.getAssetPrice(yETH);
@@ -388,13 +389,14 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
     function test_Action08_Case04_unrealizedPnLInEpochSealing() public {
         // Setup: LP provides liquidity
         uint256 lpDeposit = 100_000e18;
+        uint256 preFundedUSY = 1_000_000e18; // Base03 pre-funds YLP with 1M USY
         vm.prank(lpProvider);
         ylp.requestDeposit(lpDeposit, 0, 500);
 
         vm.roll(block.number + 10);
         vm.prank(solver);
         (uint256 epoch1, uint256 nav1,) = ylp.sealEpoch(0, block.number);
-        assertEq(nav1, lpDeposit);
+        assertEq(nav1, preFundedUSY + lpDeposit, "Initial NAV should include pre-funding");
 
         uint256[] memory depositIds = new uint256[](1);
         depositIds[0] = 0;
@@ -562,11 +564,12 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
     function test_Action08_Case06_extremePriceMoveAutoPause() public {
         // Setup: LP provides large liquidity
         uint256 lpDeposit = 1_000_000e18;
+        uint256 preFundedUSY = 1_000_000e18; // Base03 pre-funds YLP with 1M USY
+        uint256 totalNAV = preFundedUSY + lpDeposit; // 2M total
         vm.prank(lpProvider);
         ylp.requestDeposit(lpDeposit, 0, 500);
 
         // Increase rate limit to allow extreme price move without triggering rate-of-change guard
-        vm.prank(riskAdmin);
         ylp.setMaxRateChangeBps(5000); // 50% - allows testing auto-pause
 
         vm.roll(block.number + 10);
@@ -580,7 +583,7 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Step 1: Trader opens large position at current price
         uint256 initialPrice = yoloOracleReal.getAssetPrice(yETH);
-        uint256 amountIn = 400_000e18; // 40% of YLP NAV
+        uint256 amountIn = 800_000e18; // 40% of total 2M NAV (1M pre-funded + 1M deposited)
         vm.prank(trader1);
         _swapUSYForSynthetic(yETHPoolKey, isToken0USY_ETH, amountIn);
         vm.prank(trader1);
