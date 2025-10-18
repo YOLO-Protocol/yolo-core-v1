@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Base02_DeployYoloHook} from "./base/Base02_DeployYoloHook.t.sol";
+import {Base03_DeployComprehensiveTestEnvironment} from "./base/Base03_DeployComprehensiveTestEnvironment.t.sol";
 import {YoloHook} from "../src/core/YoloHook.sol";
 import {YoloHookStorage} from "../src/core/YoloHookStorage.sol";
-import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -16,7 +15,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
 
-contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
+/**
+ * @title TestAction07_SyntheticSwaps
+ * @notice Integration tests for synthetic swaps using Base03's comprehensive asset setup
+ * @dev Migrated from Base02 to Base03 to leverage pre-deployed multi-asset environment
+ */
+contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironment {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
 
@@ -34,55 +38,47 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
 
     uint256 constant SYNTHETIC_FEE_BPS = 10; // 0.10%
 
-    address public assetsAdmin = makeAddr("assetsAdmin");
     address public trader = makeAddr("trader");
 
-    MockERC20 public weth;
-    address public yETH;
+    // Pool keys for Base03's pre-deployed assets
     PoolKey public syntheticPoolKey;
     bool public isToken0USY;
     YoloSyntheticAsset public yEthToken;
 
-    // Additional synthetic assets for multi-asset tests
-    MockERC20 public wbtc;
-    address public yBTC;
+    // Additional pool keys for multi-asset tests
     PoolKey public yBTCPoolKey;
     bool public isToken0USY_BTC;
 
-    MockERC20 public goldToken;
-    address public yGOLD;
-    PoolKey public yGOLDPoolKey;
-    bool public isToken0USY_GOLD;
+    PoolKey public ySILVERPoolKey;
+    bool public isToken0USY_SILVER;
 
     function setUp() public override {
-        super.setUp();
+        super.setUp(); // Deploy comprehensive Base03 environment
 
-        oracle.setAssetPrice(address(usdc), 1e8); // $1
-        oracle.setAssetPrice(address(0), 1e8); // Placeholder for USY cost basis
-        oracle.setAssetPrice(usy, 1e8); // USY synthetic spot price
-
-        weth = new MockERC20("Wrapped Ether", "WETH", 18);
-        oracle.setAssetPrice(address(weth), 2000e8); // $2,000
-
-        aclManager.createRole("ASSETS_ADMIN", bytes32(0));
-        aclManager.grantRole(keccak256("ASSETS_ADMIN"), assetsAdmin);
-
-        vm.prank(assetsAdmin);
-        yETH = yoloHook.createSyntheticAsset("Yolo Synthetic ETH", "yETH", 18, address(weth), address(usyImpl), 0, 0);
-
-        oracle.setAssetPrice(yETH, 2000e8);
-
+        // Setup pool keys using Base03's pre-deployed assets
         syntheticPoolKey = _getSyntheticPoolKey(yETH);
         isToken0USY = Currency.unwrap(syntheticPoolKey.currency0) == usy;
         yEthToken = YoloSyntheticAsset(yETH);
 
+        yBTCPoolKey = _getSyntheticPoolKey(yBTC);
+        isToken0USY_BTC = Currency.unwrap(yBTCPoolKey.currency0) == usy;
+
+        ySILVERPoolKey = _getSyntheticPoolKey(ySILVER);
+        isToken0USY_SILVER = Currency.unwrap(ySILVERPoolKey.currency0) == usy;
+
+        // Fund trader with USY
         deal(usy, trader, 1_000_000e18);
 
+        // Approve tokens for trader
         vm.startPrank(trader);
         IERC20(usy).approve(address(swapRouter), type(uint256).max);
         IERC20(usy).approve(address(manager), type(uint256).max);
         IERC20(yETH).approve(address(swapRouter), type(uint256).max);
         IERC20(yETH).approve(address(manager), type(uint256).max);
+        IERC20(yBTC).approve(address(swapRouter), type(uint256).max);
+        IERC20(yBTC).approve(address(manager), type(uint256).max);
+        IERC20(ySILVER).approve(address(swapRouter), type(uint256).max);
+        IERC20(ySILVER).approve(address(manager), type(uint256).max);
         vm.stopPrank();
     }
 
@@ -163,8 +159,8 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
     function test_Action07_Case06_swapUSYForSyntheticExactOut_emitsEvent() public {
         uint256 amountOut = 5 ether;
 
-        uint256 priceIn = oracle.getAssetPrice(usy);
-        uint256 priceOut = oracle.getAssetPrice(yETH);
+        uint256 priceIn = yoloOracleReal.getAssetPrice(usy);
+        uint256 priceOut = yoloOracleReal.getAssetPrice(yETH);
         uint256 netIn = (priceOut * amountOut + priceIn - 1) / priceIn;
         uint256 denominator = 10_000 - SYNTHETIC_FEE_BPS;
         uint256 grossIn = (netIn * 10_000 + denominator - 1) / denominator;
@@ -198,7 +194,7 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
     }
 
     function test_Action07_Case07_revertWhenOraclePriceZero() public {
-        oracle.setAssetPrice(yETH, 0);
+        yETHOracle.updateAnswer(0);
         vm.expectRevert();
         vm.prank(trader);
         _swapUSYForSynthetic(1e18);
@@ -208,8 +204,8 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
         uint256 amountIn1 = 4_000e18;
         uint256 amountIn2 = 6_000e18;
 
-        uint256 priceUSY = oracle.getAssetPrice(usy);
-        uint256 priceYeth1 = oracle.getAssetPrice(yETH);
+        uint256 priceUSY = yoloOracleReal.getAssetPrice(usy);
+        uint256 priceYeth1 = yoloOracleReal.getAssetPrice(yETH);
 
         vm.prank(trader);
         _swapUSYForSynthetic(amountIn1);
@@ -221,8 +217,8 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
         yoloHook.burnPendingSynthetic();
 
         uint256 priceYeth2 = 1_500e8;
-        oracle.setAssetPrice(address(weth), priceYeth2);
-        oracle.setAssetPrice(yETH, priceYeth2);
+        wethOracle.updateAnswer(int256(priceYeth2));
+        yETHOracle.updateAnswer(int256(priceYeth2));
 
         vm.prank(trader);
         _swapUSYForSynthetic(amountIn2);
@@ -272,8 +268,8 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
         uint256 expectedFee = (amountIn * SYNTHETIC_FEE_BPS) / 10_000;
         uint256 netInput = amountIn - expectedFee;
 
-        uint256 priceUSY = oracle.getAssetPrice(usy);
-        uint256 priceYETH = oracle.getAssetPrice(yETH);
+        uint256 priceUSY = yoloOracleReal.getAssetPrice(usy);
+        uint256 priceYETH = yoloOracleReal.getAssetPrice(yETH);
         uint256 expectedOutput = (priceUSY * netInput) / priceYETH;
 
         // Record ALL balances before swap
@@ -427,38 +423,22 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
     // ============================================================
 
     /**
-     * @notice Test Case 10: Create multiple synthetic assets
-     * @dev Sets up yBTC and yGOLD for multi-asset testing
+     * @notice Test Case 10: Verify multiple synthetic assets exist
+     * @dev Base03 pre-deploys yBTC and ySILVER, this test verifies their readiness
      */
     function test_Action07_Case10_multipleAssetPairCreation() public {
-        // Create yBTC (priced at $50,000)
-        wbtc = new MockERC20("Wrapped Bitcoin", "WBTC", 8);
-        oracle.setAssetPrice(address(wbtc), 50_000e8);
+        // Verify yBTC exists and has correct price (Base03 sets to $68,000)
+        assertEq(yoloOracleReal.getAssetPrice(yBTC), 68_000e8, "yBTC price should be $68,000");
 
-        vm.prank(assetsAdmin);
-        yBTC = yoloHook.createSyntheticAsset("Yolo Synthetic BTC", "yBTC", 8, address(wbtc), address(usyImpl), 0, 0);
-        oracle.setAssetPrice(yBTC, 50_000e8);
+        // Verify ySILVER exists and has correct price (Base03 sets to $31.50)
+        assertEq(yoloOracleReal.getAssetPrice(ySILVER), 3150e6, "ySILVER price should be $31.50");
 
-        // Create yGOLD (priced at $2,500)
-        goldToken = new MockERC20("Gold Token", "GOLD", 18);
-        oracle.setAssetPrice(address(goldToken), 2_500e8);
+        // Verify pool keys were created correctly
+        assertTrue(Currency.unwrap(yBTCPoolKey.currency0) != address(0), "yBTC pool currency0 should exist");
+        assertTrue(Currency.unwrap(yBTCPoolKey.currency1) != address(0), "yBTC pool currency1 should exist");
 
-        vm.prank(assetsAdmin);
-        yGOLD = yoloHook.createSyntheticAsset(
-            "Yolo Synthetic GOLD", "yGOLD", 18, address(goldToken), address(usyImpl), 0, 0
-        );
-        oracle.setAssetPrice(yGOLD, 2_500e8);
-
-        // Verify pools created
-        yBTCPoolKey = _getSyntheticPoolKey(yBTC);
-        isToken0USY_BTC = Currency.unwrap(yBTCPoolKey.currency0) == usy;
-
-        yGOLDPoolKey = _getSyntheticPoolKey(yGOLD);
-        isToken0USY_GOLD = Currency.unwrap(yGOLDPoolKey.currency0) == usy;
-
-        // Verify oracle prices
-        assertEq(oracle.getAssetPrice(yBTC), 50_000e8, "yBTC price should be $50,000");
-        assertEq(oracle.getAssetPrice(yGOLD), 2_500e8, "yGOLD price should be $2,500");
+        assertTrue(Currency.unwrap(ySILVERPoolKey.currency0) != address(0), "ySILVER pool currency0 should exist");
+        assertTrue(Currency.unwrap(ySILVERPoolKey.currency1) != address(0), "ySILVER pool currency1 should exist");
     }
 
     /**
@@ -466,21 +446,12 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
      * @dev Tests swapping with a different synthetic asset (higher price)
      */
     function test_Action07_Case11_swapUSYForBTC() public {
-        // Setup yBTC
-        test_Action07_Case10_multipleAssetPairCreation();
-
-        // Approve yBTC
-        vm.startPrank(trader);
-        IERC20(yBTC).approve(address(swapRouter), type(uint256).max);
-        IERC20(yBTC).approve(address(manager), type(uint256).max);
-        vm.stopPrank();
-
         uint256 amountIn = 100_000e18; // 100,000 USY
         uint256 expectedFee = (amountIn * SYNTHETIC_FEE_BPS) / 10_000;
         uint256 netInput = amountIn - expectedFee;
 
-        uint256 priceUSY = oracle.getAssetPrice(usy);
-        uint256 priceBTC = oracle.getAssetPrice(yBTC);
+        uint256 priceUSY = yoloOracleReal.getAssetPrice(usy);
+        uint256 priceBTC = yoloOracleReal.getAssetPrice(yBTC);
         uint256 expectedOutput = (priceUSY * netInput) / priceBTC;
 
         // Execute swap USY -> yBTC
@@ -508,16 +479,6 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
      * @dev Tests auto-flush behavior when swapping different synthetic assets
      */
     function test_Action07_Case13_sequentialSwapsAcrossPairs() public {
-        // Setup additional assets
-        test_Action07_Case10_multipleAssetPairCreation();
-
-        vm.startPrank(trader);
-        IERC20(yBTC).approve(address(swapRouter), type(uint256).max);
-        IERC20(yBTC).approve(address(manager), type(uint256).max);
-        IERC20(yGOLD).approve(address(swapRouter), type(uint256).max);
-        IERC20(yGOLD).approve(address(manager), type(uint256).max);
-        vm.stopPrank();
-
         // Swap 1: USY -> yETH (creates pending USY)
         uint256 swap1Amount = 10_000e18;
         uint256 fee1 = (swap1Amount * SYNTHETIC_FEE_BPS) / 10_000;
@@ -563,9 +524,6 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
      * @dev Tests complex multi-asset swap sequence with proper pending tracking
      */
     function test_Action07_Case20_threeWaySwapSequence() public {
-        // Setup all synthetic assets
-        test_Action07_Case10_multipleAssetPairCreation();
-
         // Create separate traders
         address traderA = makeAddr("traderA");
         address traderB = makeAddr("traderB");
@@ -583,7 +541,7 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
             IERC20(usy).approve(address(swapRouter), type(uint256).max);
             IERC20(yETH).approve(address(swapRouter), type(uint256).max);
             IERC20(yBTC).approve(address(swapRouter), type(uint256).max);
-            IERC20(yGOLD).approve(address(swapRouter), type(uint256).max);
+            IERC20(ySILVER).approve(address(swapRouter), type(uint256).max);
             vm.stopPrank();
         }
 
@@ -618,18 +576,18 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
         assertEq(pendingB, usy, "After B: pending = USY (A's burned)");
         assertEq(amtB, netB, "After B: pending = netB only");
 
-        // Sequence 3: Trader C swaps USY -> yGOLD (burns B's pending)
+        // Sequence 3: Trader C swaps USY -> ySILVER (burns B's pending)
         uint256 amountC = 10_000e18;
         uint256 feeC = (amountC * SYNTHETIC_FEE_BPS) / 10_000;
         uint256 netC = amountC - feeC;
 
         vm.prank(traderC);
         SwapParams memory paramsC = SwapParams({
-            zeroForOne: isToken0USY_GOLD,
+            zeroForOne: isToken0USY_SILVER,
             amountSpecified: -int256(amountC),
-            sqrtPriceLimitX96: isToken0USY_GOLD ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
+            sqrtPriceLimitX96: isToken0USY_SILVER ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
-        swapRouter.swap(yGOLDPoolKey, paramsC, settings, "");
+        swapRouter.swap(ySILVERPoolKey, paramsC, settings, "");
 
         (address pendingC, uint256 amtC) = yoloHook.getPendingSyntheticBurn();
         assertEq(pendingC, usy, "After C: pending = USY (B's burned)");
@@ -638,13 +596,13 @@ contract TestAction07_SyntheticSwaps is Base02_DeployYoloHook {
         // Verify all traders received their outputs
         assertGt(IERC20(yETH).balanceOf(traderA), 0, "Trader A received yETH");
         assertGt(IERC20(yBTC).balanceOf(traderB), 0, "Trader B received yBTC");
-        assertGt(IERC20(yGOLD).balanceOf(traderC), 0, "Trader C received yGOLD");
+        assertGt(IERC20(ySILVER).balanceOf(traderC), 0, "Trader C received ySILVER");
 
         // Verify hook has zero balance
         assertEq(IERC20(usy).balanceOf(address(yoloHook)), 0, "Hook USY = 0");
         assertEq(IERC20(yETH).balanceOf(address(yoloHook)), 0, "Hook yETH = 0");
         assertEq(IERC20(yBTC).balanceOf(address(yoloHook)), 0, "Hook yBTC = 0");
-        assertEq(IERC20(yGOLD).balanceOf(address(yoloHook)), 0, "Hook yGOLD = 0");
+        assertEq(IERC20(ySILVER).balanceOf(address(yoloHook)), 0, "Hook ySILVER = 0");
     }
 
     function _swapUSYForSynthetic(uint256 amountIn) internal returns (BalanceDelta) {
