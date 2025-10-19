@@ -135,7 +135,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
 
         // Alice transfers 5 tokens to Bob
         vm.prank(alice);
-        yETH.transfer(bob, 5e18);
+        require(yETH.transfer(bob, 5e18), "Transfer failed");
 
         // Alice should still have avg price of 100
         assertEq(yETH.balanceOf(alice), 5e18);
@@ -160,7 +160,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
 
         // Alice transfers all to Bob
         vm.prank(alice);
-        yETH.transfer(bob, 10e18);
+        require(yETH.transfer(bob, 10e18), "Transfer failed");
 
         // Alice's average should be cleared
         assertEq(yETH.balanceOf(alice), 0);
@@ -244,13 +244,13 @@ contract TestContract04_YoloSyntheticAsset is Test {
 
         // Alice transfers 10 to Charlie (who has nothing)
         vm.prank(alice);
-        yETH.transfer(charlie, 10e18);
+        require(yETH.transfer(charlie, 10e18), "Transfer failed");
 
         assertEq(yETH.avgPriceX8(charlie), PRICE_100_USY); // Inherits Alice's price
 
         // Bob transfers 5 to Charlie
         vm.prank(bob);
-        yETH.transfer(charlie, 5e18);
+        require(yETH.transfer(charlie, 5e18), "Transfer failed");
 
         // Charlie should have: (10*100e8 + 5*200e8) / 15 = 133.33e8 (ceiling)
         assertEq(yETH.balanceOf(charlie), 15e18);
@@ -281,6 +281,8 @@ contract TestContract04_YoloSyntheticAsset is Test {
         // Transfer should fail
         vm.prank(alice);
         vm.expectRevert(TestYoloSyntheticAsset.YoloSyntheticAsset__TradingDisabled.selector);
+        // Negative test case - expecting transfer to fail, no need to check return value
+        // forge-lint: disable-next-line(erc20-unchecked-transfer)
         yETH.transfer(bob, 5e18);
 
         // Mint and burn should still work
@@ -296,7 +298,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
 
         // Transfer should work now
         vm.prank(alice);
-        yETH.transfer(bob, 2e18);
+        require(yETH.transfer(bob, 2e18), "Transfer failed");
         assertEq(yETH.balanceOf(bob), 7e18);
     }
 
@@ -425,7 +427,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         // Transfer triggers incentives for both parties
         incentivesController.reset();
         vm.prank(alice);
-        yETH.transfer(bob, 5e18);
+        require(yETH.transfer(bob, 5e18), "Transfer failed");
 
         assertEq(incentivesController.userActionCount(alice), 1);
         assertEq(incentivesController.userActionCount(bob), 1);
@@ -486,12 +488,12 @@ contract TestContract04_YoloSyntheticAsset is Test {
         uint128 initialGlobal = yETH.globalAveragePriceX8();
 
         vm.prank(alice);
-        yETH.transfer(charlie, 4e18);
+        require(yETH.transfer(charlie, 4e18), "Transfer failed");
         uint128 afterFirst = yETH.globalAveragePriceX8();
         assertLe(_absDiff(afterFirst, initialGlobal), 1);
 
         vm.prank(bob);
-        yETH.transfer(charlie, 3e18);
+        require(yETH.transfer(charlie, 3e18), "Transfer failed");
         uint128 afterSecond = yETH.globalAveragePriceX8();
         assertLe(_absDiff(afterSecond, initialGlobal), 1);
     }
@@ -565,12 +567,12 @@ contract TestContract04_YoloSyntheticAsset is Test {
 
         // Phase 2: Transfers (should not change global cost)
         vm.prank(alice);
-        yETH.transfer(bob, 3e18); // Alice: 7, Bob: 8
+        require(yETH.transfer(bob, 3e18), "Transfer failed"); // Alice: 7, Bob: 8
 
         _verifyGlobalCostInvariant();
 
         vm.prank(charlie);
-        yETH.transfer(alice, 2e18); // Charlie: 6, Alice: 9
+        require(yETH.transfer(alice, 2e18), "Transfer failed"); // Charlie: 6, Alice: 9
 
         _verifyGlobalCostInvariant();
 
@@ -595,10 +597,10 @@ contract TestContract04_YoloSyntheticAsset is Test {
 
         // Phase 5: More complex transfers
         vm.prank(bob);
-        yETH.transfer(charlie, 2e18);
+        require(yETH.transfer(charlie, 2e18), "Transfer failed");
 
         vm.prank(alice);
-        yETH.transfer(bob, 1e18);
+        require(yETH.transfer(bob, 1e18), "Transfer failed");
 
         _verifyGlobalCostInvariant();
 

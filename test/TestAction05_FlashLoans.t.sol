@@ -503,7 +503,7 @@ contract MockFlashBorrower is IFlashBorrower {
     function onFlashLoan(address initiator, address token, uint256 amount, uint256 fee, bytes calldata data) external {
         // Approve and transfer repayment
         IERC20(token).approve(msg.sender, amount + fee);
-        IERC20(token).transfer(msg.sender, amount + fee);
+        require(IERC20(token).transfer(msg.sender, amount + fee), "Transfer failed");
     }
 
     function onBatchFlashLoan(
@@ -516,7 +516,7 @@ contract MockFlashBorrower is IFlashBorrower {
         // Repay all loans
         for (uint256 i = 0; i < tokens.length; i++) {
             IERC20(tokens[i]).approve(msg.sender, amounts[i] + fees[i]);
-            IERC20(tokens[i]).transfer(msg.sender, amounts[i] + fees[i]);
+            require(IERC20(tokens[i]).transfer(msg.sender, amounts[i] + fees[i]), "Transfer failed");
         }
     }
 }
@@ -555,7 +555,7 @@ contract DataAwareFlashBorrower is IFlashBorrower {
 
         // Approve and transfer repayment
         IERC20(token).approve(msg.sender, amount + fee);
-        IERC20(token).transfer(msg.sender, amount + fee);
+        require(IERC20(token).transfer(msg.sender, amount + fee), "Transfer failed");
     }
 
     function onBatchFlashLoan(

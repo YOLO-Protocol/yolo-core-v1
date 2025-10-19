@@ -117,7 +117,7 @@ contract TestContract03_MintableIncentivizedERC20Upgradeable is Test {
 
         // Transfer half to bob
         vm.prank(alice);
-        token.transfer(bob, amount / 2);
+        require(token.transfer(bob, amount / 2), "Transfer failed");
 
         assertEq(token.balanceOf(alice), amount / 2);
         assertEq(token.balanceOf(bob), amount / 2);
@@ -191,7 +191,7 @@ contract TestContract03_MintableIncentivizedERC20Upgradeable is Test {
         vm.stopPrank();
 
         vm.prank(alice);
-        token.transfer(bob, amount / 4);
+        require(token.transfer(bob, amount / 4), "Transfer failed");
 
         // Additional data should work
         token.setAdditionalData(alice, 12345);

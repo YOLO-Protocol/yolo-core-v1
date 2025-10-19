@@ -168,7 +168,7 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
 
         // Transfer from alice to bob
         vm.prank(alice);
-        token.transfer(bob, amount / 2);
+        require(token.transfer(bob, amount / 2), "Transfer failed");
 
         // Check alice's incentive tracking
         assertEq(incentivesController.userActionCount(alice), 1, "Alice should have 1 action");
@@ -200,7 +200,7 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
 
         // Self-transfer
         vm.prank(alice);
-        token.transfer(alice, amount / 2);
+        require(token.transfer(alice, amount / 2), "Transfer failed");
 
         // Should only record once
         assertEq(incentivesController.userActionCount(alice), 1, "Should only record once for self-transfer");
@@ -335,7 +335,7 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
         vm.stopPrank();
 
         vm.prank(alice);
-        token.transfer(bob, amount / 4);
+        require(token.transfer(bob, amount / 4), "Transfer failed");
 
         assertEq(token.balanceOf(alice), amount / 4, "Alice balance incorrect");
         assertEq(token.balanceOf(bob), amount / 4, "Bob balance incorrect");
@@ -373,11 +373,11 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
 
         // Transfer to bob
         vm.prank(alice);
-        token.transfer(bob, amount2);
+        require(token.transfer(bob, amount2), "Transfer failed");
 
         // Bob transfers to charlie
         vm.prank(bob);
-        token.transfer(charlie, amount2 / 2);
+        require(token.transfer(charlie, amount2 / 2), "Transfer failed");
 
         // Burn from charlie
         vm.prank(yoloHook);
@@ -415,7 +415,7 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
 
         // Zero transfer should work
         vm.prank(alice);
-        token.transfer(bob, 0);
+        require(token.transfer(bob, 0), "Transfer failed");
         assertEq(token.balanceOf(bob), 0, "Bob balance not zero");
     }
 
@@ -450,7 +450,7 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
 
         // Transfer
         vm.prank(alice);
-        token.transfer(bob, transferAmount);
+        require(token.transfer(bob, transferAmount), "Transfer failed");
 
         assertEq(token.balanceOf(alice), mintAmount - transferAmount, "Alice balance incorrect");
         assertEq(token.balanceOf(bob), transferAmount, "Bob balance incorrect");
@@ -474,7 +474,7 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
         // The malicious contract will try to reenter during handleAction
         // Should complete without reentrancy due to guard
         vm.prank(address(malicious));
-        token.transfer(alice, 100 * 10 ** 18);
+        require(token.transfer(alice, 100 * 10 ** 18), "Transfer failed");
 
         // Verify the transfer completed successfully
         assertEq(token.balanceOf(alice), 100 * 10 ** 18, "Transfer should complete");
@@ -557,7 +557,7 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
         vm.expectEmit(true, true, false, true);
         emit Transfer(alice, bob, amount / 4);
         vm.prank(alice);
-        token.transfer(bob, amount / 4);
+        require(token.transfer(bob, amount / 4), "Transfer failed");
     }
 
     /**
@@ -576,10 +576,10 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
 
         // Multiple transfers in same block to same recipient
         vm.prank(alice);
-        token.transfer(charlie, 100 * 10 ** 18);
+        require(token.transfer(charlie, 100 * 10 ** 18), "Transfer failed");
 
         vm.prank(bob);
-        token.transfer(charlie, 50 * 10 ** 18);
+        require(token.transfer(charlie, 50 * 10 ** 18), "Transfer failed");
 
         // Verify charlie's incentives were tracked for each receive
         assertEq(incentivesController.userActionCount(charlie), 2, "Charlie should have 2 actions");
@@ -650,6 +650,8 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
         // Try to transfer more than balance
         vm.prank(alice);
         vm.expectRevert(IncentivizedERC20.IncentivizedERC20__InsufficientBalance.selector);
+        // Negative test case - expecting transfer to fail, no need to check return value
+        // forge-lint: disable-next-line(erc20-unchecked-transfer)
         token.transfer(bob, amount + 1);
     }
 }
