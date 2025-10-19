@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "forge-std/Test.sol";
-import "../src/mocks/MockMintableIncentivizedERC20Upgradeable.sol";
-import "../src/mocks/MockIncentivesController.sol";
-import "../src/access/ACLManager.sol";
+import {Test} from "forge-std/Test.sol";
+import {MockMintableIncentivizedERC20Upgradeable} from "../src/mocks/MockMintableIncentivizedERC20Upgradeable.sol";
+import {MockIncentivesController} from "../src/mocks/MockIncentivesController.sol";
+import {ACLManager} from "../src/access/ACLManager.sol";
+import {MintableIncentivizedERC20Upgradeable} from "../src/tokenization/base/MintableIncentivizedERC20Upgradeable.sol";
 
 contract TestContract03_MintableIncentivizedERC20Upgradeable is Test {
     MockMintableIncentivizedERC20Upgradeable public token;

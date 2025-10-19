@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import {Base02_DeployYoloHook} from "./base/Base02_DeployYoloHook.t.sol";
-import {YoloHook} from "../src/core/YoloHook.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -11,7 +10,6 @@ import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {console2} from "forge-std/Test.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 

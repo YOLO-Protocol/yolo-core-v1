@@ -5,7 +5,6 @@ import {Base02_DeployYoloHook} from "./base/Base02_DeployYoloHook.t.sol";
 import {YoloHook} from "../src/core/YoloHook.sol";
 import {YoloHookStorage} from "../src/core/YoloHookStorage.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
-import {DataTypes} from "../src/libraries/DataTypes.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
 import {IFlashBorrower} from "../src/interfaces/IFlashBorrower.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";

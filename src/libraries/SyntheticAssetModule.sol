@@ -3,8 +3,6 @@ pragma solidity ^0.8.26;
 
 import {DataTypes} from "./DataTypes.sol";
 import {AppStorage} from "../core/YoloHookStorage.sol";
-import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
-import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
 import {IACLManager} from "../interfaces/IACLManager.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";

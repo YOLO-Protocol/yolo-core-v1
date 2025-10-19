@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "forge-std/Test.sol";
-import "../src/mocks/TestYoloSyntheticAsset.sol";
-import "../src/access/ACLManager.sol";
-import "../src/mocks/MockIncentivesController.sol";
-import "../src/mocks/MockYoloOracle.sol";
-import "../src/mocks/MockYLPVault.sol";
+import {Test} from "forge-std/Test.sol";
+import {TestYoloSyntheticAsset} from "../src/mocks/TestYoloSyntheticAsset.sol";
+import {ACLManager} from "../src/access/ACLManager.sol";
+import {MockIncentivesController} from "../src/mocks/MockIncentivesController.sol";
+import {MockYoloOracle} from "../src/mocks/MockYoloOracle.sol";
+import {MockYLPVault} from "../src/mocks/MockYLPVault.sol";
+import {MintableIncentivizedERC20Upgradeable} from "../src/tokenization/base/MintableIncentivizedERC20Upgradeable.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 contract TestContract04_YoloSyntheticAsset is Test {

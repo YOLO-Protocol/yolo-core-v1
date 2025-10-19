@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "./base/MintableIncentivizedERC20Upgradeable.sol";
+import {MintableIncentivizedERC20Upgradeable} from "./base/MintableIncentivizedERC20Upgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IYoloHook} from "../interfaces/IYoloHook.sol";
 

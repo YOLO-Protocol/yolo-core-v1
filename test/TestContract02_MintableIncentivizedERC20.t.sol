@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "forge-std/Test.sol";
-import "../src/mocks/MockMintableIncentivizedERC20.sol";
-import "../src/mocks/MockIncentivesController.sol";
-import "../src/mocks/MaliciousIncentivesTracker.sol";
-import "../src/access/ACLManager.sol";
-import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {Test} from "forge-std/Test.sol";
+import {MockMintableIncentivizedERC20} from "../src/mocks/MockMintableIncentivizedERC20.sol";
+import {MockIncentivesController} from "../src/mocks/MockIncentivesController.sol";
+import {MaliciousIncentivesTracker} from "../src/mocks/MaliciousIncentivesTracker.sol";
+import {ACLManager} from "../src/access/ACLManager.sol";
+import {IIncentivesTracker} from "../src/interfaces/IIncentivesTracker.sol";
+import {MintableIncentivizedERC20} from "../src/tokenization/base/MintableIncentivizedERC20.sol";
+import {IncentivizedERC20} from "../src/tokenization/base/IncentivizedERC20.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 contract TestContract02_MintableIncentivizedERC20 is Test {
     MockMintableIncentivizedERC20 public token;
@@ -517,7 +520,7 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
 
         // Bob transfers from Alice to Charlie
         vm.prank(bob);
-        token.transferFrom(alice, charlie, amount / 2);
+        require(token.transferFrom(alice, charlie, amount / 2), "Transfer failed");
 
         // Check balances
         assertEq(token.balanceOf(alice), amount / 2, "Alice balance incorrect");

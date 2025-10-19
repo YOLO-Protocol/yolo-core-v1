@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "forge-std/Test.sol";
-import "../src/access/ACLManager.sol";
+import {Test, console} from "forge-std/Test.sol";
+import {ACLManager} from "../src/access/ACLManager.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**

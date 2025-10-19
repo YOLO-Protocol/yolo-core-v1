@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "../tokenization/base/MintableIncentivizedERC20Upgradeable.sol";
+import {MintableIncentivizedERC20Upgradeable} from "../tokenization/base/MintableIncentivizedERC20Upgradeable.sol";
 
 /**
  * @title MockMintableIncentivizedERC20Upgradeable

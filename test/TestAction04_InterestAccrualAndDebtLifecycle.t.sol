@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import {Base02_DeployYoloHook} from "./base/Base02_DeployYoloHook.t.sol";
-import {YoloHook} from "../src/core/YoloHook.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
 import {DataTypes} from "../src/libraries/DataTypes.sol";
 import {InterestRateMath} from "../src/libraries/InterestRateMath.sol";

@@ -2,11 +2,11 @@
 pragma solidity ^0.8.26;
 
 // Import all the parent contracts directly to avoid the constructor issue
-import "../tokenization/base/MintableIncentivizedERC20Upgradeable.sol";
-import "../tokenization/base/EIP712BaseUpgradeable.sol";
-import "../interfaces/IYoloSyntheticAsset.sol";
-import "../interfaces/IYoloOracle.sol";
-import "../interfaces/IYLPVault.sol";
+import {MintableIncentivizedERC20Upgradeable} from "../tokenization/base/MintableIncentivizedERC20Upgradeable.sol";
+import {EIP712BaseUpgradeable} from "../tokenization/base/EIP712BaseUpgradeable.sol";
+import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
+import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
+import {IYLPVault} from "../interfaces/IYLPVault.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**

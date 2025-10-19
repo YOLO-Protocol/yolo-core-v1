@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "./IncentivizedERC20Upgradeable.sol";
+import {IncentivizedERC20Upgradeable} from "./IncentivizedERC20Upgradeable.sol";
 
 /**
  * @title MintableIncentivizedERC20Upgradeable

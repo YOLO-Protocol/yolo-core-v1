@@ -50,4 +50,15 @@ cbor_metadata = true
 gas_reports = []
 optimizer = false
 
+# Linter configuration
+[lint]
+exclude_lints = [
+    "mixed-case-variable",           # Keep USY, yETH, pnlUSY domain-specific naming
+    "mixed-case-function",           # Keep EIP-712 DOMAIN_SEPARATOR, OpenZeppelin __init
+    "asm-keccak256",                 # Not worth complexity for minimal gas savings
+    "unwrapped-modifier-logic",      # Only needed if hitting 24KB contract limit
+    "pascal-case-struct",            # YLPStorage is correct PascalCase (linter limitation)
+    "screaming-snake-case-immutable" # Acceptable for test mocks
+]
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

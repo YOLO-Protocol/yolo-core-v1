@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import {Base03_DeployComprehensiveTestEnvironment} from "./base/Base03_DeployComprehensiveTestEnvironment.t.sol";
-import {YoloHook} from "../src/core/YoloHook.sol";
 import {YoloHookStorage} from "../src/core/YoloHookStorage.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";

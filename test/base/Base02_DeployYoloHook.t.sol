@@ -7,7 +7,6 @@ import {YoloSyntheticAsset} from "../../src/tokenization/YoloSyntheticAsset.sol"
 import {StakedYoloUSD} from "../../src/tokenization/StakedYoloUSD.sol";
 import {YLP} from "../../src/tokenization/YLP.sol";
 import {ACLManager} from "../../src/access/ACLManager.sol";
-import {IACLManager} from "../../src/interfaces/IACLManager.sol";
 import {MockERC20} from "../../src/mocks/MockERC20.sol";
 import {MockYoloOracle} from "../../src/mocks/MockYoloOracle.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";

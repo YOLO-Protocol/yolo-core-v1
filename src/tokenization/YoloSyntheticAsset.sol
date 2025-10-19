@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "./base/MintableIncentivizedERC20Upgradeable.sol";
-import "./base/EIP712BaseUpgradeable.sol";
-import "../interfaces/IYoloSyntheticAsset.sol";
-import "../interfaces/IYoloOracle.sol";
-import "../interfaces/IYoloHook.sol";
-import "../interfaces/IYLPVault.sol";
+import {MintableIncentivizedERC20Upgradeable} from "./base/MintableIncentivizedERC20Upgradeable.sol";
+import {EIP712BaseUpgradeable} from "./base/EIP712BaseUpgradeable.sol";
+import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
+import {IYoloHook} from "../interfaces/IYoloHook.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 

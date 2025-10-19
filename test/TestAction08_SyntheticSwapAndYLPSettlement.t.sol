@@ -2,12 +2,10 @@
 pragma solidity ^0.8.26;
 
 import {Base03_DeployComprehensiveTestEnvironment} from "./base/Base03_DeployComprehensiveTestEnvironment.t.sol";
-import {YoloHook} from "../src/core/YoloHook.sol";
 import {YLP} from "../src/tokenization/YLP.sol";
-import {IYLPVault} from "../src/interfaces/IYLPVault.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";

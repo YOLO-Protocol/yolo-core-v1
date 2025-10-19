@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "../interfaces/IIncentivesTracker.sol";
-import "../tokenization/base/MintableIncentivizedERC20.sol";
+import {IIncentivesTracker} from "../interfaces/IIncentivesTracker.sol";
+import {MintableIncentivizedERC20} from "../tokenization/base/MintableIncentivizedERC20.sol";
 
 /**
  * @title MaliciousIncentivesTracker
