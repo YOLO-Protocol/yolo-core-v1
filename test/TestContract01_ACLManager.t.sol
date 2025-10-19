@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
 import "../src/access/ACLManager.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title   TestContract01_ACLManager
@@ -492,7 +493,7 @@ contract TestContract01_ACLManager is Test {
 
         address[] memory accounts = new address[](10);
         for (uint256 i = 0; i < 10; i++) {
-            accounts[i] = address(uint160(0x100 + i));
+            accounts[i] = address(SafeCast.toUint160(0x100 + i));
         }
 
         // Measure gas for batch operation

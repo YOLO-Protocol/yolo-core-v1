@@ -7,6 +7,7 @@ import "../src/access/ACLManager.sol";
 import "../src/mocks/MockIncentivesController.sol";
 import "../src/mocks/MockYoloOracle.sol";
 import "../src/mocks/MockYLPVault.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 contract TestContract04_YoloSyntheticAsset is Test {
     TestYoloSyntheticAsset public yETH;
@@ -145,7 +146,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         // With ceiling division: (2000e26 + 500e26 + 15e18 - 1) / 15e18
         uint256 totalCost = 10e18 * PRICE_200_USY + 5e18 * PRICE_100_USY;
         uint256 totalQty = 15e18;
-        uint128 expectedAvg = uint128((totalCost + totalQty - 1) / totalQty);
+        uint128 expectedAvg = SafeCast.toUint128((totalCost + totalQty - 1) / totalQty);
         assertEq(yETH.avgPriceX8(bob), expectedAvg);
     }
 
@@ -256,7 +257,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
         // With ceiling division
         uint256 charlieTotalCost = 10e18 * PRICE_100_USY + 5e18 * PRICE_200_USY;
         uint256 charlieTotalQty = 15e18;
-        uint128 expectedCharlieAvg = uint128((charlieTotalCost + charlieTotalQty - 1) / charlieTotalQty);
+        uint128 expectedCharlieAvg = SafeCast.toUint128((charlieTotalCost + charlieTotalQty - 1) / charlieTotalQty);
         assertEq(yETH.avgPriceX8(charlie), expectedCharlieAvg);
 
         // Alice still has her original average
@@ -451,7 +452,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
 
         uint256 totalCost = 10e18 * PRICE_100_USY + 5e18 * PRICE_200_USY;
         uint256 totalQty = 15e18;
-        uint128 expectedGlobal = uint128((totalCost + totalQty - 1) / totalQty);
+        uint128 expectedGlobal = SafeCast.toUint128((totalCost + totalQty - 1) / totalQty);
         assertEq(yETH.globalAveragePriceX8(), expectedGlobal);
 
         vm.prank(yoloHook);
@@ -459,7 +460,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
 
         uint256 remainingCost = 5e18 * PRICE_100_USY + 5e18 * PRICE_200_USY;
         uint256 remainingQty = 10e18;
-        uint128 expectedAfterBurn = uint128((remainingCost + remainingQty - 1) / remainingQty);
+        uint128 expectedAfterBurn = SafeCast.toUint128((remainingCost + remainingQty - 1) / remainingQty);
         assertEq(yETH.globalAveragePriceX8(), expectedAfterBurn);
 
         vm.prank(yoloHook);

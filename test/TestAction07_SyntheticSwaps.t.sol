@@ -11,6 +11,7 @@ import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
@@ -211,14 +212,14 @@ contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironmen
         _swapUSYForSynthetic(amountIn1);
 
         uint128 avgAfterFirst = yEthToken.avgPriceX8(trader);
-        assertEq(avgAfterFirst, uint128(priceYeth1), "Initial average price incorrect");
+        assertEq(avgAfterFirst, SafeCast.toUint128(priceYeth1), "Initial average price incorrect");
 
         vm.prank(trader);
         yoloHook.burnPendingSynthetic();
 
         uint256 priceYeth2 = 1_500e8;
-        wethOracle.updateAnswer(int256(priceYeth2));
-        yETHOracle.updateAnswer(int256(priceYeth2));
+        wethOracle.updateAnswer(SafeCast.toInt256(priceYeth2));
+        yETHOracle.updateAnswer(SafeCast.toInt256(priceYeth2));
 
         vm.prank(trader);
         _swapUSYForSynthetic(amountIn2);
@@ -233,7 +234,7 @@ contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironmen
 
         uint256 totalQty = out1 + out2;
         uint256 totalCost = priceYeth1 * out1 + priceYeth2 * out2;
-        uint128 expectedAvg = uint128((totalCost + totalQty - 1) / totalQty);
+        uint128 expectedAvg = SafeCast.toUint128((totalCost + totalQty - 1) / totalQty);
 
         uint128 avgAfterSecond = yEthToken.avgPriceX8(trader);
         assertEq(avgAfterSecond, expectedAvg, "Weighted average mismatch");
@@ -458,7 +459,7 @@ contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironmen
         vm.prank(trader);
         SwapParams memory params = SwapParams({
             zeroForOne: isToken0USY_BTC,
-            amountSpecified: -int256(amountIn),
+            amountSpecified: -SafeCast.toInt256(amountIn),
             sqrtPriceLimitX96: isToken0USY_BTC ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
         PoolSwapTest.TestSettings memory settings =
@@ -501,7 +502,7 @@ contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironmen
         vm.prank(trader);
         SwapParams memory params2 = SwapParams({
             zeroForOne: isToken0USY_BTC,
-            amountSpecified: -int256(swap2Amount),
+            amountSpecified: -SafeCast.toInt256(swap2Amount),
             sqrtPriceLimitX96: isToken0USY_BTC ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
         PoolSwapTest.TestSettings memory settings =
@@ -565,7 +566,7 @@ contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironmen
         vm.prank(traderB);
         SwapParams memory paramsB = SwapParams({
             zeroForOne: isToken0USY_BTC,
-            amountSpecified: -int256(amountB),
+            amountSpecified: -SafeCast.toInt256(amountB),
             sqrtPriceLimitX96: isToken0USY_BTC ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
         PoolSwapTest.TestSettings memory settings =
@@ -584,7 +585,7 @@ contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironmen
         vm.prank(traderC);
         SwapParams memory paramsC = SwapParams({
             zeroForOne: isToken0USY_SILVER,
-            amountSpecified: -int256(amountC),
+            amountSpecified: -SafeCast.toInt256(amountC),
             sqrtPriceLimitX96: isToken0USY_SILVER ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
         swapRouter.swap(ySILVERPoolKey, paramsC, settings, "");
@@ -608,7 +609,7 @@ contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironmen
     function _swapUSYForSynthetic(uint256 amountIn) internal returns (BalanceDelta) {
         SwapParams memory params = SwapParams({
             zeroForOne: isToken0USY,
-            amountSpecified: -int256(amountIn),
+            amountSpecified: -SafeCast.toInt256(amountIn),
             sqrtPriceLimitX96: isToken0USY ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
 
@@ -621,7 +622,7 @@ contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironmen
     function _swapSyntheticForUSY(uint256 amountIn) internal returns (BalanceDelta) {
         SwapParams memory params = SwapParams({
             zeroForOne: !isToken0USY,
-            amountSpecified: -int256(amountIn),
+            amountSpecified: -SafeCast.toInt256(amountIn),
             sqrtPriceLimitX96: !isToken0USY ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
 
@@ -634,7 +635,7 @@ contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironmen
     function _swapUSYForSyntheticExactOut(uint256 amountOut) internal returns (BalanceDelta) {
         SwapParams memory params = SwapParams({
             zeroForOne: isToken0USY,
-            amountSpecified: int256(amountOut),
+            amountSpecified: SafeCast.toInt256(amountOut),
             sqrtPriceLimitX96: isToken0USY ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
 

@@ -34,6 +34,7 @@ import {
     toBeforeSwapDelta
 } from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title YoloHook
@@ -752,7 +753,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     function settlePnLFromSynthetic(address user, int256 pnlUSY) external whenNotPaused {
         if (!s._isYoloAsset[msg.sender]) revert YoloHook__NotYoloAsset();
         if (pnlUSY < 0) {
-            uint256 gain = uint256(-pnlUSY);
+            uint256 gain = SafeCast.toUint256(-pnlUSY);
             IYoloSyntheticAsset(s.usy).mint(s.ylpVault, gain);
             emit YLPFundedWithUSY(msg.sender, gain);
         }

@@ -13,6 +13,7 @@ import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title SwapModule
@@ -74,7 +75,7 @@ library SwapModule {
         if (amountSpecified >= 0) revert SwapModule__InvalidAmount();
 
         // Convert to positive amount
-        amountIn = uint256(-amountSpecified);
+        amountIn = SafeCast.toUint256(-amountSpecified);
 
         // Determine token order: is token0 USY?
         bool isToken0USY = Currency.unwrap(key.currency0) == s.usy;
@@ -174,10 +175,10 @@ library SwapModule {
     function _applyDelta(uint256 reserve, int128 delta) private pure returns (uint256 newReserve) {
         if (delta < 0) {
             // Caller paid (negative) → pool receives → INCREASE reserve
-            newReserve = reserve + uint128(-delta);
+            newReserve = reserve + SafeCast.toUint128(SafeCast.toUint256(-delta));
         } else {
             // Caller received (positive) → pool gives → DECREASE reserve
-            newReserve = reserve - uint128(delta);
+            newReserve = reserve - SafeCast.toUint128(SafeCast.toUint256(delta));
         }
         return newReserve;
     }
@@ -206,7 +207,7 @@ library SwapModule {
 
         // Calculate swap delta
         (uint256 calculatedAmountIn, uint256 calculatedAmountOut, uint256 calculatedFeeAmount) =
-            calculateAnchorSwapDelta(s, poolConfig.poolKey, zeroForOne, -int256(amountIn));
+            calculateAnchorSwapDelta(s, poolConfig.poolKey, zeroForOne, -SafeCast.toInt256(amountIn));
 
         // Scale outputs to 18 decimals for consistency
         // Determine if output is USDC (needs scaling) or USY (already 18 decimals)
@@ -280,19 +281,19 @@ library SwapModule {
 
         if (params.zeroForOne) {
             if (exactIn) {
-                delta0 = int128(uint128(grossIn));
-                delta1 = -int128(uint128(amountOut));
+                delta0 = SafeCast.toInt128(SafeCast.toInt256(grossIn));
+                delta1 = -SafeCast.toInt128(SafeCast.toInt256(amountOut));
             } else {
-                delta0 = -int128(uint128(amountOut));
-                delta1 = int128(uint128(grossIn));
+                delta0 = -SafeCast.toInt128(SafeCast.toInt256(amountOut));
+                delta1 = SafeCast.toInt128(SafeCast.toInt256(grossIn));
             }
         } else {
             if (exactIn) {
-                delta0 = -int128(uint128(amountOut));
-                delta1 = int128(uint128(grossIn));
+                delta0 = -SafeCast.toInt128(SafeCast.toInt256(amountOut));
+                delta1 = SafeCast.toInt128(SafeCast.toInt256(grossIn));
             } else {
-                delta0 = int128(uint128(grossIn));
-                delta1 = -int128(uint128(amountOut));
+                delta0 = SafeCast.toInt128(SafeCast.toInt256(grossIn));
+                delta1 = -SafeCast.toInt128(SafeCast.toInt256(amountOut));
             }
         }
 

@@ -9,6 +9,7 @@ import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IYLPVault} from "../interfaces/IYLPVault.sol";
 import {IYoloHook} from "../interfaces/IYoloHook.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title YLP (YOLO Counterparty LP Token)
@@ -325,7 +326,7 @@ contract YLP is
         nonReentrant
     {
         if (pnlUSY > 0) {
-            uint256 payout = uint256(pnlUSY);
+            uint256 payout = SafeCast.toUint256(pnlUSY);
             YLPStorage storage $ = _getYLPStorage();
             if ($.usy.balanceOf(address(this)) < payout) revert YLP__InsufficientUSY();
             if (!$.usy.transfer(user, payout)) revert YLP__USYTransferFailed();
@@ -537,7 +538,7 @@ contract YLP is
         uint256 balance = $.usy.balanceOf(address(this));
         uint256 absBound = (balance * $.maxAbsPnLBps) / 10000;
         int256 absPnL = unrealizedPnL >= 0 ? unrealizedPnL : -unrealizedPnL;
-        if (uint256(absPnL) > absBound) revert YLP__PnLExceedsBounds();
+        if (SafeCast.toUint256(absPnL) > absBound) revert YLP__PnLExceedsBounds();
 
         // Rate-of-change bound vs last epoch
         if ($.lastSnapshot.isSealed) {
@@ -545,13 +546,13 @@ contract YLP is
             int256 delta = unrealizedPnL - last;
             int256 absDelta = delta >= 0 ? delta : -delta;
             uint256 rateBound = (balance * $.maxRateChangeBps) / 10000;
-            if (uint256(absDelta) > rateBound) revert YLP__PnLChangedTooFast();
+            if (SafeCast.toUint256(absDelta) > rateBound) revert YLP__PnLChangedTooFast();
         }
 
         // Compute NAV and guards
-        int256 navSigned = int256(balance) + unrealizedPnL;
+        int256 navSigned = SafeCast.toInt256(balance) + unrealizedPnL;
         if (navSigned <= 0) revert YLP__NegativeNAV();
-        navUSY = uint256(navSigned);
+        navUSY = SafeCast.toUint256(navSigned);
 
         // Auto-pause on extreme loss
         if (unrealizedPnL < -int256((balance * $.autoPauseLossBps) / 10000)) {

@@ -13,6 +13,7 @@ import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {console2} from "forge-std/Test.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title TestAction03_AnchorPoolSwaps
@@ -372,7 +373,7 @@ contract TestAction03_AnchorPoolSwaps is Base02_DeployYoloHook {
     function _swapUSYForUSDC(uint256 amountIn) internal returns (BalanceDelta) {
         SwapParams memory params = SwapParams({
             zeroForOne: isToken0USY,
-            amountSpecified: -int256(amountIn),
+            amountSpecified: -SafeCast.toInt256(amountIn),
             sqrtPriceLimitX96: isToken0USY
                 ? TickMath.MIN_SQRT_PRICE + 1  // Price decreases when selling token0
                 : TickMath.MAX_SQRT_PRICE - 1 // Price increases when selling token1
@@ -387,7 +388,7 @@ contract TestAction03_AnchorPoolSwaps is Base02_DeployYoloHook {
     function _swapUSDCForUSY(uint256 amountIn) internal returns (BalanceDelta) {
         SwapParams memory params = SwapParams({
             zeroForOne: !isToken0USY,
-            amountSpecified: -int256(amountIn),
+            amountSpecified: -SafeCast.toInt256(amountIn),
             sqrtPriceLimitX96: !isToken0USY
                 ? TickMath.MIN_SQRT_PRICE + 1  // Price decreases when selling token0
                 : TickMath.MAX_SQRT_PRICE - 1 // Price increases when selling token1

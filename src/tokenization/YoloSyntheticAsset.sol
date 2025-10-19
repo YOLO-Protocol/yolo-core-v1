@@ -8,6 +8,7 @@ import "../interfaces/IYoloOracle.sol";
 import "../interfaces/IYoloHook.sol";
 import "../interfaces/IYLPVault.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title YoloSyntheticAsset
@@ -124,10 +125,10 @@ contract YoloSyntheticAsset is
             uint256 currentPriceX8 = IYoloHook(YOLO_HOOK).yoloOracle().getAssetPrice(address(this));
             if (currentPriceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
-            int256 deltaX8 = int256(currentPriceX8) - int256(uint256(prevAvg));
+            int256 deltaX8 = SafeCast.toInt256(currentPriceX8) - SafeCast.toInt256(uint256(prevAvg));
             int256 pnlUSY = deltaX8 >= 0
-                ? int256((uint256(deltaX8) * amount) / 1e8)  // FLOOR for profit
-                : -int256((uint256(-deltaX8) * amount + 1e8 - 1) / 1e8); // CEIL for loss
+                ? SafeCast.toInt256((SafeCast.toUint256(deltaX8) * amount) / 1e8)  // FLOOR for profit
+                : -SafeCast.toInt256((SafeCast.toUint256(-deltaX8) * amount + 1e8 - 1) / 1e8); // CEIL for loss
 
             IYoloHook(YOLO_HOOK).settlePnLFromSynthetic(from, pnlUSY);
         }
@@ -192,13 +193,13 @@ contract YoloSyntheticAsset is
                 // Calculate new weighted average with ceiling division
                 uint128 newToAvg;
                 if (toBalance == 0) {
-                    newToAvg = uint128(priceX8);
+                    newToAvg = SafeCast.toUint128(priceX8);
                 } else {
                     uint256 existingCost = uint256(prevToAvg) * toBalance;
                     uint256 incomingCost = priceX8 * amount;
                     uint256 totalCost = existingCost + incomingCost;
                     uint256 totalQuantity = toBalance + amount;
-                    newToAvg = uint128((totalCost + totalQuantity - 1) / totalQuantity); // ceiling
+                    newToAvg = SafeCast.toUint128((totalCost + totalQuantity - 1) / totalQuantity); // ceiling
                 }
 
                 avgPriceX8[to] = newToAvg;
@@ -221,11 +222,11 @@ contract YoloSyntheticAsset is
                 uint256 priceX8 = IYoloHook(YOLO_HOOK).yoloOracle().getAssetPrice(address(this));
                 if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
-                int256 deltaX8 = int256(priceX8) - int256(uint256(prevFromAvg));
+                int256 deltaX8 = SafeCast.toInt256(priceX8) - SafeCast.toInt256(uint256(prevFromAvg));
                 // FLOOR for profit, CEIL for loss (matches burn logic)
                 int256 pnlUSY = deltaX8 >= 0
-                    ? int256((uint256(deltaX8) * amount) / 1e8)
-                    : -int256((uint256(-deltaX8) * amount + 1e8 - 1) / 1e8);
+                    ? SafeCast.toInt256((SafeCast.toUint256(deltaX8) * amount) / 1e8)
+                    : -SafeCast.toInt256((SafeCast.toUint256(-deltaX8) * amount + 1e8 - 1) / 1e8);
 
                 IYoloHook(YOLO_HOOK).settlePnLFromSynthetic(from, pnlUSY);
             }
@@ -262,7 +263,7 @@ contract YoloSyntheticAsset is
                 uint256 totalCost = existingCost + carriedCost;
                 uint256 totalQuantity = toBalance + amount;
                 // Ceiling division: (a + b - 1) / b
-                avgPriceX8[to] = uint128((totalCost + totalQuantity - 1) / totalQuantity);
+                avgPriceX8[to] = SafeCast.toUint128((totalCost + totalQuantity - 1) / totalQuantity);
             }
 
             // Clear sender's average if transferring entire balance
@@ -402,9 +403,9 @@ contract YoloSyntheticAsset is
         if (prevBalance > 0) {
             uint256 totalCost = uint256(prevAvg) * prevBalance + priceX8 * amount;
             uint256 totalQuantity = prevBalance + amount;
-            newAvg = uint128((totalCost + totalQuantity - 1) / totalQuantity);
+            newAvg = SafeCast.toUint128((totalCost + totalQuantity - 1) / totalQuantity);
         } else {
-            newAvg = uint128(priceX8);
+            newAvg = SafeCast.toUint128(priceX8);
         }
 
         avgPriceX8[to] = newAvg;
@@ -454,7 +455,7 @@ contract YoloSyntheticAsset is
         if (supply == 0) {
             return 0;
         }
-        return uint128((totalCostBasisX8 + supply - 1) / supply);
+        return SafeCast.toUint128((totalCostBasisX8 + supply - 1) / supply);
     }
 
     function _updateGlobalCost(uint256 previousBalance, uint128 previousAvg, uint256 newBalance, uint128 newAvg)

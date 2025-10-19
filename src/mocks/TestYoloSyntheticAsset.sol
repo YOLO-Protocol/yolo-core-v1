@@ -7,6 +7,7 @@ import "../tokenization/base/EIP712BaseUpgradeable.sol";
 import "../interfaces/IYoloSyntheticAsset.sol";
 import "../interfaces/IYoloOracle.sol";
 import "../interfaces/IYLPVault.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title TestYoloSyntheticAsset
@@ -100,9 +101,9 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         if (currentBalance > 0) {
             uint256 totalCost = uint256(avgPriceX8[to]) * currentBalance + priceX8 * amount;
             uint256 totalQuantity = currentBalance + amount;
-            avgPriceX8[to] = uint128((totalCost + totalQuantity - 1) / totalQuantity);
+            avgPriceX8[to] = SafeCast.toUint128((totalCost + totalQuantity - 1) / totalQuantity);
         } else {
-            avgPriceX8[to] = uint128(priceX8);
+            avgPriceX8[to] = SafeCast.toUint128(priceX8);
         }
 
         _updateGlobalCost(currentBalance, previousAvg, currentBalance + amount, avgPriceX8[to]);
@@ -120,15 +121,15 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         if (currentPriceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
         if (avgCost > 0) {
-            int256 deltaX8 = int256(currentPriceX8) - int256(uint256(avgCost));
+            int256 deltaX8 = SafeCast.toInt256(currentPriceX8) - SafeCast.toInt256(uint256(avgCost));
             int256 pnlUSY;
 
             if (deltaX8 >= 0) {
-                uint256 profitNumerator = uint256(deltaX8) * amount;
-                pnlUSY = int256(profitNumerator / 1e8);
+                uint256 profitNumerator = SafeCast.toUint256(deltaX8) * amount;
+                pnlUSY = SafeCast.toInt256(profitNumerator / 1e8);
             } else {
-                uint256 lossNumerator = uint256(-deltaX8) * amount;
-                pnlUSY = -int256((lossNumerator + 1e8 - 1) / 1e8);
+                uint256 lossNumerator = SafeCast.toUint256(-deltaX8) * amount;
+                pnlUSY = -SafeCast.toInt256((lossNumerator + 1e8 - 1) / 1e8);
             }
 
             IYLPVault(ylpVault).settlePnL(from, address(this), pnlUSY);
@@ -172,7 +173,7 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
             uint256 existingCost = uint256(avgPriceX8[to]) * toBalance;
             uint256 totalCost = existingCost + carriedCost;
             uint256 totalQuantity = toBalance + amount;
-            avgPriceX8[to] = uint128((totalCost + totalQuantity - 1) / totalQuantity);
+            avgPriceX8[to] = SafeCast.toUint128((totalCost + totalQuantity - 1) / totalQuantity);
         }
 
         if (fromBalance == amount && avgPriceX8[from] > 0) {
@@ -279,7 +280,7 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         if (supply == 0) {
             return 0;
         }
-        return uint128((totalCostBasisX8 + supply - 1) / supply);
+        return SafeCast.toUint128((totalCostBasisX8 + supply - 1) / supply);
     }
 
     function _updateGlobalCost(uint256 previousBalance, uint128 previousAvg, uint256 newBalance, uint128 newAvg)

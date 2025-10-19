@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {IACLManager} from "../interfaces/IACLManager.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title YoloOracle
@@ -113,7 +114,7 @@ contract YoloOracle {
         if (source == IPriceOracle(address(0))) revert YoloOracle__UnsupportedAsset();
 
         int256 price = source.latestAnswer();
-        if (price > 0) return uint256(price);
+        if (price > 0) return SafeCast.toUint256(price);
         else return 0;
     }
 

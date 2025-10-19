@@ -10,6 +10,7 @@ import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title SyntheticSwapModule
@@ -112,8 +113,10 @@ library SyntheticSwapModule {
         s.pendingSyntheticToken = tokenIn;
         s.pendingSyntheticAmount = netIn;
 
-        int128 delta0 = exactIn ? int128(uint128(grossIn)) : -int128(uint128(amountOut));
-        int128 delta1 = exactIn ? -int128(uint128(amountOut)) : int128(uint128(grossIn));
+        int128 delta0 =
+            exactIn ? SafeCast.toInt128(SafeCast.toInt256(grossIn)) : -SafeCast.toInt128(SafeCast.toInt256(amountOut));
+        int128 delta1 =
+            exactIn ? -SafeCast.toInt128(SafeCast.toInt256(amountOut)) : SafeCast.toInt128(SafeCast.toInt256(grossIn));
 
         result.selector = IHooks.beforeSwap.selector;
         result.delta = toBeforeSwapDelta(delta0, delta1);

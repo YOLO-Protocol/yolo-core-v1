@@ -13,6 +13,7 @@ import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 
@@ -147,13 +148,13 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Step 3: Price rises to $3,700
         uint256 newPrice = 3700e8;
-        wethOracle.updateAnswer(int256(newPrice));
-        yETHOracle.updateAnswer(int256(newPrice));
+        wethOracle.updateAnswer(SafeCast.toInt256(newPrice));
+        yETHOracle.updateAnswer(SafeCast.toInt256(newPrice));
 
         // Verify unrealized PnL calculation
         YoloSyntheticAsset yethToken = YoloSyntheticAsset(yETH);
         uint128 avgCost = yethToken.avgPriceX8(trader1);
-        assertEq(avgCost, uint128(initialPrice), "Average cost should match entry price");
+        assertEq(avgCost, SafeCast.toUint128(initialPrice), "Average cost should match entry price");
 
         // Unrealized profit = (newPrice - initialPrice) * qty
         uint256 expectedProfit = ((newPrice - initialPrice) * yethBalance) / 1e8;
@@ -237,16 +238,16 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Step 3: Price drops to $2,700
         uint256 newPrice = 2700e8;
-        wethOracle.updateAnswer(int256(newPrice));
-        yETHOracle.updateAnswer(int256(newPrice));
+        wethOracle.updateAnswer(SafeCast.toInt256(newPrice));
+        yETHOracle.updateAnswer(SafeCast.toInt256(newPrice));
 
         // Verify unrealized loss
         YoloSyntheticAsset yethToken = YoloSyntheticAsset(yETH);
         uint128 avgCost = yethToken.avgPriceX8(trader1);
-        assertEq(avgCost, uint128(initialPrice), "Average cost should match entry price");
+        assertEq(avgCost, SafeCast.toUint128(initialPrice), "Average cost should match entry price");
 
         // Unrealized loss = (initialPrice - newPrice) * qty
-        int256 expectedLoss = int256((initialPrice - newPrice) * yethBalance) / 1e8;
+        int256 expectedLoss = SafeCast.toInt256((initialPrice - newPrice) * yethBalance) / 1e8;
 
         // Step 4: Trader sells at a loss
         uint256 ylpUSYBefore = IERC20(usy).balanceOf(address(ylp));
@@ -266,7 +267,7 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         uint256 ylpGain = ylpUSYAfter - ylpUSYBefore;
 
         // YLP gain should approximately equal trader loss (within rounding)
-        assertApproxEqAbs(ylpGain, uint256(expectedLoss), 100e18, "YLP gain should match trader loss");
+        assertApproxEqAbs(ylpGain, SafeCast.toUint256(expectedLoss), 100e18, "YLP gain should match trader loss");
 
         // Step 6: Verify NAV increased
         vm.roll(block.number + 20);
@@ -317,8 +318,8 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Step 2: Price rises to $3,500
         uint256 price2 = 3500e8;
-        wethOracle.updateAnswer(int256(price2));
-        yETHOracle.updateAnswer(int256(price2));
+        wethOracle.updateAnswer(SafeCast.toInt256(price2));
+        yETHOracle.updateAnswer(SafeCast.toInt256(price2));
 
         // Step 3: Trader2 buys at $3,500
         uint256 trader2AmountIn = 11_000e18;
@@ -333,13 +334,13 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         YoloSyntheticAsset yethToken = YoloSyntheticAsset(yETH);
         uint128 trader1AvgCost = yethToken.avgPriceX8(trader1);
         uint128 trader2AvgCost = yethToken.avgPriceX8(trader2);
-        assertEq(trader1AvgCost, uint128(price1), "Trader1 avg cost should match entry price");
-        assertEq(trader2AvgCost, uint128(price2), "Trader2 avg cost should be $3,500");
+        assertEq(trader1AvgCost, SafeCast.toUint128(price1), "Trader1 avg cost should match entry price");
+        assertEq(trader2AvgCost, SafeCast.toUint128(price2), "Trader2 avg cost should be $3,500");
 
         // Step 4: Price rises to $3,800
         uint256 price3 = 3800e8;
-        wethOracle.updateAnswer(int256(price3));
-        yETHOracle.updateAnswer(int256(price3));
+        wethOracle.updateAnswer(SafeCast.toInt256(price3));
+        yETHOracle.updateAnswer(SafeCast.toInt256(price3));
 
         // Calculate expected profits
         uint256 expectedProfit1 = ((price3 - price1) * trader1YETH) / 1e8;
@@ -415,11 +416,11 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Step 2: Price rises to $3,800 (unrealized profit for trader)
         uint256 newPrice = 3800e8;
-        wethOracle.updateAnswer(int256(newPrice));
-        yETHOracle.updateAnswer(int256(newPrice));
+        wethOracle.updateAnswer(SafeCast.toInt256(newPrice));
+        yETHOracle.updateAnswer(SafeCast.toInt256(newPrice));
 
         // Calculate unrealized PnL from YLP's perspective (negative = loss)
-        int256 unrealizedPnL = -int256(((newPrice - initialPrice) * yethBalance) / 1e8);
+        int256 unrealizedPnL = -SafeCast.toInt256(((newPrice - initialPrice) * yethBalance) / 1e8);
 
         // Step 3: Solver seals epoch with unrealized loss
         vm.roll(block.number + 20);
@@ -428,8 +429,8 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // NAV should reflect unrealized loss
         uint256 ylpUSYBalance = IERC20(usy).balanceOf(address(ylp));
-        int256 expectedNAV = int256(ylpUSYBalance) + unrealizedPnL;
-        assertEq(int256(nav2), expectedNAV, "NAV should include unrealized PnL");
+        int256 expectedNAV = SafeCast.toInt256(ylpUSYBalance) + unrealizedPnL;
+        assertEq(SafeCast.toInt256(nav2), expectedNAV, "NAV should include unrealized PnL");
 
         // Step 4: Trader closes position (realize the PnL)
         uint256 ylpUSYBefore = IERC20(usy).balanceOf(address(ylp));
@@ -443,7 +444,9 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Step 5: Verify realized PnL matches unrealized
         uint256 realizedLoss = ylpUSYBefore - ylpUSYAfter;
-        assertApproxEqAbs(realizedLoss, uint256(-unrealizedPnL), 100e18, "Realized loss should match unrealized");
+        assertApproxEqAbs(
+            realizedLoss, SafeCast.toUint256(-unrealizedPnL), 100e18, "Realized loss should match unrealized"
+        );
 
         // Step 6: Seal final epoch with no unrealized PnL
         vm.roll(block.number + 30);
@@ -505,13 +508,13 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Step 3: yETH price increases to $3,700 (+15.6%)
         uint256 newETHPrice = 3700e8;
-        wethOracle.updateAnswer(int256(newETHPrice));
-        yETHOracle.updateAnswer(int256(newETHPrice));
+        wethOracle.updateAnswer(SafeCast.toInt256(newETHPrice));
+        yETHOracle.updateAnswer(SafeCast.toInt256(newETHPrice));
 
         // Step 4: yBTC price decreases to $61,200 (-10%)
         uint256 newBTCPrice = 61_200e8;
-        wbtcOracle.updateAnswer(int256(newBTCPrice));
-        yBTCOracle.updateAnswer(int256(newBTCPrice));
+        wbtcOracle.updateAnswer(SafeCast.toInt256(newBTCPrice));
+        yBTCOracle.updateAnswer(SafeCast.toInt256(newBTCPrice));
 
         // Calculate expected PnL
         uint256 expectedETHProfit = ((newETHPrice - initialETHPrice) * trader1YETH) / 1e8;
@@ -593,13 +596,13 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Step 2: Extreme price movement (+100%)
         uint256 newPrice = initialPrice * 2;
-        wethOracle.updateAnswer(int256(newPrice));
-        yETHOracle.updateAnswer(int256(newPrice));
+        wethOracle.updateAnswer(SafeCast.toInt256(newPrice));
+        yETHOracle.updateAnswer(SafeCast.toInt256(newPrice));
 
         // Calculate unrealized loss (>35% triggers auto-pause)
-        int256 unrealizedPnL = -int256(((newPrice - initialPrice) * yethBalance) / 1e8);
+        int256 unrealizedPnL = -SafeCast.toInt256(((newPrice - initialPrice) * yethBalance) / 1e8);
         uint256 ylpUSY = IERC20(usy).balanceOf(address(ylp));
-        uint256 lossPercent = (uint256(-unrealizedPnL) * 10000) / ylpUSY;
+        uint256 lossPercent = (SafeCast.toUint256(-unrealizedPnL) * 10000) / ylpUSY;
 
         // Loss should exceed 35% threshold (3500 bps)
         assertGt(lossPercent, 3500, "Loss should exceed auto-pause threshold");
@@ -666,8 +669,8 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Price moves up to $3,500
         uint256 price2 = 3500e8;
-        wethOracle.updateAnswer(int256(price2));
-        yETHOracle.updateAnswer(int256(price2));
+        wethOracle.updateAnswer(SafeCast.toInt256(price2));
+        yETHOracle.updateAnswer(SafeCast.toInt256(price2));
 
         // Trader1 closes (profit)
         uint256 ylpUSYBeforeTrade1 = IERC20(usy).balanceOf(address(ylp));
@@ -691,8 +694,8 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Price drops to $3,000
         uint256 price3 = 3000e8;
-        wethOracle.updateAnswer(int256(price3));
-        yETHOracle.updateAnswer(int256(price3));
+        wethOracle.updateAnswer(SafeCast.toInt256(price3));
+        yETHOracle.updateAnswer(SafeCast.toInt256(price3));
 
         // Trader2 closes (loss)
         uint256 ylpUSYBeforeTrade2 = IERC20(usy).balanceOf(address(ylp));
@@ -763,8 +766,8 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Step 2: Price rises to $3,800
         uint256 price2 = 3800e8;
-        wethOracle.updateAnswer(int256(price2));
-        yETHOracle.updateAnswer(int256(price2));
+        wethOracle.updateAnswer(SafeCast.toInt256(price2));
+        yETHOracle.updateAnswer(SafeCast.toInt256(price2));
 
         // Step 3: Close 50% of position
         uint256 firstClose = totalYETH / 2;
@@ -784,8 +787,8 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Step 4: Price rises to $4,400
         uint256 price3 = 4400e8;
-        wethOracle.updateAnswer(int256(price3));
-        yETHOracle.updateAnswer(int256(price3));
+        wethOracle.updateAnswer(SafeCast.toInt256(price3));
+        yETHOracle.updateAnswer(SafeCast.toInt256(price3));
 
         // Step 5: Close remaining 50%
         uint256 secondClose = IERC20(yETH).balanceOf(trader1);
@@ -850,21 +853,25 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
             uint256 entryPrice = yoloOracleReal.getAssetPrice(synthetic);
 
             // Random price change: -80% to +200% (extreme stress test)
-            int256 priceChangeBps = int256(uint256(keccak256(abi.encode(seed, i, "price"))) % 28000) - 8000;
-            uint256 newPrice = uint256(int256(entryPrice) + (int256(entryPrice) * priceChangeBps) / 10000);
+            int256 priceChangeBps = SafeCast.toInt256(uint256(keccak256(abi.encode(seed, i, "price"))) % 28000) - 8000;
+            uint256 newPrice = SafeCast.toUint256(
+                SafeCast.toInt256(entryPrice) + (SafeCast.toInt256(entryPrice) * priceChangeBps) / 10000
+            );
 
             // Apply price change with safety bounds
             if (newPrice > 100 && newPrice < 500000e8) {
                 if (assetChoice == 0) {
-                    wethOracle.updateAnswer(int256(newPrice));
-                    yETHOracle.updateAnswer(int256(newPrice));
+                    wethOracle.updateAnswer(SafeCast.toInt256(newPrice));
+                    yETHOracle.updateAnswer(SafeCast.toInt256(newPrice));
                 } else {
-                    wbtcOracle.updateAnswer(int256(newPrice));
-                    yBTCOracle.updateAnswer(int256(newPrice));
+                    wbtcOracle.updateAnswer(SafeCast.toInt256(newPrice));
+                    yBTCOracle.updateAnswer(SafeCast.toInt256(newPrice));
                 }
 
                 // Calculate expected PnL
-                int256 pnl = (int256(newPrice) - int256(entryPrice)) * int256(syntheticBalance) / 1e8;
+                int256 pnl =
+                    (SafeCast.toInt256(newPrice) - SafeCast.toInt256(entryPrice)) * SafeCast.toInt256(syntheticBalance)
+                    / 1e8;
                 cumulativePnL += pnl;
 
                 // Close position
@@ -876,10 +883,12 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         }
 
         uint256 ylpUSYFinal = IERC20(usy).balanceOf(address(ylp));
-        int256 actualYLPChange = int256(ylpUSYFinal) - int256(ylpUSYInitial);
+        int256 actualYLPChange = SafeCast.toInt256(ylpUSYFinal) - SafeCast.toInt256(ylpUSYInitial);
 
         // INVARIANT: YLP change should be opposite of cumulative trader PnL
         // Allow tolerance proportional to number of trades and trade sizes
+        // casting uint8 to uint256 is safe (no truncation possible)
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint256 tolerance = uint256(numTrades) * 200e18;
         assertApproxEqAbs(actualYLPChange, -cumulativePnL, tolerance, "Multi-asset cumulative PnL mismatch");
     }
@@ -909,8 +918,8 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Price rises for profit scenario
         uint256 newPrice = 4200e8;
-        wethOracle.updateAnswer(int256(newPrice));
-        yETHOracle.updateAnswer(int256(newPrice));
+        wethOracle.updateAnswer(SafeCast.toInt256(newPrice));
+        yETHOracle.updateAnswer(SafeCast.toInt256(newPrice));
 
         uint256 remainingBalance = totalYETH;
         uint256 ylpUSYBefore = IERC20(usy).balanceOf(address(ylp));
@@ -939,7 +948,7 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
             // INVARIANT: Cost basis must remain unchanged after partial close
             if (remainingBalance > 0) {
                 uint128 avgCostAfterClose = yethToken.avgPriceX8(trader1);
-                assertEq(avgCostAfterClose, uint128(entryPrice), "Cost basis changed during partial close");
+                assertEq(avgCostAfterClose, SafeCast.toUint128(entryPrice), "Cost basis changed during partial close");
             }
         }
 
@@ -982,22 +991,28 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         uint256 btcEntryPrice = yoloOracleReal.getAssetPrice(yBTC);
 
         // Apply fuzzed price changes
-        uint256 newETHPrice = uint256(int256(ethEntryPrice) + (int256(ethEntryPrice) * ethPriceChangeBps) / 10000);
-        uint256 newBTCPrice = uint256(int256(btcEntryPrice) + (int256(btcEntryPrice) * btcPriceChangeBps) / 10000);
+        uint256 newETHPrice = SafeCast.toUint256(
+            SafeCast.toInt256(ethEntryPrice) + (SafeCast.toInt256(ethEntryPrice) * ethPriceChangeBps) / 10000
+        );
+        uint256 newBTCPrice = SafeCast.toUint256(
+            SafeCast.toInt256(btcEntryPrice) + (SafeCast.toInt256(btcEntryPrice) * btcPriceChangeBps) / 10000
+        );
 
         if (newETHPrice > 0 && newETHPrice < 20000e8) {
-            wethOracle.updateAnswer(int256(newETHPrice));
-            yETHOracle.updateAnswer(int256(newETHPrice));
+            wethOracle.updateAnswer(SafeCast.toInt256(newETHPrice));
+            yETHOracle.updateAnswer(SafeCast.toInt256(newETHPrice));
         }
 
         if (newBTCPrice > 0 && newBTCPrice < 300000e8) {
-            wbtcOracle.updateAnswer(int256(newBTCPrice));
-            yBTCOracle.updateAnswer(int256(newBTCPrice));
+            wbtcOracle.updateAnswer(SafeCast.toInt256(newBTCPrice));
+            yBTCOracle.updateAnswer(SafeCast.toInt256(newBTCPrice));
         }
 
         // Calculate expected PnL for both traders
-        int256 trader1PnL = (int256(newETHPrice) - int256(ethEntryPrice)) * int256(trader1YETH) / 1e8;
-        int256 trader2PnL = (int256(newBTCPrice) - int256(btcEntryPrice)) * int256(trader2YBTC) / 1e8;
+        int256 trader1PnL =
+            (SafeCast.toInt256(newETHPrice) - SafeCast.toInt256(ethEntryPrice)) * SafeCast.toInt256(trader1YETH) / 1e8;
+        int256 trader2PnL =
+            (SafeCast.toInt256(newBTCPrice) - SafeCast.toInt256(btcEntryPrice)) * SafeCast.toInt256(trader2YBTC) / 1e8;
         int256 totalTraderPnL = trader1PnL + trader2PnL;
 
         // Close both positions
@@ -1016,7 +1031,7 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         }
 
         uint256 ylpUSYFinal = IERC20(usy).balanceOf(address(ylp));
-        int256 ylpPnL = int256(ylpUSYFinal) - int256(ylpUSYInitial);
+        int256 ylpPnL = SafeCast.toInt256(ylpUSYFinal) - SafeCast.toInt256(ylpUSYInitial);
 
         // INVARIANT: Zero-sum - YLP's PnL should be opposite of total trader PnL
         assertApproxEqAbs(ylpPnL, -totalTraderPnL, 300e18, "Zero-sum settlement violated");
@@ -1046,12 +1061,13 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         uint256 entryPrice = yoloOracleReal.getAssetPrice(yETH);
 
         // Apply extreme price shock
-        uint256 shockedPrice = uint256(int256(entryPrice) + (int256(entryPrice) * priceShockBps) / 10000);
+        uint256 shockedPrice =
+            SafeCast.toUint256(SafeCast.toInt256(entryPrice) + (SafeCast.toInt256(entryPrice) * priceShockBps) / 10000);
 
         // Safety bounds
         if (shockedPrice > 100 && shockedPrice < 50000e8) {
-            wethOracle.updateAnswer(int256(shockedPrice));
-            yETHOracle.updateAnswer(int256(shockedPrice));
+            wethOracle.updateAnswer(SafeCast.toInt256(shockedPrice));
+            yETHOracle.updateAnswer(SafeCast.toInt256(shockedPrice));
 
             // Close position
             vm.prank(trader1);
@@ -1065,8 +1081,9 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
             assertGt(ylpUSYAfter, 0, "YLP balance went to zero after extreme shock");
 
             // Calculate expected PnL
-            int256 expectedPnL = (int256(shockedPrice) - int256(entryPrice)) * int256(yethBalance) / 1e8;
-            int256 actualYLPChange = int256(ylpUSYAfter) - int256(ylpUSYBefore);
+            int256 expectedPnL =
+                (SafeCast.toInt256(shockedPrice) - SafeCast.toInt256(entryPrice)) * SafeCast.toInt256(yethBalance) / 1e8;
+            int256 actualYLPChange = SafeCast.toInt256(ylpUSYAfter) - SafeCast.toInt256(ylpUSYBefore);
 
             // Verify settlement occurred correctly
             assertApproxEqAbs(actualYLPChange, -expectedPnL, 300e18, "Extreme shock settlement mismatch");
@@ -1094,8 +1111,8 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
 
         // Price moves up (profit zone)
         uint256 price2 = price1 + (price1 * (uint256(keccak256(abi.encode(seed, "up"))) % 2000)) / 10000; // +0-20%
-        wethOracle.updateAnswer(int256(price2));
-        yETHOracle.updateAnswer(int256(price2));
+        wethOracle.updateAnswer(SafeCast.toInt256(price2));
+        yETHOracle.updateAnswer(SafeCast.toInt256(price2));
 
         // Add to position at higher price
         uint256 secondTrade = 15_000e18;
@@ -1109,14 +1126,14 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
         uint128 avgCost2 = yethToken.avgPriceX8(trader1);
 
         // Weighted average cost should be between price1 and price2
-        assertGe(avgCost2, uint128(price1), "Avg cost below first entry");
-        assertLe(avgCost2, uint128(price2), "Avg cost above second entry");
+        assertGe(avgCost2, SafeCast.toUint128(price1), "Avg cost below first entry");
+        assertLe(avgCost2, SafeCast.toUint128(price2), "Avg cost above second entry");
 
         // Price crashes (loss zone)
         uint256 price3 = price1 - (price1 * (uint256(keccak256(abi.encode(seed, "down"))) % 3000)) / 10000; // -0-30%
         if (price3 > 100) {
-            wethOracle.updateAnswer(int256(price3));
-            yETHOracle.updateAnswer(int256(price3));
+            wethOracle.updateAnswer(SafeCast.toInt256(price3));
+            yETHOracle.updateAnswer(SafeCast.toInt256(price3));
 
             // Close entire position at loss
             vm.prank(trader1);
@@ -1125,10 +1142,11 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
             yoloHook.burnPendingSynthetic();
 
             uint256 ylpUSYFinal = IERC20(usy).balanceOf(address(ylp));
-            int256 actualYLPChange = int256(ylpUSYFinal) - int256(ylpUSYInitial);
+            int256 actualYLPChange = SafeCast.toInt256(ylpUSYFinal) - SafeCast.toInt256(ylpUSYInitial);
 
             // Calculate expected PnL based on weighted average cost
-            int256 expectedPnL = (int256(price3) - int256(uint256(avgCost2))) * int256(balance2) / 1e8;
+            int256 expectedPnL =
+                (SafeCast.toInt256(price3) - SafeCast.toInt256(uint256(avgCost2))) * SafeCast.toInt256(balance2) / 1e8;
 
             // Verify YLP captured the opposite of trader's PnL
             assertApproxEqAbs(actualYLPChange, -expectedPnL, 200e18, "Alternating PnL settlement mismatch");
@@ -1145,7 +1163,7 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
     {
         SwapParams memory params = SwapParams({
             zeroForOne: isUSYToken0,
-            amountSpecified: -int256(amountIn),
+            amountSpecified: -SafeCast.toInt256(amountIn),
             sqrtPriceLimitX96: isUSYToken0 ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
 
@@ -1161,7 +1179,7 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
     {
         SwapParams memory params = SwapParams({
             zeroForOne: !isUSYToken0,
-            amountSpecified: -int256(amountIn),
+            amountSpecified: -SafeCast.toInt256(amountIn),
             sqrtPriceLimitX96: !isUSYToken0 ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
 
