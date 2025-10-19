@@ -142,24 +142,24 @@ abstract contract YoloHookStorage {
     // ============================================================
 
     // Liquidity errors
-    error InvalidAmount();
-    error InvalidAddress();
-    error sUSYNotInitialized();
-    error InsufficientBalance();
-    error InsufficientBootstrapLiquidity();
-    error InsufficientLiquidityMinted();
-    error InsufficientLiquidity();
-    error InsufficientOutput();
-    error ImbalancedDeposit();
-    error DirectPoolManagerLiquidityNotAllowed(); // modifyLiquidity must use YoloHook functions
+    error YoloHookStorage__InvalidAmount();
+    error YoloHookStorage__InvalidAddress();
+    error YoloHookStorage__sUSYNotInitialized();
+    error YoloHookStorage__InsufficientBalance();
+    error YoloHookStorage__InsufficientBootstrapLiquidity();
+    error YoloHookStorage__InsufficientLiquidityMinted();
+    error YoloHookStorage__InsufficientLiquidity();
+    error YoloHookStorage__InsufficientOutput();
+    error YoloHookStorage__ImbalancedDeposit();
+    error YoloHookStorage__DirectPoolManagerLiquidityNotAllowed(); // modifyLiquidity must use YoloHook functions
 
     // Swap errors
-    error InsufficientLiquidityForSwap();
-    error InvalidSwapAmount();
-    error SyntheticSwapNotImplemented();
-    error UnknownPool();
-    error NoPendingSyntheticBurn();
-    error UnknownUnlockAction();
+    error YoloHookStorage__InsufficientLiquidityForSwap();
+    error YoloHookStorage__InvalidSwapAmount();
+    error YoloHookStorage__SyntheticSwapNotImplemented();
+    error YoloHookStorage__UnknownPool();
+    error YoloHookStorage__NoPendingSyntheticBurn();
+    error YoloHookStorage__UnknownUnlockAction();
 
     // ============================================================
     // EVENTS

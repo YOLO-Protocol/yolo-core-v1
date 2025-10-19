@@ -211,7 +211,7 @@ contract TestContract05_StakedYoloUSD is Test {
 
         // Should fail from non-admin
         vm.prank(user1);
-        vm.expectRevert(StakedYoloUSD.Unauthorized.selector);
+        vm.expectRevert(StakedYoloUSD.StakedYoloUSD__Unauthorized.selector);
         sUSY.updateYoloHook(newHook);
 
         // Should succeed from assetsAdmin

@@ -13,7 +13,7 @@ library DecimalNormalization {
     // ERRORS
     // ============================================================
 
-    error InvalidDecimals();
+    error DecimalNormalization__InvalidDecimals();
 
     // ============================================================
     // NORMALIZATION FUNCTIONS
@@ -27,7 +27,7 @@ library DecimalNormalization {
      * @return amount18 Amount in 18 decimals
      */
     function to18(uint256 amount, uint8 decimals) internal pure returns (uint256 amount18) {
-        if (decimals > 18) revert InvalidDecimals();
+        if (decimals > 18) revert DecimalNormalization__InvalidDecimals();
 
         if (decimals == 18) {
             return amount;
@@ -46,7 +46,7 @@ library DecimalNormalization {
      * @return amount Amount in native decimals (rounded down)
      */
     function from18(uint256 amount18, uint8 decimals) internal pure returns (uint256 amount) {
-        if (decimals > 18) revert InvalidDecimals();
+        if (decimals > 18) revert DecimalNormalization__InvalidDecimals();
 
         if (decimals == 18) {
             return amount18;

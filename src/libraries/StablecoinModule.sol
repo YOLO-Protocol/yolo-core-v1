@@ -39,12 +39,12 @@ library StablecoinModule {
     // ERRORS
     // ============================================================
 
-    error UnknownAction();
-    error InsufficientBootstrapLiquidity();
-    error InsufficientLiquidityMinted();
-    error ImbalancedDeposit();
-    error InsufficientLiquidity();
-    error InsufficientOutput();
+    error StablecoinModule__UnknownAction();
+    error StablecoinModule__InsufficientBootstrapLiquidity();
+    error StablecoinModule__InsufficientLiquidityMinted();
+    error StablecoinModule__ImbalancedDeposit();
+    error StablecoinModule__InsufficientLiquidity();
+    error StablecoinModule__InsufficientOutput();
 
     // ============================================================
     // EXTERNAL ENTRYPOINTS
@@ -59,9 +59,11 @@ library StablecoinModule {
         uint256 minSUSYReceive,
         address receiver
     ) external returns (bool isBootstrap, uint256 usyUsed, uint256 usdcUsed, uint256 sUSYMinted) {
-        if (maxUsyAmount == 0 || maxUsdcAmount == 0) revert YoloHookStorage.InvalidAmount();
-        if (receiver == address(0)) revert YoloHookStorage.InvalidAddress();
-        if (s.sUSY == address(0)) revert YoloHookStorage.sUSYNotInitialized();
+        if (maxUsyAmount == 0 || maxUsdcAmount == 0) {
+            revert YoloHookStorage.YoloHookStorage__InvalidAmount();
+        }
+        if (receiver == address(0)) revert YoloHookStorage.YoloHookStorage__InvalidAddress();
+        if (s.sUSY == address(0)) revert YoloHookStorage.YoloHookStorage__sUSYNotInitialized();
 
         isBootstrap = StakedYoloUSD(s.sUSY).totalSupply() == 0;
 
@@ -93,12 +95,14 @@ library StablecoinModule {
         uint256 minUsdcOut,
         address receiver
     ) external returns (uint256 usyOut, uint256 usdcOut) {
-        if (sUSYAmount == 0) revert YoloHookStorage.InvalidAmount();
-        if (receiver == address(0)) revert YoloHookStorage.InvalidAddress();
-        if (s.sUSY == address(0)) revert YoloHookStorage.sUSYNotInitialized();
+        if (sUSYAmount == 0) revert YoloHookStorage.YoloHookStorage__InvalidAmount();
+        if (receiver == address(0)) revert YoloHookStorage.YoloHookStorage__InvalidAddress();
+        if (s.sUSY == address(0)) revert YoloHookStorage.YoloHookStorage__sUSYNotInitialized();
 
         StakedYoloUSD sUSYContract = StakedYoloUSD(s.sUSY);
-        if (sUSYContract.balanceOf(sender) < sUSYAmount) revert YoloHookStorage.InsufficientBalance();
+        if (sUSYContract.balanceOf(sender) < sUSYAmount) {
+            revert YoloHookStorage.YoloHookStorage__InsufficientBalance();
+        }
 
         bytes memory callbackData = abi.encode(
             DataTypes.CallbackData({
@@ -141,7 +145,7 @@ library StablecoinModule {
         } else if (cbd.action == DataTypes.UnlockAction.REMOVE_LIQUIDITY) {
             return _handleRemoveLiquidity(s, poolManager, cbd.data);
         } else {
-            revert UnknownAction();
+            revert StablecoinModule__UnknownAction();
         }
     }
 
@@ -226,10 +230,10 @@ library StablecoinModule {
 
         // 4. Calculate total value and sUSY to mint
         uint256 totalValue18 = minAmount18 + minAmount18; // Both equal
-        if (totalValue18 <= MINIMUM_LIQUIDITY) revert InsufficientBootstrapLiquidity();
+        if (totalValue18 <= MINIMUM_LIQUIDITY) revert StablecoinModule__InsufficientBootstrapLiquidity();
 
         sUSYMinted = totalValue18 - MINIMUM_LIQUIDITY;
-        if (sUSYMinted < params.minSUSY) revert InsufficientLiquidityMinted();
+        if (sUSYMinted < params.minSUSY) revert StablecoinModule__InsufficientLiquidityMinted();
 
         // 5. Lock MINIMUM_LIQUIDITY permanently to address(1)
         sUSYContract.mint(address(1), MINIMUM_LIQUIDITY);
@@ -274,11 +278,11 @@ library StablecoinModule {
         // 4. Check 1% imbalance tolerance
         uint256 diff = shareUSY > shareUSDC ? shareUSY - shareUSDC : shareUSDC - shareUSY;
         uint256 maxShare = shareUSY > shareUSDC ? shareUSY : shareUSDC;
-        if ((diff * 10000) / maxShare > 100) revert ImbalancedDeposit(); // 1% = 100 bps
+        if ((diff * 10000) / maxShare > 100) revert StablecoinModule__ImbalancedDeposit(); // 1% = 100 bps
 
         // 5. Take minimum share (conservative, favors pool)
         sUSYMinted = shareUSY < shareUSDC ? shareUSY : shareUSDC;
-        if (sUSYMinted < params.minSUSY) revert InsufficientLiquidityMinted();
+        if (sUSYMinted < params.minSUSY) revert StablecoinModule__InsufficientLiquidityMinted();
 
         // 6. Convert back to native decimals
         usyUsed = usyIn18;
@@ -305,7 +309,7 @@ library StablecoinModule {
         // Get current state
         StakedYoloUSD sUSYContract = StakedYoloUSD(s.sUSY);
         uint256 totalSupply = sUSYContract.totalSupply();
-        if (totalSupply == 0) revert InsufficientLiquidity();
+        if (totalSupply == 0) revert StablecoinModule__InsufficientLiquidity();
 
         // 1. Normalize reserves to 18 decimals
         uint256 reserveUSY18 = s.totalAnchorReserveUSY;
@@ -320,8 +324,8 @@ library StablecoinModule {
         uint256 usdcOut = usdcOut18.from18(s.usdcDecimals);
 
         // 4. Check slippage protection
-        if (usyOut < params.minUsyOut) revert InsufficientOutput();
-        if (usdcOut < params.minUsdcOut) revert InsufficientOutput();
+        if (usyOut < params.minUsyOut) revert StablecoinModule__InsufficientOutput();
+        if (usdcOut < params.minUsdcOut) revert StablecoinModule__InsufficientOutput();
 
         // 5. Handle dehypothecation if needed (TODO: implement when RehypothecationModule ready)
         // if (s.rehypothecationEnabled) {

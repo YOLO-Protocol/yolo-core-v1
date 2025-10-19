@@ -40,8 +40,8 @@ contract StakedYoloUSD is MintableIncentivizedERC20Upgradeable, UUPSUpgradeable 
     // ERRORS
     // ============================================================
 
-    error Unauthorized();
-    error InvalidAddress();
+    error StakedYoloUSD__Unauthorized();
+    error StakedYoloUSD__InvalidAddress();
 
     // ============================================================
     // EVENTS
@@ -62,8 +62,8 @@ contract StakedYoloUSD is MintableIncentivizedERC20Upgradeable, UUPSUpgradeable 
     // ============================================================
 
     function initialize(address _yoloHook, address _aclManager) external initializer {
-        if (_yoloHook == address(0)) revert InvalidAddress();
-        if (_aclManager == address(0)) revert InvalidAddress();
+        if (_yoloHook == address(0)) revert StakedYoloUSD__InvalidAddress();
+        if (_aclManager == address(0)) revert StakedYoloUSD__InvalidAddress();
 
         __MintableIncentivizedERC20_init(_yoloHook, _aclManager, "Staked YOLO USD", "sUSY", 18);
         __UUPSUpgradeable_init();
@@ -74,7 +74,7 @@ contract StakedYoloUSD is MintableIncentivizedERC20Upgradeable, UUPSUpgradeable 
     // ============================================================
 
     modifier onlyRole(bytes32 role) {
-        if (!ACL_MANAGER.hasRole(role, msg.sender)) revert Unauthorized();
+        if (!ACL_MANAGER.hasRole(role, msg.sender)) revert StakedYoloUSD__Unauthorized();
         _;
     }
 
@@ -183,7 +183,7 @@ contract StakedYoloUSD is MintableIncentivizedERC20Upgradeable, UUPSUpgradeable 
      * @param newHook New YoloHook address
      */
     function updateYoloHook(address newHook) external onlyRole(ASSETS_ADMIN) {
-        if (newHook == address(0)) revert InvalidAddress();
+        if (newHook == address(0)) revert StakedYoloUSD__InvalidAddress();
 
         address oldHook = YOLO_HOOK;
         YOLO_HOOK = newHook;

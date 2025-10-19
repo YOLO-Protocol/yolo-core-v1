@@ -152,7 +152,7 @@ contract TestAction07_SyntheticSwaps is Base03_DeployComprehensiveTestEnvironmen
     }
 
     function test_Action07_Case05_burnPendingSynthetic_revertsWhenEmpty() public {
-        vm.expectRevert(YoloHookStorage.NoPendingSyntheticBurn.selector);
+        vm.expectRevert(YoloHookStorage.YoloHookStorage__NoPendingSyntheticBurn.selector);
         yoloHook.burnPendingSynthetic();
     }
 

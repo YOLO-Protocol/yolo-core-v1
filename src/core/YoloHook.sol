@@ -1050,7 +1050,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     function burnPendingSynthetic() external whenNotPaused nonReentrant {
         if (s.pendingSyntheticToken == address(0) || s.pendingSyntheticAmount == 0) {
-            revert NoPendingSyntheticBurn();
+            revert YoloHookStorage.YoloHookStorage__NoPendingSyntheticBurn();
         }
 
         bytes memory callbackData =
@@ -1187,7 +1187,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             return SyntheticSwapModule.handleUnlockCallback(s, poolManager, callback.data);
         }
 
-        revert UnknownUnlockAction();
+        revert YoloHookStorage.YoloHookStorage__UnknownUnlockAction();
     }
 
     // ============================================================
@@ -1205,7 +1205,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         override
         returns (bytes4)
     {
-        revert DirectPoolManagerLiquidityNotAllowed();
+        revert YoloHookStorage.YoloHookStorage__DirectPoolManagerLiquidityNotAllowed();
     }
 
     /**
@@ -1219,7 +1219,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         override
         returns (bytes4)
     {
-        revert DirectPoolManagerLiquidityNotAllowed();
+        revert YoloHookStorage.YoloHookStorage__DirectPoolManagerLiquidityNotAllowed();
     }
 
     /**
@@ -1234,7 +1234,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         BalanceDelta,
         bytes calldata
     ) internal pure override returns (bytes4, BalanceDelta) {
-        revert DirectPoolManagerLiquidityNotAllowed();
+        revert YoloHookStorage.YoloHookStorage__DirectPoolManagerLiquidityNotAllowed();
     }
 
     /**
@@ -1249,7 +1249,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         BalanceDelta,
         bytes calldata
     ) internal pure override returns (bytes4, BalanceDelta) {
-        revert DirectPoolManagerLiquidityNotAllowed();
+        revert YoloHookStorage.YoloHookStorage__DirectPoolManagerLiquidityNotAllowed();
     }
 
     // ============================================================
@@ -1298,7 +1298,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
             return (result.selector, result.delta, result.lpFeeOverride);
         } else {
-            revert UnknownPool();
+            revert YoloHookStorage.YoloHookStorage__UnknownPool();
         }
     }
 

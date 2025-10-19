@@ -46,6 +46,8 @@ library FlashLoanModule {
     error FlashLoanModule__InsufficientRepayment();
     error FlashLoanModule__InvalidArrayLength();
     error FlashLoanModule__AssetNotFound();
+    error FlashLoanModule__MintFailed();
+    error FlashLoanModule__BurnFailed();
 
     // ============================================================
     // FLASH LOAN - SINGLE ASSET
@@ -291,7 +293,7 @@ library FlashLoanModule {
                     revert(add(32, returndata), mload(returndata))
                 }
             }
-            revert("FlashLoanModule: mint failed");
+            revert FlashLoanModule__MintFailed();
         }
     }
 
@@ -316,7 +318,7 @@ library FlashLoanModule {
                     revert(add(32, returndata), mload(returndata))
                 }
             }
-            revert("FlashLoanModule: burn failed");
+            revert FlashLoanModule__BurnFailed();
         }
     }
 }
