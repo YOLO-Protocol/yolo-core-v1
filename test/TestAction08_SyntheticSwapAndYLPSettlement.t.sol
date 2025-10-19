@@ -867,9 +867,8 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
                 }
 
                 // Calculate expected PnL
-                int256 pnl =
-                    (SafeCast.toInt256(newPrice) - SafeCast.toInt256(entryPrice)) * SafeCast.toInt256(syntheticBalance)
-                    / 1e8;
+                int256 pnl = (SafeCast.toInt256(newPrice) - SafeCast.toInt256(entryPrice))
+                    * SafeCast.toInt256(syntheticBalance) / 1e8;
                 cumulativePnL += pnl;
 
                 // Close position
@@ -1079,8 +1078,8 @@ contract TestAction08_SyntheticSwapAndYLPSettlement is Base03_DeployComprehensiv
             assertGt(ylpUSYAfter, 0, "YLP balance went to zero after extreme shock");
 
             // Calculate expected PnL
-            int256 expectedPnL =
-                (SafeCast.toInt256(shockedPrice) - SafeCast.toInt256(entryPrice)) * SafeCast.toInt256(yethBalance) / 1e8;
+            int256 expectedPnL = (SafeCast.toInt256(shockedPrice) - SafeCast.toInt256(entryPrice))
+                * SafeCast.toInt256(yethBalance) / 1e8;
             int256 actualYLPChange = SafeCast.toInt256(ylpUSYAfter) - SafeCast.toInt256(ylpUSYBefore);
 
             // Verify settlement occurred correctly
