@@ -228,8 +228,6 @@ library LiquidationModule {
      * @param collateral Collateral asset
      * @param yoloAsset Synthetic asset
      * @param repayAmount Amount being repaid
-     * @param user User being liquidated
-     * @param isExpired Whether position is expired
      */
     function _executeLiquidation(
         AppStorage storage s,
@@ -238,8 +236,9 @@ library LiquidationModule {
         address collateral,
         address yoloAsset,
         uint256 repayAmount,
-        address user,
-        bool isExpired
+        address,
+        /* user */
+        bool /* isExpired */
     ) internal {
         // Calculate current debt: (18 decimals * 27) / 27 = 18 decimals
         uint256 actualDebt = InterestRateMath.divUp(position.normalizedDebtRay * config.liquidityIndexRay, RAY);
@@ -276,12 +275,12 @@ library LiquidationModule {
 
     /**
      * @notice Update global liquidity index
-     * @param s Reference to AppStorage
      * @param config Reference to pair configuration
      * @param rate Interest rate in basis points
      */
     function _updateGlobalLiquidityIndex(
-        AppStorage storage s,
+        AppStorage storage,
+        /* s */
         DataTypes.PairConfiguration storage config,
         uint256 rate
     ) internal {
