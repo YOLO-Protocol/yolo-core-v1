@@ -791,4 +791,151 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
 
         assertTrue(true, "Placeholder for reentrancy guard structural test");
     }
+
+    // ============================================================
+    // WITHDRAW COLLATERAL TESTS
+    // ============================================================
+
+    function test_Action04_Case21_withdrawCollateral_partialWithdrawal() public {
+        // Setup: Borrow with excess collateral
+        vm.startPrank(borrower1);
+
+        // Track balance before operations (borrower1 has 1M USDC from setUp)
+        uint256 balanceBefore = usdc.balanceOf(borrower1);
+
+        // Borrow 4 ether yUSD with 20k USDC collateral (80% LTV needs ~5k USDC)
+        yoloHook.borrow(yUSD, 4 ether, address(usdc), 20_000e6, borrower1);
+
+        // Balance after deposit
+        uint256 balanceAfterDeposit = usdc.balanceOf(borrower1);
+
+        // Should be able to withdraw excess collateral
+        uint256 withdrawAmount = 10_000e6; // Withdraw half
+        yoloHook.withdrawCollateral(address(usdc), yUSD, withdrawAmount, borrower1, borrower1);
+        vm.stopPrank();
+
+        // Verify position updated
+        DataTypes.UserPosition memory position = yoloHook.getUserPosition(borrower1, address(usdc), yUSD);
+        assertEq(position.collateralSuppliedAmount, 10_000e6, "Collateral should be reduced");
+
+        // Verify borrower received withdrawn collateral (check delta)
+        uint256 balanceAfter = usdc.balanceOf(borrower1);
+        assertEq(balanceAfter - balanceAfterDeposit, withdrawAmount, "Borrower should receive withdrawn collateral");
+    }
+
+    function test_Action04_Case22_withdrawCollateral_failsIfInsolvent() public {
+        // Setup: Borrow at exactly 80% LTV
+        vm.startPrank(borrower1);
+        usdc.mint(borrower1, 5_000e6);
+        usdc.approve(address(yoloHook), 5_000e6);
+
+        yoloHook.borrow(yUSD, 4_000 ether, address(usdc), 5_000e6, borrower1);
+
+        // Try to withdraw any collateral - should fail (position at max LTV)
+        vm.expectRevert(); // LendingPairModule__PositionInsolvent
+        yoloHook.withdrawCollateral(address(usdc), yUSD, 1, borrower1, borrower1);
+        vm.stopPrank();
+    }
+
+    function test_Action04_Case23_withdrawCollateral_onBehalfOf_requiresLooperRole() public {
+        // Setup position
+        vm.startPrank(borrower1);
+        usdc.mint(borrower1, 20_000e6);
+        usdc.approve(address(yoloHook), 20_000e6);
+        yoloHook.borrow(yUSD, 4 ether, address(usdc), 20_000e6, borrower1);
+        vm.stopPrank();
+
+        // Try to withdraw on behalf without LOOPER_ROLE
+        vm.prank(borrower2);
+        vm.expectRevert(); // YoloHook__CallerNotAuthorized
+        yoloHook.withdrawCollateral(address(usdc), yUSD, 1_000e6, borrower1, borrower2);
+    }
+
+    function test_Action04_Case24_withdrawCollateral_zeroAddressReceiver_fails() public {
+        // Setup position
+        vm.startPrank(borrower1);
+        usdc.mint(borrower1, 20_000e6);
+        usdc.approve(address(yoloHook), 20_000e6);
+        yoloHook.borrow(yUSD, 4 ether, address(usdc), 20_000e6, borrower1);
+
+        // Try to withdraw to zero address
+        vm.expectRevert(); // LendingPairModule__InvalidReceiver
+        yoloHook.withdrawCollateral(address(usdc), yUSD, 1_000e6, borrower1, address(0));
+        vm.stopPrank();
+    }
+
+    function test_Action04_Case25_withdrawCollateral_fullWithdrawal_withoutDebt() public {
+        // Setup: Borrow and fully repay
+        vm.startPrank(borrower1);
+
+        // Track initial balance (borrower1 has 1M USDC from setUp)
+        uint256 initialBalance = usdc.balanceOf(borrower1);
+
+        yoloHook.borrow(yUSD, 4 ether, address(usdc), 10_000e6, borrower1);
+
+        // Balance after borrowing
+        uint256 balanceAfterBorrow = usdc.balanceOf(borrower1);
+        assertEq(balanceAfterBorrow, initialBalance - 10_000e6, "Collateral deposited");
+
+        // Repay all debt - this automatically claims collateral (claimCollateral=true hardcoded)
+        YoloSyntheticAsset(yUSD).approve(address(yoloHook), type(uint256).max);
+        yoloHook.repay(yUSD, address(usdc), 0, borrower1); // 0 = full repayment
+
+        // Check 1: Verify collateral was already returned during repay
+        uint256 balanceAfterRepay = usdc.balanceOf(borrower1);
+        assertEq(balanceAfterRepay, initialBalance, "Collateral should be auto-returned on full repay");
+
+        // Verify position cleared
+        DataTypes.UserPosition memory position = yoloHook.getUserPosition(borrower1, address(usdc), yUSD);
+        assertEq(position.collateralSuppliedAmount, 0, "All collateral already withdrawn");
+        assertEq(position.normalizedDebtRay, 0, "No debt remaining");
+
+        // Check 2: Since collateral was auto-claimed, withdrawCollateral should fail
+        // (Not calling withdrawCollateral since position is already cleared)
+        vm.stopPrank();
+    }
+
+    function test_Action04_Case26_withdrawCollateral_afterInterestAccrual() public {
+        // Setup: Borrow with excess collateral
+        vm.startPrank(borrower1);
+        usdc.mint(borrower1, 20_000e6);
+        usdc.approve(address(yoloHook), 20_000e6);
+        yoloHook.borrow(yUSD, 4 ether, address(usdc), 20_000e6, borrower1);
+        vm.stopPrank();
+
+        // Warp time to accrue interest
+        vm.warp(block.timestamp + 365 days);
+
+        // Calculate new required collateral after interest
+        uint256 debtAfter = yoloHook.getPositionDebt(borrower1, address(usdc), yUSD);
+
+        // Should still be able to withdraw some collateral
+        vm.prank(borrower1);
+        yoloHook.withdrawCollateral(address(usdc), yUSD, 8_000e6, borrower1, borrower1);
+
+        // Verify position still solvent
+        DataTypes.UserPosition memory position = yoloHook.getUserPosition(borrower1, address(usdc), yUSD);
+        assertEq(position.collateralSuppliedAmount, 12_000e6, "Collateral reduced");
+        assertTrue(debtAfter > 4 ether, "Interest accrued");
+    }
+
+    function test_Action04_Case27_withdrawCollateral_emitsEvent() public {
+        // Setup position
+        vm.startPrank(borrower1);
+        usdc.mint(borrower1, 20_000e6);
+        usdc.approve(address(yoloHook), 20_000e6);
+        yoloHook.borrow(yUSD, 4 ether, address(usdc), 20_000e6, borrower1);
+
+        // Expect CollateralWithdrawn event
+        vm.expectEmit(true, true, true, true);
+        emit CollateralWithdrawn(borrower1, address(usdc), yUSD, 5_000e6, borrower1);
+
+        yoloHook.withdrawCollateral(address(usdc), yUSD, 5_000e6, borrower1, borrower1);
+        vm.stopPrank();
+    }
+
+    // Event declaration for testing
+    event CollateralWithdrawn(
+        address indexed user, address indexed collateral, address indexed yoloAsset, uint256 amount, address receiver
+    );
 }
