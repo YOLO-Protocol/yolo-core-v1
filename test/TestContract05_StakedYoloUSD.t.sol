@@ -6,6 +6,7 @@ import {StakedYoloUSD} from "../src/tokenization/StakedYoloUSD.sol";
 import {IYoloHook} from "../src/interfaces/IYoloHook.sol";
 import {IYoloOracle} from "../src/interfaces/IYoloOracle.sol";
 import {ACLManager} from "../src/access/ACLManager.sol";
+import {DataTypes} from "../src/libraries/DataTypes.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /**
@@ -338,8 +339,22 @@ contract MockYoloHook is IYoloHook {
     function repay(address, address, uint256, address) external pure {}
     function depositCollateral(address, address, uint256, address) external pure {}
 
+    function withdrawCollateral(address, address, uint256, address, address) external pure {}
+
     function getPositionDebt(address, address, address) external pure returns (uint256) {
         return 0;
+    }
+
+    function getUserPosition(address, address, address) external pure returns (DataTypes.UserPosition memory position) {
+        return position; // Return empty position
+    }
+
+    function getPairConfiguration(address, address)
+        external
+        pure
+        returns (DataTypes.PairConfiguration memory pairConfig)
+    {
+        return pairConfig; // Return empty config
     }
 
     function flashLoan(address, address, uint256, bytes calldata) external pure returns (bool) {
