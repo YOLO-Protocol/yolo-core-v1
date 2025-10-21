@@ -644,7 +644,7 @@ contract Base03_DeployComprehensiveTestEnvironment is Base02_DeployYoloHook {
     function test_Base03_Case08_CanBorrowSyntheticAssets() public {
         usdc.mint(address(this), 10000e6);
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yXAU, 1e18, address(usdc), 3600e6); // Borrow 1 yXAU (Gold)
+        yoloHook.borrow(yXAU, 1e18, address(usdc), 3600e6, address(this)); // Borrow 1 yXAU (Gold)
         assertEq(IERC20(yXAU).balanceOf(address(this)), 1e18, "Should receive 1 yXAU");
     }
 

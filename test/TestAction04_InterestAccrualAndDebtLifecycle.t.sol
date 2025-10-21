@@ -152,7 +152,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 borrowAmount = 4 ether; // 4 yUSD (50% LTV)
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount);
+        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount, borrower1);
 
         DataTypes.UserPosition memory position = yoloHook.getUserPosition(borrower1, address(usdc), yUSD);
         DataTypes.PairConfiguration memory pair = yoloHook.getPairConfiguration(yUSD, address(usdc));
@@ -184,7 +184,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 10_000e6;
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount);
+        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount, borrower1);
 
         DataTypes.PairConfiguration memory pairBefore = yoloHook.getPairConfiguration(yUSD, address(usdc));
 
@@ -214,7 +214,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 20_000e6;
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, initialBorrow, address(usdc), collateralAmount);
+        yoloHook.borrow(yUSD, initialBorrow, address(usdc), collateralAmount, borrower1);
 
         // Warp 6 months
         vm.warp(block.timestamp + 180 days);
@@ -222,7 +222,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         // Second borrow (reborrow)
         uint256 secondBorrow = 2 ether;
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, secondBorrow, address(usdc), 0); // No additional collateral
+        yoloHook.borrow(yUSD, secondBorrow, address(usdc), 0, borrower1); // No additional collateral
 
         DataTypes.UserPosition memory position = yoloHook.getUserPosition(borrower1, address(usdc), yUSD);
         DataTypes.PairConfiguration memory pair = yoloHook.getPairConfiguration(yUSD, address(usdc));
@@ -256,7 +256,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 10_000e6;
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount);
+        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount, borrower1);
 
         // Warp 1 year
         vm.warp(block.timestamp + YEAR);
@@ -281,7 +281,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
 
         // Repay
         vm.prank(borrower1);
-        yoloHook.repay(yUSD, address(usdc), repayAmount);
+        yoloHook.repay(yUSD, address(usdc), repayAmount, borrower1);
 
         // Treasury should have received the interest
         uint256 treasuryBalanceAfter = YoloSyntheticAsset(yUSD).balanceOf(treasury);
@@ -304,7 +304,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 10_000e6;
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount);
+        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount, borrower1);
 
         // Warp 1 year
         vm.warp(block.timestamp + YEAR);
@@ -325,7 +325,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
 
         // Full repay
         vm.prank(borrower1);
-        yoloHook.repay(yUSD, address(usdc), fullDebt);
+        yoloHook.repay(yUSD, address(usdc), fullDebt, borrower1);
 
         // Borrower should receive collateral back
         uint256 borrowerCollateralAfter = usdc.balanceOf(borrower1);
@@ -351,7 +351,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 10_000e6;
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount);
+        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount, borrower1);
 
         // Warp 6 months
         vm.warp(block.timestamp + 180 days);
@@ -381,7 +381,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 1.25 ether; // $2500 collateral for 80% LTV
 
         vm.prank(borrower1);
-        yoloHook.borrow(yETH, borrowAmount, address(weth), collateralAmount);
+        yoloHook.borrow(yETH, borrowAmount, address(weth), collateralAmount, borrower1);
 
         // Warp to near expiry
         vm.warp(block.timestamp + 20 days);
@@ -412,7 +412,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 1.25 ether; // $2500 collateral for 80% LTV
 
         vm.prank(borrower1);
-        yoloHook.borrow(yETH, borrowAmount, address(weth), collateralAmount);
+        yoloHook.borrow(yETH, borrowAmount, address(weth), collateralAmount, borrower1);
 
         // Warp past expiry
         vm.warp(block.timestamp + 31 days);
@@ -446,7 +446,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 10_000e6; // $10,000 USDC
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount);
+        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount, borrower1);
 
         // Manipulate price to make position insolvent
         // Drop USDC price to $0.80 (20% drop)
@@ -496,7 +496,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
 
         // Borrow
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount / 1e12);
+        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount / 1e12, borrower1);
 
         // Warp
         vm.warp(block.timestamp + timeElapsed);
@@ -521,14 +521,14 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 10_000e6;
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount);
+        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount, borrower1);
 
         DataTypes.PairConfiguration memory pair = yoloHook.getPairConfiguration(yUSD, address(usdc));
         uint256 indexBefore = pair.liquidityIndexRay;
 
         // Immediate reborrow (no time elapsed)
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, 1 ether, address(usdc), 0);
+        yoloHook.borrow(yUSD, 1 ether, address(usdc), 0, borrower1);
 
         DataTypes.PairConfiguration memory pairAfter = yoloHook.getPairConfiguration(yUSD, address(usdc));
 
@@ -546,7 +546,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 2000e6; // $2000 USDC for $1 debt (200% collateral)
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount);
+        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount, borrower1);
 
         // Warp
         vm.warp(block.timestamp + 1 days);
@@ -568,7 +568,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateral1 = 10_000e6;
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrow1, address(usdc), collateral1);
+        yoloHook.borrow(yUSD, borrow1, address(usdc), collateral1, borrower1);
 
         // Warp 6 months
         vm.warp(block.timestamp + 180 days);
@@ -578,7 +578,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateral2 = 5_000e6;
 
         vm.prank(borrower2);
-        yoloHook.borrow(yUSD, borrow2, address(usdc), collateral2);
+        yoloHook.borrow(yUSD, borrow2, address(usdc), collateral2, borrower2);
 
         // Warp another 6 months
         vm.warp(block.timestamp + 180 days);
@@ -604,11 +604,11 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
     function test_Action04_Case14_crossPair_independence() public {
         // Borrow from pair 1 (5% APR)
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, 4 ether, address(usdc), 10_000e6);
+        yoloHook.borrow(yUSD, 4 ether, address(usdc), 10_000e6, borrower1);
 
         // Borrow from pair 2 (10% APR)
         vm.prank(borrower1);
-        yoloHook.borrow(yETH, 1 ether, address(weth), 1.25 ether);
+        yoloHook.borrow(yETH, 1 ether, address(weth), 1.25 ether, borrower1);
 
         // Warp 1 year
         vm.warp(block.timestamp + YEAR);
@@ -631,7 +631,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
     function test_Action04_Case15_storedInterestRate_lifecycle() public {
         // Initial borrow on EXPIRABLE pair (yETH-WETH)
         vm.prank(borrower1);
-        yoloHook.borrow(yETH, 1 ether, address(weth), 2.6 ether);
+        yoloHook.borrow(yETH, 1 ether, address(weth), 2.6 ether, borrower1);
 
         DataTypes.UserPosition memory pos1 = yoloHook.getUserPosition(borrower1, address(weth), yETH);
         assertEq(pos1.storedInterestRate, BORROW_RATE_10PCT, "Should store initial rate");
@@ -643,7 +643,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         // Reborrow (DOES NOT update stored rate - only renewal does)
         vm.warp(block.timestamp + 1 days);
         vm.prank(borrower1);
-        yoloHook.borrow(yETH, 1 ether, address(weth), 0); // Changed from 0.5 to 1 to meet minimum
+        yoloHook.borrow(yETH, 1 ether, address(weth), 0, borrower1); // Changed from 0.5 to 1 to meet minimum
 
         DataTypes.UserPosition memory pos2 = yoloHook.getUserPosition(borrower1, address(weth), yETH);
         assertEq(
@@ -668,7 +668,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 collateralAmount = 10_000e6; // $10,000
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount);
+        yoloHook.borrow(yUSD, borrowAmount, address(usdc), collateralAmount, borrower1);
 
         // Check health factor
         (uint256 totalCollateralUSD, uint256 totalDebtUSD, uint256 ltv) = yoloHook.getUserAccountData(borrower1);
@@ -685,7 +685,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
     function test_Action04_Case17_expiryRenewal_window() public {
         // Borrow expirable
         vm.prank(borrower1);
-        yoloHook.borrow(yETH, 1 ether, address(weth), 1.25 ether);
+        yoloHook.borrow(yETH, 1 ether, address(weth), 1.25 ether, borrower1);
 
         DataTypes.UserPosition memory pos1 = yoloHook.getUserPosition(borrower1, address(weth), yETH);
         uint256 firstExpiry = pos1.expiryTimestamp;
@@ -710,10 +710,10 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
     function test_Action04_Case18_treasuryFlow_accounting() public {
         // Multiple borrowers generate interest
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, 4 ether, address(usdc), 10_000e6);
+        yoloHook.borrow(yUSD, 4 ether, address(usdc), 10_000e6, borrower1);
 
         vm.prank(borrower2);
-        yoloHook.borrow(yUSD, 2 ether, address(usdc), 5_000e6);
+        yoloHook.borrow(yUSD, 2 ether, address(usdc), 5_000e6, borrower2);
 
         // Warp 1 year
         vm.warp(block.timestamp + YEAR);
@@ -727,7 +727,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         vm.prank(borrower1);
         YoloSyntheticAsset(yUSD).approve(address(yoloHook), debt1);
         vm.prank(borrower1);
-        yoloHook.repay(yUSD, address(usdc), debt1);
+        yoloHook.repay(yUSD, address(usdc), debt1, borrower1);
 
         uint256 treasuryAfter1 = YoloSyntheticAsset(yUSD).balanceOf(treasury);
         uint256 interest1 = treasuryAfter1 - treasuryBefore;
@@ -739,7 +739,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         vm.prank(borrower2);
         YoloSyntheticAsset(yUSD).approve(address(yoloHook), debt2);
         vm.prank(borrower2);
-        yoloHook.repay(yUSD, address(usdc), debt2);
+        yoloHook.repay(yUSD, address(usdc), debt2, borrower2);
 
         uint256 treasuryAfter2 = YoloSyntheticAsset(yUSD).balanceOf(treasury);
         uint256 interest2 = treasuryAfter2 - treasuryAfter1;
@@ -755,7 +755,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
     function test_Action04_Case19_liquidityIndex_monotonicity() public {
         // Borrow
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, 4 ether, address(usdc), 10_000e6);
+        yoloHook.borrow(yUSD, 4 ether, address(usdc), 10_000e6, borrower1);
 
         DataTypes.PairConfiguration memory pair1 = yoloHook.getPairConfiguration(yUSD, address(usdc));
 
@@ -763,7 +763,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         for (uint256 i = 0; i < 5; i++) {
             vm.warp(block.timestamp + 30 days);
             vm.prank(borrower1);
-            yoloHook.borrow(yUSD, 1 ether, address(usdc), 0); // Minimum borrow amount
+            yoloHook.borrow(yUSD, 1 ether, address(usdc), 0, borrower1); // Minimum borrow amount
 
             DataTypes.PairConfiguration memory pair2 = yoloHook.getPairConfiguration(yUSD, address(usdc));
 
@@ -783,7 +783,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         // Basic check: can't borrow during borrow callback
 
         vm.prank(borrower1);
-        yoloHook.borrow(yUSD, 4 ether, address(usdc), 10_000e6);
+        yoloHook.borrow(yUSD, 4 ether, address(usdc), 10_000e6, borrower1);
 
         // Reentrancy would fail at function entry
         // This is a structural test - the modifiers should be in place

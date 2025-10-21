@@ -175,7 +175,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         uint256 collateralNeeded = (amount * 2e8 * 10000) / (1e8 * 8000); // amount * price / LTV
         collateralNeeded = collateralNeeded / 1e12; // Convert to 6 decimals
 
-        yoloHook.borrow(yETH, amount, address(usdc), collateralNeeded);
+        yoloHook.borrow(yETH, amount, address(usdc), collateralNeeded, recipient);
 
         vm.stopPrank();
     }
@@ -292,7 +292,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         usdc.mint(address(flashBorrower), 10000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yETH, 50e18, address(usdc), 150e6); // 50 yETH * $2 = $100, need $125 at 80% LTV
+        yoloHook.borrow(yETH, 50e18, address(usdc), 150e6, address(flashBorrower)); // 50 yETH * $2 = $100, need $125 at 80% LTV
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
@@ -323,7 +323,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         usdc.mint(address(flashBorrower), 10000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yETH, totalAmount, address(usdc), 30e6); // ~10 yETH * $2 = $20, need $25 at 80% LTV
+        yoloHook.borrow(yETH, totalAmount, address(usdc), 30e6, address(flashBorrower)); // ~10 yETH * $2 = $20, need $25 at 80% LTV
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
@@ -350,7 +350,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         usdc.mint(address(flashBorrower), 20000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yETH, yethAmount, address(usdc), 50e6); // 20 yETH * $2 = $40, need $50 at 80% LTV
+        yoloHook.borrow(yETH, yethAmount, address(usdc), 50e6, address(flashBorrower)); // 20 yETH * $2 = $40, need $50 at 80% LTV
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
@@ -359,7 +359,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         usdc.mint(address(flashBorrower), 150000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yBTC, ybtcAmount, address(usdc), 100000e6); // 2 yBTC * $40k = $80k, need $100k at 80% LTV
+        yoloHook.borrow(yBTC, ybtcAmount, address(usdc), 100000e6, address(flashBorrower)); // 2 yBTC * $40k = $80k, need $100k at 80% LTV
         YoloSyntheticAsset(yBTC).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
@@ -397,7 +397,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         usdc.mint(address(flashBorrower), 20000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yETH, totalYETH, address(usdc), 30e6); // ~10 yETH * $2 = $20, need $25 at 80% LTV
+        yoloHook.borrow(yETH, totalYETH, address(usdc), 30e6, address(flashBorrower)); // ~10 yETH * $2 = $20, need $25 at 80% LTV
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
@@ -406,7 +406,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         usdc.mint(address(flashBorrower), 150000e6);
         vm.startPrank(address(flashBorrower));
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yBTC, totalYBTC, address(usdc), 60000e6); // ~1 yBTC * $40k = $40k, need $50k at 80% LTV
+        yoloHook.borrow(yBTC, totalYBTC, address(usdc), 60000e6, address(flashBorrower)); // ~1 yBTC * $40k = $40k, need $50k at 80% LTV
         YoloSyntheticAsset(yBTC).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
 
@@ -478,7 +478,7 @@ contract TestAction06_PrivilegedRoles is Base02_DeployYoloHook {
         // Borrow at 80% LTV (just under limit)
         // USDC collateral: 2000e6 ($2000)
         // yETH borrowed: 800e18 (worth $1600 at $2/yETH)
-        yoloHook.borrow(yETH, 800e18, address(usdc), 2000e6);
+        yoloHook.borrow(yETH, 800e18, address(usdc), 2000e6, borrower);
         vm.stopPrank();
 
         // Crash yETH price to make position undercollateralized

@@ -332,4 +332,17 @@ contract MockYoloHook is IYoloHook {
     function isYoloAsset(address) external pure returns (bool) {
         return true;
     }
+
+    // CDP Operations (stub implementations for IYoloHook compliance)
+    function borrow(address, uint256, address, uint256, address) external pure {}
+    function repay(address, address, uint256, address) external pure {}
+    function depositCollateral(address, address, uint256, address) external pure {}
+
+    function getPositionDebt(address, address, address) external pure returns (uint256) {
+        return 0;
+    }
+
+    function flashLoan(address, address, uint256, bytes calldata) external pure returns (bool) {
+        return true;
+    }
 }

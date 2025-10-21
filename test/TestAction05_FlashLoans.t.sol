@@ -475,7 +475,7 @@ contract TestAction05_FlashLoans is Base02_DeployYoloHook {
         usdc.mint(borrower, 200000e6); // Generous amount for flash loan tests
         vm.startPrank(borrower);
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yETH, amount, address(usdc), 160000e6); // 50 yETH * $2000 = $100k, need $125k at 80% LTV
+        yoloHook.borrow(yETH, amount, address(usdc), 160000e6, borrower); // 50 yETH * $2000 = $100k, need $125k at 80% LTV
         YoloSyntheticAsset(yETH).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
     }
@@ -484,7 +484,7 @@ contract TestAction05_FlashLoans is Base02_DeployYoloHook {
         usdc.mint(borrower, 400000e6); // Generous amount for flash loan tests
         vm.startPrank(borrower);
         usdc.approve(address(yoloHook), type(uint256).max);
-        yoloHook.borrow(yBTC, amount, address(usdc), 320000e6); // 5 yBTC * $40k = $200k, need $250k at 80% LTV
+        yoloHook.borrow(yBTC, amount, address(usdc), 320000e6, borrower); // 5 yBTC * $40k = $200k, need $250k at 80% LTV
         YoloSyntheticAsset(yBTC).approve(address(yoloHook), type(uint256).max);
         vm.stopPrank();
     }
