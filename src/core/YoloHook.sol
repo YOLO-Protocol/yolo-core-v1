@@ -904,6 +904,34 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     /**
+     * @notice Withdraw collateral from position
+     * @dev LOOPER_ROLE required when onBehalfOf != msg.sender
+     *      Withdraws from onBehalfOf's position, sends to receiver
+     *      Must maintain minimum collateralization after withdrawal
+     * @param collateral Collateral asset
+     * @param yoloAsset Synthetic asset
+     * @param amount Amount to withdraw
+     * @param onBehalfOf Address whose position to withdraw from
+     * @param receiver Address to receive the withdrawn collateral
+     */
+    function withdrawCollateral(
+        address collateral,
+        address yoloAsset,
+        uint256 amount,
+        address onBehalfOf,
+        address receiver
+    ) external whenNotPaused nonReentrant {
+        // Authorization: only LOOPER_ROLE can withdraw on behalf of others
+        if (onBehalfOf != msg.sender) {
+            if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
+                revert YoloHook__CallerNotAuthorized();
+            }
+        }
+
+        s.withdrawCollateral(collateral, yoloAsset, amount, onBehalfOf, receiver);
+    }
+
+    /**
      * @notice Liquidate undercollateralized or expired position
      * @param user User to liquidate
      * @param collateral Collateral asset
