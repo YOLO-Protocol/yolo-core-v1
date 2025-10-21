@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {IYoloOracle} from "./IYoloOracle.sol";
+import {DataTypes} from "../libraries/DataTypes.sol";
 
 /**
  * @title IYoloHook
@@ -130,6 +131,25 @@ interface IYoloHook {
     /// @param yoloAsset Synthetic asset
     /// @return Current debt amount
     function getPositionDebt(address user, address collateral, address yoloAsset) external view returns (uint256);
+
+    /// @notice Get user position data
+    /// @param user User address
+    /// @param collateral Collateral asset
+    /// @param yoloAsset Synthetic asset
+    /// @return position User position struct
+    function getUserPosition(address user, address collateral, address yoloAsset)
+        external
+        view
+        returns (DataTypes.UserPosition memory position);
+
+    /// @notice Get pair configuration
+    /// @param yoloAsset Synthetic asset
+    /// @param collateral Collateral asset
+    /// @return pairConfig Pair configuration struct
+    function getPairConfiguration(address yoloAsset, address collateral)
+        external
+        view
+        returns (DataTypes.PairConfiguration memory pairConfig);
 
     // ============================================================
     // FLASH LOANS
