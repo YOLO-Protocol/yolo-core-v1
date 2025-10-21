@@ -70,4 +70,79 @@ interface IYoloHook {
 
     /// @notice Returns true if the address is a YOLO synthetic asset
     function isYoloAsset(address syntheticToken) external view returns (bool);
+
+    // ============================================================
+    // CDP OPERATIONS
+    // ============================================================
+
+    /// @notice Borrow synthetic assets against collateral
+    /// @dev Supports onBehalfOf pattern (Aave V3) - LOOPER_ROLE required when onBehalfOf != msg.sender
+    /// @param yoloAsset Synthetic asset to borrow
+    /// @param borrowAmount Amount to borrow (18 decimals)
+    /// @param collateral Collateral asset
+    /// @param collateralAmount Amount of collateral to deposit
+    /// @param onBehalfOf Address who owns the position (tokens minted to msg.sender)
+    function borrow(
+        address yoloAsset,
+        uint256 borrowAmount,
+        address collateral,
+        uint256 collateralAmount,
+        address onBehalfOf
+    ) external;
+
+    /// @notice Repay borrowed synthetic assets
+    /// @dev Supports onBehalfOf pattern - LOOPER_ROLE required when onBehalfOf != msg.sender
+    ///      Burns tokens from msg.sender, reduces debt on onBehalfOf
+    /// @param yoloAsset Synthetic asset to repay
+    /// @param collateral Collateral asset
+    /// @param repayAmount Amount to repay (0 = full repayment)
+    /// @param onBehalfOf Address whose debt to reduce (tokens burned from msg.sender)
+    function repay(address yoloAsset, address collateral, uint256 repayAmount, address onBehalfOf) external;
+
+    /// @notice Deposit additional collateral to existing position
+    /// @dev Requires existing position - LOOPER_ROLE required when onBehalfOf != msg.sender
+    ///      Pulls collateral from msg.sender, credits onBehalfOf
+    /// @param yoloAsset Synthetic asset
+    /// @param collateral Collateral asset
+    /// @param amount Amount to deposit
+    /// @param onBehalfOf Address to credit collateral to (collateral from msg.sender)
+    function depositCollateral(address yoloAsset, address collateral, uint256 amount, address onBehalfOf) external;
+
+    /// @notice Withdraw collateral from position
+    /// @dev LOOPER_ROLE required when onBehalfOf != msg.sender
+    ///      Withdraws from onBehalfOf's position, sends to receiver
+    /// @param collateral Collateral asset
+    /// @param yoloAsset Synthetic asset
+    /// @param amount Amount to withdraw
+    /// @param onBehalfOf Address whose position to withdraw from
+    /// @param receiver Address to receive the withdrawn collateral
+    function withdrawCollateral(
+        address collateral,
+        address yoloAsset,
+        uint256 amount,
+        address onBehalfOf,
+        address receiver
+    ) external;
+
+    /// @notice Get position debt with accrued interest
+    /// @param user User address
+    /// @param collateral Collateral asset
+    /// @param yoloAsset Synthetic asset
+    /// @return Current debt amount
+    function getPositionDebt(address user, address collateral, address yoloAsset) external view returns (uint256);
+
+    // ============================================================
+    // FLASH LOANS
+    // ============================================================
+
+    /// @notice Execute flash loan
+    /// @dev EIP-3156 compliant - zero fee for PRIVILEGED_FLASHLOANER_ROLE
+    /// @param borrower Address to receive the loan
+    /// @param token Token to borrow
+    /// @param amount Amount to borrow
+    /// @param data Arbitrary data passed to borrower
+    /// @return success True if flash loan succeeded
+    function flashLoan(address borrower, address token, uint256 amount, bytes calldata data)
+        external
+        returns (bool success);
 }
