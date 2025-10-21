@@ -542,18 +542,23 @@ library LendingPairModule {
     /**
      * @notice Borrow synthetic assets against collateral
      * @dev Exact pattern from reference implementation with compound interest support
+     *      Supports onBehalfOf pattern (Aave V3) for leverage loop contracts
+     *      CRITICAL: Mints to msg.sender (caller) but tracks debt on onBehalfOf (position owner)
+     *      This enables looper contracts to settle flash loans without requiring user allowances
      * @param s Reference to AppStorage
      * @param yoloAsset Synthetic asset to borrow
      * @param borrowAmount Amount to borrow (18 decimals)
      * @param collateral Collateral asset
      * @param collateralAmount Amount of collateral to deposit (can be 0 for existing positions)
+     * @param onBehalfOf Address who owns the position and debt (tokens minted to msg.sender)
      */
     function borrowSyntheticAsset(
         AppStorage storage s,
         address yoloAsset,
         uint256 borrowAmount,
         address collateral,
-        uint256 collateralAmount
+        uint256 collateralAmount,
+        address onBehalfOf
     ) external {
         // Early validation
         if (borrowAmount == 0) revert LendingPairModule__InsufficientAmount();
@@ -572,7 +577,7 @@ library LendingPairModule {
         if (pairConfig.maxMintableCap == 0) revert LendingPairModule__YoloAssetPaused();
         if (pairConfig.maxSupplyCap == 0) revert LendingPairModule__CollateralPaused();
 
-        // Transfer collateral first if provided
+        // Transfer collateral first if provided (pulled from msg.sender)
         if (collateralAmount > 0) {
             IERC20(collateral).safeTransferFrom(msg.sender, address(this), collateralAmount);
         }
@@ -580,11 +585,12 @@ library LendingPairModule {
         // Update global liquidity index
         _updateGlobalLiquidityIndex(s, pairConfig, pairConfig.borrowRate);
 
-        DataTypes.UserPosition storage position = s.positions[msg.sender][collateral][yoloAsset];
+        // Position ownership goes to onBehalfOf, not msg.sender
+        DataTypes.UserPosition storage position = s.positions[onBehalfOf][collateral][yoloAsset];
 
         if (position.borrower == address(0)) {
             // NEW POSITION
-            _initializeNewPosition(s, position, msg.sender, collateral, yoloAsset, pairConfig.borrowRate);
+            _initializeNewPosition(s, position, onBehalfOf, collateral, yoloAsset, pairConfig.borrowRate);
 
             position.userLiquidityIndexRay = pairConfig.liquidityIndexRay;
             position.normalizedPrincipalRay = (borrowAmount * RAY) / pairConfig.liquidityIndexRay;
@@ -628,29 +634,36 @@ library LendingPairModule {
             revert LendingPairModule__ExceedsCollateralCap();
         }
 
-        // Mint
+        // Mint to msg.sender (caller receives tokens, debt tracked on onBehalfOf)
+        // This enables looper contracts to settle flash loans without requiring user allowances
         IYoloSyntheticAsset(yoloAsset).mint(msg.sender, borrowAmount);
-        emit Borrowed(msg.sender, collateral, collateralAmount, yoloAsset, borrowAmount);
+        emit Borrowed(onBehalfOf, collateral, collateralAmount, yoloAsset, borrowAmount);
     }
 
     /**
      * @notice Repay borrowed synthetic assets
      * @dev Exact pattern from reference implementation with interest-first payment
+     *      Supports onBehalfOf pattern (Aave V3) for debt repayment
+     *      CRITICAL: Burns from msg.sender (caller pays) but reduces debt on onBehalfOf
+     *      Collateral returned to onBehalfOf if fully repaid
      * @param s Reference to AppStorage
      * @param collateral Collateral asset
      * @param yoloAsset Synthetic asset to repay
      * @param repayAmount Amount to repay (0 = full repayment)
      * @param claimCollateral Whether to claim collateral if fully repaid
+     * @param onBehalfOf Address whose debt to reduce (tokens burned from msg.sender)
      */
     function repaySyntheticAsset(
         AppStorage storage s,
         address collateral,
         address yoloAsset,
         uint256 repayAmount,
-        bool claimCollateral
+        bool claimCollateral,
+        address onBehalfOf
     ) external {
-        DataTypes.UserPosition storage position = s.positions[msg.sender][collateral][yoloAsset];
-        if (position.borrower != msg.sender) revert LendingPairModule__InvalidPosition();
+        // Position lookup uses onBehalfOf (whose debt we're reducing)
+        DataTypes.UserPosition storage position = s.positions[onBehalfOf][collateral][yoloAsset];
+        if (position.borrower != onBehalfOf) revert LendingPairModule__InvalidPosition();
 
         bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
         DataTypes.PairConfiguration storage pairConfig = s._pairConfigs[pairId];
@@ -678,14 +691,14 @@ library LendingPairModule {
         (uint256 interestPaid, uint256 principalPaid) =
             _processRepayment(s, position, pairConfig, yoloAsset, actualRepayAmount, actualDebt);
 
-        // Handle full repayment if applicable
+        // Handle full repayment if applicable (collateral goes back to position owner)
         if (position.normalizedDebtRay == 0 && claimCollateral) {
             uint256 collateralToReturn = position.collateralSuppliedAmount;
             position.collateralSuppliedAmount = 0;
-            IERC20(collateral).safeTransfer(msg.sender, collateralToReturn);
+            IERC20(collateral).safeTransfer(onBehalfOf, collateralToReturn);
         }
 
-        emit Repaid(msg.sender, collateral, yoloAsset, actualRepayAmount, interestPaid, principalPaid);
+        emit Repaid(onBehalfOf, collateral, yoloAsset, actualRepayAmount, interestPaid, principalPaid);
     }
 
     /**
@@ -748,17 +761,29 @@ library LendingPairModule {
 
     /**
      * @notice Deposit additional collateral to existing position
+     * @dev Supports onBehalfOf pattern (Aave V3) for collateral deposits
+     *      CRITICAL: Pulls collateral from msg.sender (caller pays) but credits onBehalfOf
+     *      IMPORTANT: Requires existing position. For new positions, use borrow() with collateralAmount > 0
      * @param s Reference to AppStorage
      * @param collateral Collateral asset
      * @param yoloAsset Synthetic asset
      * @param amount Amount to deposit
+     * @param onBehalfOf Address to credit the collateral to (collateral from msg.sender)
      */
-    function depositCollateral(AppStorage storage s, address collateral, address yoloAsset, uint256 amount) external {
+    function depositCollateral(
+        AppStorage storage s,
+        address collateral,
+        address yoloAsset,
+        uint256 amount,
+        address onBehalfOf
+    ) external {
         if (amount == 0) revert LendingPairModule__InsufficientAmount();
 
-        DataTypes.UserPosition storage position = s.positions[msg.sender][collateral][yoloAsset];
-        if (position.borrower != msg.sender) revert LendingPairModule__InvalidPosition();
+        // Position lookup uses onBehalfOf (whose collateral we're increasing)
+        DataTypes.UserPosition storage position = s.positions[onBehalfOf][collateral][yoloAsset];
+        if (position.borrower != onBehalfOf) revert LendingPairModule__InvalidPosition();
 
+        // Collateral is pulled from msg.sender (payer)
         IERC20(collateral).safeTransferFrom(msg.sender, address(this), amount);
         position.collateralSuppliedAmount += amount;
     }
@@ -797,12 +822,12 @@ library LendingPairModule {
 
     /**
      * @notice Update global liquidity index with compound interest
-     * @param s Reference to AppStorage
      * @param config Reference to pair configuration
      * @param rate Interest rate in basis points
      */
     function _updateGlobalLiquidityIndex(
-        AppStorage storage s,
+        AppStorage storage,
+        /* s */
         DataTypes.PairConfiguration storage config,
         uint256 rate
     ) internal {
