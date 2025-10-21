@@ -73,6 +73,10 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     /// @notice Role for zero-fee flash loans
     bytes32 public constant PRIVILEGED_FLASHLOANER_ROLE = keccak256("PRIVILEGED_FLASHLOANER");
 
+    /// @notice Role for contracts that can operate on behalf of users (Looper, Position Managers)
+    /// @dev Allows deposit/borrow/repay operations for onBehalfOf addresses (e.g., leverage loops)
+    bytes32 public constant LOOPER_ROLE = keccak256("LOOPER");
+
     // ========================
     // IMMUTABLE STORAGE
     // ========================
@@ -808,27 +812,59 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Borrow synthetic assets against collateral
+     * @dev Follows Aave V3 onBehalfOf pattern for leverage loop contracts
+     *      - If onBehalfOf != msg.sender, caller must have LOOPER_ROLE
+     *      - Collateral is pulled from msg.sender (payer)
+     *      - Borrowed tokens are minted to msg.sender (enables flash loan repayment)
+     *      - Position ownership and debt is attributed to onBehalfOf (NOT token receiver)
      * @param yoloAsset Synthetic asset to borrow
      * @param borrowAmount Amount to borrow (18 decimals)
      * @param collateral Collateral asset
      * @param collateralAmount Collateral to deposit (native decimals)
+     * @param onBehalfOf Address to own the position/debt (borrowed tokens minted to msg.sender)
      */
-    function borrow(address yoloAsset, uint256 borrowAmount, address collateral, uint256 collateralAmount)
-        external
-        whenNotPaused
-        nonReentrant
-    {
-        s.borrowSyntheticAsset(yoloAsset, borrowAmount, collateral, collateralAmount);
+    function borrow(
+        address yoloAsset,
+        uint256 borrowAmount,
+        address collateral,
+        uint256 collateralAmount,
+        address onBehalfOf
+    ) external whenNotPaused nonReentrant {
+        // Authorization: only LOOPER_ROLE can borrow on behalf of others
+        if (onBehalfOf != msg.sender) {
+            if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
+                revert YoloHook__CallerNotAuthorized();
+            }
+        }
+
+        s.borrowSyntheticAsset(yoloAsset, borrowAmount, collateral, collateralAmount, onBehalfOf);
     }
 
     /**
      * @notice Repay borrowed synthetic assets
+     * @dev Follows Aave V3 onBehalfOf pattern for debt repayment
+     *      - If onBehalfOf != msg.sender, caller must have LOOPER_ROLE
+     *      - Tokens are burned from msg.sender (payer)
+     *      - Debt reduction is applied to onBehalfOf's position (beneficiary)
+     *      - Collateral returned to onBehalfOf if fully repaid
      * @param yoloAsset Synthetic asset to repay
      * @param collateral Collateral asset
      * @param repayAmount Amount to repay (18 decimals)
+     * @param onBehalfOf Address whose debt to reduce (tokens burned from msg.sender)
      */
-    function repay(address yoloAsset, address collateral, uint256 repayAmount) external whenNotPaused nonReentrant {
-        s.repaySyntheticAsset(collateral, yoloAsset, repayAmount, true); // true = claim collateral if fully repaid
+    function repay(address yoloAsset, address collateral, uint256 repayAmount, address onBehalfOf)
+        external
+        whenNotPaused
+        nonReentrant
+    {
+        // Authorization: only LOOPER_ROLE can repay on behalf of others
+        if (onBehalfOf != msg.sender) {
+            if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
+                revert YoloHook__CallerNotAuthorized();
+            }
+        }
+
+        s.repaySyntheticAsset(collateral, yoloAsset, repayAmount, true, onBehalfOf); // true = claim collateral if fully repaid
     }
 
     /**
@@ -842,16 +878,29 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Add collateral to existing position
+     * @dev Follows Aave V3 onBehalfOf pattern for collateral deposits
+     *      - If onBehalfOf != msg.sender, caller must have LOOPER_ROLE
+     *      - Collateral is pulled from msg.sender (payer)
+     *      - Collateral is credited to onBehalfOf's position (receiver)
+     *      - IMPORTANT: Requires existing position (use borrow() for new positions)
      * @param yoloAsset Synthetic asset
      * @param collateral Collateral asset
      * @param amount Amount to deposit
+     * @param onBehalfOf Address to credit the collateral to (collateral from msg.sender)
      */
-    function depositCollateral(address yoloAsset, address collateral, uint256 amount)
+    function depositCollateral(address yoloAsset, address collateral, uint256 amount, address onBehalfOf)
         external
         whenNotPaused
         nonReentrant
     {
-        s.depositCollateral(collateral, yoloAsset, amount);
+        // Authorization: only LOOPER_ROLE can deposit on behalf of others
+        if (onBehalfOf != msg.sender) {
+            if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
+                revert YoloHook__CallerNotAuthorized();
+            }
+        }
+
+        s.depositCollateral(collateral, yoloAsset, amount, onBehalfOf);
     }
 
     /**
