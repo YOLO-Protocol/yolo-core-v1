@@ -130,6 +130,13 @@ library LendingPairModule {
         address indexed user, address indexed collateral, address indexed yoloAsset, uint256 interestPaid
     );
 
+    /**
+     * @notice Emitted when collateral is withdrawn from a position
+     */
+    event CollateralWithdrawn(
+        address indexed user, address indexed collateral, address indexed yoloAsset, uint256 amount, address receiver
+    );
+
     function getPositionDebt(AppStorage storage s, address user, address collateral, address yoloAsset)
         external
         view
@@ -168,6 +175,9 @@ library LendingPairModule {
     error LendingPairModule__ExceedsCollateralCap();
     error LendingPairModule__NoDebt();
     error LendingPairModule__RepayExceedsDebt();
+    error LendingPairModule__InsufficientCollateral();
+    error LendingPairModule__PositionInsolvent();
+    error LendingPairModule__InvalidReceiver();
 
     // ============================================================
     // CONSTANTS
@@ -786,6 +796,56 @@ library LendingPairModule {
         // Collateral is pulled from msg.sender (payer)
         IERC20(collateral).safeTransferFrom(msg.sender, address(this), amount);
         position.collateralSuppliedAmount += amount;
+    }
+
+    /**
+     * @notice Withdraw collateral from position
+     * @dev Supports onBehalfOf pattern for partial collateral withdrawal
+     *      CRITICAL: Withdraws from onBehalfOf's position, sends to receiver
+     *      Must maintain minimum collateralization ratio after withdrawal
+     * @param s Reference to AppStorage
+     * @param collateral Collateral asset
+     * @param yoloAsset Synthetic asset
+     * @param amount Amount to withdraw
+     * @param onBehalfOf Address whose position to withdraw from
+     * @param receiver Address to receive the withdrawn collateral
+     */
+    function withdrawCollateral(
+        AppStorage storage s,
+        address collateral,
+        address yoloAsset,
+        uint256 amount,
+        address onBehalfOf,
+        address receiver
+    ) external {
+        if (amount == 0) revert LendingPairModule__InsufficientAmount();
+        if (receiver == address(0)) revert LendingPairModule__InvalidReceiver();
+
+        // Position lookup uses onBehalfOf (whose collateral we're withdrawing)
+        DataTypes.UserPosition storage position = s.positions[onBehalfOf][collateral][yoloAsset];
+        if (position.borrower != onBehalfOf) revert LendingPairModule__InvalidPosition();
+        if (position.collateralSuppliedAmount < amount) revert LendingPairModule__InsufficientCollateral();
+
+        bytes32 pairId = keccak256(abi.encodePacked(yoloAsset, collateral));
+        DataTypes.PairConfiguration storage pairConfig = s._pairConfigs[pairId];
+
+        // Update global liquidity index before solvency check
+        _updateGlobalLiquidityIndex(s, pairConfig, pairConfig.borrowRate);
+
+        // Reduce collateral first
+        position.collateralSuppliedAmount -= amount;
+
+        // Check solvency after withdrawal (only if position has debt)
+        if (position.normalizedDebtRay > 0) {
+            if (!_isSolvent(s, position, collateral, yoloAsset, pairConfig.ltv)) {
+                revert LendingPairModule__PositionInsolvent();
+            }
+        }
+
+        // Transfer collateral to receiver
+        IERC20(collateral).safeTransfer(receiver, amount);
+
+        emit CollateralWithdrawn(onBehalfOf, collateral, yoloAsset, amount, receiver);
     }
 
     // ============================================================
