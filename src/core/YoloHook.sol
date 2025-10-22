@@ -645,10 +645,10 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Updates the oracle module
-     * @dev Only callable by risk admin (oracle is swappable)
+     * @dev Only callable by default admin (critical infrastructure change)
      * @param _yoloOracle New oracle address
      */
-    function updateOracle(IYoloOracle _yoloOracle) external onlyRiskAdmin {
+    function updateOracle(IYoloOracle _yoloOracle) external onlyDefaultAdmin {
         if (address(_yoloOracle) == address(0)) revert YoloHook__InvalidOracle();
         s.yoloOracle = _yoloOracle;
         emit OracleUpdated(address(_yoloOracle));
@@ -656,10 +656,10 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Updates the YLP vault
-     * @dev Only callable by assets admin
+     * @dev Only callable by default admin (critical infrastructure change)
      * @param _ylpVault New YLP vault address
      */
-    function updateYLPVault(address _ylpVault) external onlyAssetsAdmin {
+    function updateYLPVault(address _ylpVault) external onlyDefaultAdmin {
         if (_ylpVault == address(0)) revert YoloHook__InvalidAddress();
         s.ylpVault = _ylpVault;
         emit YLPVaultUpdated(_ylpVault);
@@ -667,10 +667,10 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Updates the treasury address
-     * @dev Only callable by assets admin
+     * @dev Only callable by default admin (governance-level decision)
      * @param _treasury New treasury address
      */
-    function setTreasury(address _treasury) external onlyAssetsAdmin {
+    function setTreasury(address _treasury) external onlyDefaultAdmin {
         if (_treasury == address(0)) revert YoloHook__InvalidAddress();
         s.treasury = _treasury;
         emit TreasuryUpdated(_treasury);
