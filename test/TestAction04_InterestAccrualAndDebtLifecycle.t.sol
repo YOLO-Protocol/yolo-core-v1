@@ -796,7 +796,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
     // WITHDRAW COLLATERAL TESTS
     // ============================================================
 
-    function test_Action04_Case21_withdrawCollateral_partialWithdrawal() public {
+    function test_Action04_Case21_withdrawCollateralPartialWithdrawal() public {
         // Setup: Borrow with excess collateral
         vm.startPrank(borrower1);
 
@@ -823,7 +823,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         assertEq(balanceAfter - balanceAfterDeposit, withdrawAmount, "Borrower should receive withdrawn collateral");
     }
 
-    function test_Action04_Case22_withdrawCollateral_failsIfInsolvent() public {
+    function test_Action04_Case22_withdrawCollateralFailsIfInsolvent() public {
         // Setup: Borrow at exactly 80% LTV
         vm.startPrank(borrower1);
         usdc.mint(borrower1, 5_000e6);
@@ -837,7 +837,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         vm.stopPrank();
     }
 
-    function test_Action04_Case23_withdrawCollateral_onBehalfOf_requiresLooperRole() public {
+    function test_Action04_Case23_withdrawCollateralOnBehalfOfRequiresLooperRole() public {
         // Setup position
         vm.startPrank(borrower1);
         usdc.mint(borrower1, 20_000e6);
@@ -851,7 +851,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         yoloHook.withdrawCollateral(address(usdc), yUSD, 1_000e6, borrower1, borrower2);
     }
 
-    function test_Action04_Case24_withdrawCollateral_zeroAddressReceiver_fails() public {
+    function test_Action04_Case24_withdrawCollateralZeroAddressReceiverFails() public {
         // Setup position
         vm.startPrank(borrower1);
         usdc.mint(borrower1, 20_000e6);
@@ -864,7 +864,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         vm.stopPrank();
     }
 
-    function test_Action04_Case25_withdrawCollateral_fullWithdrawal_withoutDebt() public {
+    function test_Action04_Case25_withdrawCollateralFullWithdrawalWithoutDebt() public {
         // Setup: Borrow and fully repay
         vm.startPrank(borrower1);
 
@@ -895,7 +895,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         vm.stopPrank();
     }
 
-    function test_Action04_Case26_withdrawCollateral_afterInterestAccrual() public {
+    function test_Action04_Case26_withdrawCollateralAfterInterestAccrual() public {
         // Setup: Borrow with excess collateral
         vm.startPrank(borrower1);
         usdc.mint(borrower1, 20_000e6);
@@ -919,7 +919,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         assertTrue(debtAfter > 4 ether, "Interest accrued");
     }
 
-    function test_Action04_Case27_withdrawCollateral_emitsEvent() public {
+    function test_Action04_Case27_withdrawCollateralEmitsEvent() public {
         // Setup position
         vm.startPrank(borrower1);
         usdc.mint(borrower1, 20_000e6);
