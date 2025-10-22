@@ -14,6 +14,7 @@ import {PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title SwapModule
@@ -273,6 +274,25 @@ library SwapModule {
             s.totalAnchorReserveUSY += netIn;
             s.totalAnchorReserveUSDC -= amountOut;
             s._pendingDehypoUSDC = amountOut;
+        }
+
+        // Distribute anchor swap fees
+        if (feeAmount > 0) {
+            // Split fee based on governance parameter
+            uint256 feeToTreasury = (feeAmount * s.anchorFeeTreasuryShareBps) / 10_000;
+            uint256 feeToLPs = feeAmount - feeToTreasury;
+
+            // Add LP portion to reserves (auto-compound, increases sUSY value)
+            if (usdcToUsy) {
+                s.totalAnchorReserveUSDC += feeToLPs;
+            } else {
+                s.totalAnchorReserveUSY += feeToLPs;
+            }
+
+            // Transfer treasury portion (skip if treasury not set)
+            if (feeToTreasury > 0 && s.treasury != address(0)) {
+                IERC20(Currency.unwrap(currencyIn)).transfer(s.treasury, feeToTreasury);
+            }
         }
 
         bool exactIn = params.amountSpecified < 0;
