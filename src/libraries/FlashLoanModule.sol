@@ -57,16 +57,22 @@ library FlashLoanModule {
      * @dev Mints synthetic asset → calls borrower callback → burns repayment
      *      Fee is minted to treasury
      * @param s AppStorage reference
+     * @param caller Original caller to check for privileges (msg.sender of YoloHook function)
      * @param borrower Contract implementing IFlashBorrower
      * @param token Synthetic asset to borrow
      * @param amount Amount to borrow (in token decimals)
      * @param data Arbitrary data passed to borrower callback
      * @return success Whether flash loan succeeded
+     * @return fee Fee amount charged (0 for privileged callers)
      */
-    function flashLoan(AppStorage storage s, address borrower, address token, uint256 amount, bytes calldata data)
-        external
-        returns (bool success, uint256 fee)
-    {
+    function flashLoan(
+        AppStorage storage s,
+        address caller,
+        address borrower,
+        address token,
+        uint256 amount,
+        bytes calldata data
+    ) external returns (bool success, uint256 fee) {
         // Validate inputs
         if (borrower == address(0)) revert FlashLoanModule__InvalidBorrower();
         if (amount == 0) revert FlashLoanModule__InvalidAmount();
@@ -85,7 +91,8 @@ library FlashLoanModule {
         }
 
         // Calculate fee (zero for privileged flashloaners)
-        if (IACLManager(s.ACL_MANAGER).hasRole(keccak256("PRIVILEGED_FLASHLOANER"), msg.sender)) {
+        // Check caller (original msg.sender), not current msg.sender (which is YoloHook)
+        if (IACLManager(s.ACL_MANAGER).hasRole(keccak256("PRIVILEGED_FLASHLOANER"), caller)) {
             fee = 0; // Privileged flashloaners get zero fees
         } else {
             fee = (amount * s.flashLoanFeeBps) / 10000; // Normal fee for others
@@ -128,14 +135,17 @@ library FlashLoanModule {
      * @dev Mints all assets → calls borrower callback → burns all repayments
      *      Fees are minted to treasury
      * @param s AppStorage reference
+     * @param caller Original caller to check for privileges (msg.sender of YoloHook function)
      * @param borrower Contract implementing IFlashBorrower
      * @param tokens Array of synthetic assets to borrow
      * @param amounts Array of amounts to borrow (in token decimals)
      * @param data Arbitrary data passed to borrower callback
      * @return success Whether flash loan succeeded
+     * @return fees Array of fee amounts charged (0 for privileged callers)
      */
     function flashLoanBatch(
         AppStorage storage s,
+        address caller,
         address borrower,
         address[] calldata tokens,
         uint256[] calldata amounts,
@@ -172,7 +182,8 @@ library FlashLoanModule {
             }
 
             // Calculate fee (zero for privileged flashloaners)
-            if (IACLManager(s.ACL_MANAGER).hasRole(keccak256("PRIVILEGED_FLASHLOANER"), msg.sender)) {
+            // Check caller (original msg.sender), not current msg.sender (which is YoloHook)
+            if (IACLManager(s.ACL_MANAGER).hasRole(keccak256("PRIVILEGED_FLASHLOANER"), caller)) {
                 fees[i] = 0; // Privileged flashloaners get zero fees
             } else {
                 fees[i] = (amount * s.flashLoanFeeBps) / 10000; // Normal fee for others
@@ -219,17 +230,24 @@ library FlashLoanModule {
     /**
      * @notice Preview flash loan fee for a single asset
      * @param s AppStorage reference
+     * @param caller Address to check for privileges
      * @param token Synthetic asset address
      * @param amount Amount to borrow
-     * @return fee Fee amount in token decimals
+     * @return fee Fee amount in token decimals (0 for privileged callers)
      */
-    function previewFlashLoanFee(AppStorage storage s, address token, uint256 amount)
+    function previewFlashLoanFee(AppStorage storage s, address caller, address token, uint256 amount)
         external
         view
         returns (uint256 fee)
     {
         if (!s._isYoloAsset[token]) return 0;
-        fee = (amount * s.flashLoanFeeBps) / 10000;
+
+        // Check if caller has privileged role
+        if (IACLManager(s.ACL_MANAGER).hasRole(keccak256("PRIVILEGED_FLASHLOANER"), caller)) {
+            fee = 0; // Privileged flashloaners get zero fees
+        } else {
+            fee = (amount * s.flashLoanFeeBps) / 10000;
+        }
     }
 
     /**

@@ -176,6 +176,17 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         _;
     }
 
+    /**
+     * @notice Ensure caller has LOOPER role
+     * @dev Used for privileged operations that only looper contracts can perform
+     */
+    modifier onlyLooper() {
+        if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
+            revert YoloHook__CallerNotAuthorized();
+        }
+        _;
+    }
+
     // ========================
     // CONSTRUCTOR
     // ========================
@@ -1081,7 +1092,8 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         returns (bool success)
     {
         uint256 fee;
-        (success, fee) = FlashLoanModule.flashLoan(s, borrower, token, amount, data);
+        // Pass msg.sender as caller for privilege checking
+        (success, fee) = FlashLoanModule.flashLoan(s, msg.sender, borrower, token, amount, data);
 
         address[] memory tokens = new address[](1);
         tokens[0] = token;
@@ -1110,9 +1122,48 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         bytes calldata data
     ) external whenNotPaused nonReentrant returns (bool success) {
         uint256[] memory fees;
-        (success, fees) = FlashLoanModule.flashLoanBatch(s, borrower, tokens, amounts, data);
+        // Pass msg.sender as caller for privilege checking
+        (success, fees) = FlashLoanModule.flashLoanBatch(s, msg.sender, borrower, tokens, amounts, data);
 
         // Emit event (library cannot emit events with proper context)
+        emit FlashLoanExecuted(borrower, msg.sender, tokens, amounts, fees);
+    }
+
+    /**
+     * @notice Execute a privileged flash loan for leverage operations
+     * @dev Only callable by contracts with LOOPER_ROLE
+     *      No reentrancy guard to allow callbacks to borrow/repay
+     *      Used by YoloLooper for leverage/deleverage operations
+     *      Borrower must be msg.sender to prevent proxy attacks
+     * @param borrower Contract implementing IFlashBorrower (must be msg.sender)
+     * @param token Synthetic asset to borrow
+     * @param amount Amount to borrow (in token decimals)
+     * @param data Arbitrary data passed to borrower callback
+     * @return success Whether flash loan succeeded
+     */
+    function leverageFlashLoan(address borrower, address token, uint256 amount, bytes calldata data)
+        external
+        whenNotPaused
+        onlyLooper
+        returns (bool success)
+    {
+        // Security: Prevent loopers from proxying flash loans to arbitrary addresses
+        if (borrower != msg.sender) {
+            revert YoloHook__CallerNotAuthorized();
+        }
+
+        // Note: No nonReentrant modifier - allows callback to call borrow/repay
+        uint256 fee;
+        // Pass msg.sender (the looper) as caller for privilege checking
+        (success, fee) = FlashLoanModule.flashLoan(s, msg.sender, borrower, token, amount, data);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = token;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = amount;
+        uint256[] memory fees = new uint256[](1);
+        fees[0] = fee;
+
         emit FlashLoanExecuted(borrower, msg.sender, tokens, amounts, fees);
     }
 
@@ -1161,7 +1212,8 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @return fee Fee amount in token decimals
      */
     function previewFlashLoanFee(address token, uint256 amount) external view returns (uint256 fee) {
-        return FlashLoanModule.previewFlashLoanFee(s, token, amount);
+        // Pass msg.sender as caller for accurate fee preview
+        return FlashLoanModule.previewFlashLoanFee(s, msg.sender, token, amount);
     }
 
     /**

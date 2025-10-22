@@ -165,4 +165,15 @@ interface IYoloHook {
     function flashLoan(address borrower, address token, uint256 amount, bytes calldata data)
         external
         returns (bool success);
+
+    /// @notice Execute privileged flash loan for leverage operations
+    /// @dev Only callable by contracts with LOOPER_ROLE, no reentrancy guard
+    /// @param borrower Address to receive the loan (the looper)
+    /// @param token Token to borrow
+    /// @param amount Amount to borrow
+    /// @param data Arbitrary data passed to borrower
+    /// @return success True if flash loan succeeded
+    function leverageFlashLoan(address borrower, address token, uint256 amount, bytes calldata data)
+        external
+        returns (bool success);
 }
