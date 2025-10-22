@@ -334,6 +334,61 @@ contract MockYoloHook is IYoloHook {
         return true;
     }
 
+    function isWhitelistedCollateral(address) external pure returns (bool) {
+        return true;
+    }
+
+    function getAllSyntheticAssets() external pure returns (address[] memory) {
+        return new address[](0);
+    }
+
+    function getAllWhitelistedCollaterals() external pure returns (address[] memory) {
+        return new address[](0);
+    }
+
+    function getAssetConfiguration(address) external pure returns (DataTypes.AssetConfiguration memory) {
+        return DataTypes.AssetConfiguration({
+            syntheticToken: address(0),
+            oracleSource: address(0),
+            maxSupply: 0,
+            maxFlashLoanAmount: 0,
+            isActive: false,
+            createdAt: 0
+        });
+    }
+
+    function paused() external pure returns (bool) {
+        return false;
+    }
+
+    function getUserPositionKeys(address) external pure returns (DataTypes.UserPositionKey[] memory) {
+        return new DataTypes.UserPositionKey[](0);
+    }
+
+    function getSyntheticCollaterals(address) external pure returns (address[] memory) {
+        return new address[](0);
+    }
+
+    function getCollateralSynthetics(address) external pure returns (address[] memory) {
+        return new address[](0);
+    }
+
+    function getAnchorAmplification() external pure returns (uint256) {
+        return 100; // Mock amplification
+    }
+
+    function getAnchorSwapFeeBps() external pure returns (uint256) {
+        return 4; // Mock 0.04%
+    }
+
+    function getSyntheticSwapFeeBps() external pure returns (uint256) {
+        return 30; // Mock 0.30%
+    }
+
+    function getFlashLoanFeeBps() external pure returns (uint256) {
+        return 9; // Mock 0.09%
+    }
+
     // CDP Operations (stub implementations for IYoloHook compliance)
     function borrow(address, uint256, address, uint256, address) external pure {}
     function repay(address, address, uint256, bool, address) external pure {}
