@@ -32,6 +32,8 @@ library StablecoinModule {
      * @dev MINIMUM_LIQUIDITY mirrors YoloHookStorage.MINIMUM_LIQUIDITY
      *      Libraries cannot access contract constants, so we maintain this copy.
      *      CRITICAL: Must match YoloHookStorage.MINIMUM_LIQUIDITY = 1000
+     *      WARNING: Duplication risk - if YoloHookStorage value changes, this must be updated manually
+     *      TODO: Consider adding build-time assertion or passing as parameter from hook
      */
     uint256 private constant MINIMUM_LIQUIDITY = 1000;
 

@@ -115,9 +115,9 @@ contract TestContract04_YoloSyntheticAsset is Test {
         vm.prank(yoloHook);
         yETH.mint(alice, 10e18);
 
-        // Average should be (10*100e8 + 10*200e8) / 20 = 150e8 (exact, no rounding)
+        // Average should be (10*100e8 + 10*200e8) / 20 = 150e8 using ceiling division
         assertEq(yETH.balanceOf(alice), 20e18);
-        // In this case ceiling division gives same result as regular division (no remainder)
+        // In this case ceiling division gives same result as floor division (no remainder)
         assertEq(yETH.avgPriceX8(alice), 150e8);
     }
 
@@ -142,9 +142,10 @@ contract TestContract04_YoloSyntheticAsset is Test {
         assertEq(yETH.balanceOf(alice), 5e18);
         assertEq(yETH.avgPriceX8(alice), PRICE_100_USY);
 
-        // Bob should have weighted average: (10*200e8 + 5*100e8) / 15 = 166.67e8 (ceiling)
+        // Bob should have weighted average: (10*200e8 + 5*100e8) / 15 = 166.67e8 using ceiling division
         assertEq(yETH.balanceOf(bob), 15e18);
-        // With ceiling division: (2000e26 + 500e26 + 15e18 - 1) / 15e18
+        // Ceiling division rounds up to favor the protocol (conservative cost basis tracking)
+        // Formula: (totalCost + totalQty - 1) / totalQty
         uint256 totalCost = 10e18 * PRICE_200_USY + 5e18 * PRICE_100_USY;
         uint256 totalQty = 15e18;
         uint128 expectedAvg = SafeCast.toUint128((totalCost + totalQty - 1) / totalQty);
@@ -349,9 +350,9 @@ contract TestContract04_YoloSyntheticAsset is Test {
         vm.prank(yoloHook);
         yETH.mint(alice, 10e18);
 
-        // Average should be (10*100e8 + 10*300e8) / 20 = 200e8 (exact, no rounding)
+        // Average should be (10*100e8 + 10*300e8) / 20 = 200e8 using ceiling division
         assertEq(yETH.balanceOf(alice), 20e18);
-        // In this case ceiling division gives same result (no remainder)
+        // In this case ceiling division gives same result as floor division (no remainder)
         assertEq(yETH.avgPriceX8(alice), 200e8);
     }
 

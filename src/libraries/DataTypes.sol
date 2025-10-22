@@ -101,8 +101,8 @@ library DataTypes {
      * @param collateral Collateral asset address
      * @param yoloAsset Synthetic asset address
      * @param collateralSuppliedAmount Amount of collateral deposited (native decimals)
-     * @param normalizedPrincipalRay Principal amount in RAY precision (27 decimals)
-     * @param normalizedDebtRay Total debt (principal + interest) in RAY precision (27 decimals)
+     * @param normalizedPrincipalRay Principal normalized by user's entry index (stored as 18 decimal value, computed using RAY precision)
+     * @param normalizedDebtRay Total debt (principal + interest) normalized by user's entry index (stored as 18 decimal value, computed using RAY precision)
      * @param userLiquidityIndexRay User's entry liquidity index (RAY precision)
      * @param storedInterestRate Interest rate at position creation/renewal (basis points)
      * @param lastUpdatedTimeStamp Last time position was updated

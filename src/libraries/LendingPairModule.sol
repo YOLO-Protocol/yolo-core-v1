@@ -611,7 +611,7 @@ library LendingPairModule {
             }
         } else {
             // EXISTING POSITION - exact reference pattern
-            // Debt: normalizedDebt is 18 decimals, multiply by index (27) and divide by RAY (27) = 18 decimals
+            // normalizedDebtRay stores scaled debt (18 decimals), multiply by index (27) and divide by RAY (27) = actual debt (18 decimals)
             uint256 currentDebt = InterestRateMath.divUp(position.normalizedDebtRay * pairConfig.liquidityIndexRay, RAY);
 
             // Principal: uses helper function with correct index tracking

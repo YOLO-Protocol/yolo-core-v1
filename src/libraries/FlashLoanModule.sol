@@ -14,7 +14,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  * @notice Externally linked library for flash loan operations
  * @dev Implements EIP-3156 inspired flash loans adapted for YOLO Protocol
  *      Uses mint→callback→burn pattern for synthetic assets
- *      Fees are minted to treasury, not burned
+ *      Principal is burned, fees are transferred to treasury
  */
 library FlashLoanModule {
     using SafeERC20 for IERC20;
@@ -54,8 +54,8 @@ library FlashLoanModule {
 
     /**
      * @notice Execute a flash loan for a single synthetic asset
-     * @dev Mints synthetic asset → calls borrower callback → burns repayment
-     *      Fee is minted to treasury
+     * @dev Mints synthetic asset → calls borrower callback → burns principal, transfers fee to treasury
+     *      Borrower must return principal + fee; only principal is burned, fee goes to treasury
      * @param s AppStorage reference
      * @param caller Original caller to check for privileges (msg.sender of YoloHook function)
      * @param borrower Contract implementing IFlashBorrower
@@ -138,8 +138,8 @@ library FlashLoanModule {
 
     /**
      * @notice Execute a flash loan for multiple synthetic assets
-     * @dev Mints all assets → calls borrower callback → burns all repayments
-     *      Fees are minted to treasury
+     * @dev Mints all assets → calls borrower callback → burns principals, transfers fees to treasury
+     *      Borrower must return each principal + fee; only principals are burned, fees go to treasury
      * @param s AppStorage reference
      * @param caller Original caller to check for privileges (msg.sender of YoloHook function)
      * @param borrower Contract implementing IFlashBorrower

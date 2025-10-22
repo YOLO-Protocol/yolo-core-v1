@@ -14,7 +14,8 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title SyntheticSwapModule
- * @notice Externally linked library that mirrors the V0.5 synthetic swap mechanics
+ * @notice Externally linked library for oracle-based synthetic asset swaps
+ * @dev Implements mint-burn pattern for synthetic swaps using YoloOracle prices
  */
 library SyntheticSwapModule {
     using CurrencyLibrary for Currency;

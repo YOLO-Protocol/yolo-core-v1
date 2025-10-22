@@ -64,7 +64,7 @@ library SwapModule {
      * @param amountSpecified Input amount (exact input only, always negative in v4)
      * @return amountIn Input amount in native decimals
      * @return amountOut Output amount in native decimals
-     * @return feeAmount Fee collected in output token (native decimals)
+     * @return feeAmount Fee collected in input token (native decimals)
      */
     function calculateAnchorSwapDelta(
         AppStorage storage s,

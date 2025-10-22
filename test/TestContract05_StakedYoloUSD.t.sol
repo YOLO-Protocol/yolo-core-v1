@@ -93,7 +93,7 @@ contract TestContract05_StakedYoloUSD is Test {
         (uint256 usyPerSUSY, uint256 usdcPerSUSY) = sUSY.getReserveBreakdownPerSUSY();
 
         // Expected: (1000e18 * 1e18) / 500e18 = 2e18 USY per sUSY
-        //           (1000e18 * 1e18) / 500e18 = 2e18 USDC per sUSY (normalized)
+        //           1000e6 USDC normalized to 1000e18, then (1000e18 * 1e18) / 500e18 = 2e18 USDC per sUSY
         assertEq(usyPerSUSY, 2e18, "USY per sUSY should be 2e18");
         assertEq(usdcPerSUSY, 2e18, "USDC per sUSY should be 2e18 (normalized)");
     }
@@ -110,7 +110,7 @@ contract TestContract05_StakedYoloUSD is Test {
         (uint256 usyPerSUSY, uint256 usdcPerSUSY) = sUSY.getReserveBreakdownPerSUSY();
 
         // Expected: (2000e18 * 1e18) / 100e18 = 20e18 USY per sUSY
-        //           (1000e18 * 1e18) / 100e18 = 10e18 USDC per sUSY
+        //           1000e6 USDC normalized to 1000e18, then (1000e18 * 1e18) / 100e18 = 10e18 USDC per sUSY
         assertEq(usyPerSUSY, 20e18, "USY per sUSY should be 20e18");
         assertEq(usdcPerSUSY, 10e18, "USDC per sUSY should be 10e18");
     }
