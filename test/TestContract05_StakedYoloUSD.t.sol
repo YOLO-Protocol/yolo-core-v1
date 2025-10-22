@@ -360,4 +360,8 @@ contract MockYoloHook is IYoloHook {
     function flashLoan(address, address, uint256, bytes calldata) external pure returns (bool) {
         return true;
     }
+
+    function leverageFlashLoan(address, address, uint256, bytes calldata) external pure returns (bool) {
+        return true;
+    }
 }
