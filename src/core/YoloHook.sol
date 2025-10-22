@@ -100,6 +100,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     event AnchorSwapFeeUpdated(uint256 newFeeBps);
     event SyntheticSwapFeeUpdated(uint256 newFeeBps);
     event AnchorAmplificationUpdated(uint256 newAmplification);
+    event AnchorFeeTreasuryShareUpdated(uint256 oldShareBps, uint256 newShareBps);
     event PrivilegedLiquidatorToggled(bool enabled);
     event YLPFundedWithUSY(address indexed callerAsset, uint256 amount);
     event EmergencyWithdrawal(address indexed token, address indexed to, uint256 amount);
@@ -118,6 +119,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     error YoloHook__InvalidConfiguration();
     error YoloHook__NoPrivilegedLiquidators();
     error YoloHook__InvalidRescue();
+    error YoloHook__InvalidFeeSplit();
 
     // ========================
     // INTERNAL ACCESS CONTROL CHECKS
@@ -741,6 +743,22 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         if (newFeeBps > 10000) revert YoloHook__InvalidConfiguration(); // Max 100%
         s.syntheticSwapFeeBps = newFeeBps;
         emit SyntheticSwapFeeUpdated(newFeeBps);
+    }
+
+    /**
+     * @notice Updates anchor pool fee treasury share
+     * @dev Only callable by risk admin
+     *      Remaining share (10000 - newShareBps) auto-compounds into LP reserves
+     *      Changes take effect immediately for new swaps
+     * @param newShareBps New treasury share in basis points (0-10000)
+     */
+    function setAnchorFeeTreasuryShare(uint256 newShareBps) external onlyRiskAdmin {
+        if (newShareBps > 10_000) revert YoloHook__InvalidFeeSplit();
+
+        uint256 oldShare = s.anchorFeeTreasuryShareBps;
+        s.anchorFeeTreasuryShareBps = newShareBps;
+
+        emit AnchorFeeTreasuryShareUpdated(oldShare, newShareBps);
     }
 
     /**
