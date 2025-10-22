@@ -72,6 +72,52 @@ interface IYoloHook {
     /// @notice Returns true if the address is a YOLO synthetic asset
     function isYoloAsset(address syntheticToken) external view returns (bool);
 
+    /// @notice Returns true if the address is whitelisted as collateral
+    function isWhitelistedCollateral(address collateralAsset) external view returns (bool);
+
+    /// @notice Get all synthetic assets
+    function getAllSyntheticAssets() external view returns (address[] memory);
+
+    /// @notice Get all whitelisted collaterals
+    function getAllWhitelistedCollaterals() external view returns (address[] memory);
+
+    /// @notice Get asset configuration
+    function getAssetConfiguration(address syntheticAsset) external view returns (DataTypes.AssetConfiguration memory);
+
+    /// @notice Check if protocol is paused
+    function paused() external view returns (bool);
+
+    /// @notice Get user's position keys for iteration
+    /// @param user User address
+    /// @return Array of position keys (user's active positions)
+    function getUserPositionKeys(address user) external view returns (DataTypes.UserPositionKey[] memory);
+
+    /// @notice Get valid collaterals for a synthetic asset
+    /// @param syntheticAsset Synthetic asset address
+    /// @return Array of collateral addresses valid for this synthetic
+    function getSyntheticCollaterals(address syntheticAsset) external view returns (address[] memory);
+
+    /// @notice Get valid synthetic assets for a collateral
+    /// @param collateral Collateral asset address
+    /// @return Array of synthetic addresses valid for this collateral
+    function getCollateralSynthetics(address collateral) external view returns (address[] memory);
+
+    /// @notice Get anchor pool amplification coefficient
+    /// @return Amplification coefficient (A parameter for StableSwap)
+    function getAnchorAmplification() external view returns (uint256);
+
+    /// @notice Get anchor pool swap fee
+    /// @return Swap fee in basis points (0-10000)
+    function getAnchorSwapFeeBps() external view returns (uint256);
+
+    /// @notice Get synthetic pool swap fee
+    /// @return Swap fee in basis points (0-10000)
+    function getSyntheticSwapFeeBps() external view returns (uint256);
+
+    /// @notice Get flash loan fee
+    /// @return Fee in basis points (0-10000)
+    function getFlashLoanFeeBps() external view returns (uint256);
+
     // ============================================================
     // CDP OPERATIONS
     // ============================================================
