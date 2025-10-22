@@ -10,6 +10,7 @@ import {IACLManager} from "../interfaces/IACLManager.sol";
 import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
 import {IYLPVault} from "../interfaces/IYLPVault.sol";
 import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
+import {IStabilityTracker} from "../interfaces/IStabilityTracker.sol";
 import {YoloHookStorage, AppStorage} from "./YoloHookStorage.sol";
 import {DataTypes} from "../libraries/DataTypes.sol";
 import {SyntheticAssetModule} from "../libraries/SyntheticAssetModule.sol";
@@ -96,6 +97,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     event OracleUpdated(address indexed newOracle);
     event YLPVaultUpdated(address indexed newVault);
     event TreasuryUpdated(address indexed newTreasury);
+    event StabilityTrackerUpdated(address indexed newTracker);
     event ImplementationUpgraded(address indexed target, address indexed newImplementation);
     event AnchorSwapFeeUpdated(uint256 newFeeBps);
     event SyntheticSwapFeeUpdated(uint256 newFeeBps);
@@ -678,6 +680,19 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         if (_treasury == address(0)) revert YoloHook__InvalidAddress();
         s.treasury = _treasury;
         emit TreasuryUpdated(_treasury);
+    }
+
+    /**
+     * @notice Sets or removes the stability tracker module
+     * @dev Only callable by default admin (governance-level decision)
+     *      This is an optional pluggable module that rewards traders who help maintain USY-USDC peg
+     *      Pass address(0) to disable the module
+     * @param _stabilityTracker Address of the stability tracker contract (or address(0) to disable)
+     */
+    function setStabilityTracker(address _stabilityTracker) external onlyDefaultAdmin {
+        // Allow address(0) to disable the module
+        s.stabilityTracker = IStabilityTracker(_stabilityTracker);
+        emit StabilityTrackerUpdated(_stabilityTracker);
     }
 
     /**
@@ -1600,6 +1615,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     /**
      * @notice Handle anchor pool swaps (USY-USDC StableSwap)
      * @dev Delegates swap logic to SwapModule, emits event in hook context
+     *      Integrates with optional stability tracker for peg maintenance incentives
      * @param key PoolKey identifying the anchor pool
      * @param params Swap parameters
      * @param sender Address initiating the swap
@@ -1611,7 +1627,23 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         internal
         returns (bytes4, BeforeSwapDelta, uint24)
     {
+        // Stability tracking - capture reserves BEFORE swap
+        if (address(s.stabilityTracker) != address(0)) {
+            // Extract original swapper (not router/looper)
+            // For now, use sender directly - routers can implement IOriginalSwapper interface later
+            address swapper = sender;
+            s.stabilityTracker.beforeSwapUpdate(swapper, s.totalAnchorReserveUSDC, s.totalAnchorReserveUSY);
+        }
+
+        // Execute the swap
         SwapModule.AnchorSwapResult memory result = SwapModule.executeAnchorSwap(s, poolManager, key, params);
+
+        // Stability tracking - capture reserves AFTER swap
+        if (address(s.stabilityTracker) != address(0)) {
+            address swapper = sender;
+            s.stabilityTracker.afterSwapUpdate(swapper, s.totalAnchorReserveUSDC, s.totalAnchorReserveUSY);
+        }
+
         emit AnchorSwap(
             PoolId.unwrap(key.toId()),
             sender,
