@@ -106,6 +106,10 @@ struct AppStorage {
     uint256 anchorAmplificationCoefficient;
     /// @notice Anchor pool swap fee in basis points (0-10000, e.g., 4 = 0.04%)
     uint256 anchorSwapFeeBps;
+    /// @notice Anchor pool fee share that goes to treasury in basis points (0-10000)
+    /// @dev Remaining share (10000 - anchorFeeTreasuryShareBps) auto-compounds into LP reserves
+    ///      Example: 2000 = 20% to treasury, 80% to LPs
+    uint256 anchorFeeTreasuryShareBps;
     /// @notice Synthetic pool swap fee in basis points (0-10000)
     uint256 syntheticSwapFeeBps;
     /// @notice Pending synthetic asset to burn (settled next unlock)
