@@ -63,6 +63,7 @@ library BootstrapModule {
         s.USDC_SCALE_UP = 10 ** (18 - s.usdcDecimals);
         s.anchorAmplificationCoefficient = anchorAmplificationCoefficient;
         s.anchorSwapFeeBps = anchorSwapFeeBps;
+        s.anchorFeeTreasuryShareBps = 2000; // 20% to treasury, 80% to LPs
         s.syntheticSwapFeeBps = syntheticSwapFeeBps;
         s.flashLoanFeeBps = 9; // default flash-loan fee
 
