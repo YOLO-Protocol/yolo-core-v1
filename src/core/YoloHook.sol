@@ -800,6 +800,65 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         return s._pairConfigs[pairId];
     }
 
+    /**
+     * @notice Get user's position keys for iteration
+     * @param user User address
+     * @return Array of position keys (user's active positions)
+     */
+    function getUserPositionKeys(address user) external view returns (DataTypes.UserPositionKey[] memory) {
+        return s.userPositionKeys[user];
+    }
+
+    /**
+     * @notice Get valid collaterals for a synthetic asset
+     * @param syntheticAsset Synthetic asset address
+     * @return Array of collateral addresses valid for this synthetic
+     */
+    function getSyntheticCollaterals(address syntheticAsset) external view returns (address[] memory) {
+        return s._syntheticToCollaterals[syntheticAsset];
+    }
+
+    /**
+     * @notice Get valid synthetic assets for a collateral
+     * @param collateral Collateral asset address
+     * @return Array of synthetic addresses valid for this collateral
+     */
+    function getCollateralSynthetics(address collateral) external view returns (address[] memory) {
+        return s._collateralToSynthetics[collateral];
+    }
+
+    /**
+     * @notice Get anchor pool amplification coefficient
+     * @return Amplification coefficient (A parameter for StableSwap)
+     */
+    function getAnchorAmplification() external view returns (uint256) {
+        return s.anchorAmplificationCoefficient;
+    }
+
+    /**
+     * @notice Get anchor pool swap fee
+     * @return Swap fee in basis points (0-10000)
+     */
+    function getAnchorSwapFeeBps() external view returns (uint256) {
+        return s.anchorSwapFeeBps;
+    }
+
+    /**
+     * @notice Get synthetic pool swap fee
+     * @return Swap fee in basis points (0-10000)
+     */
+    function getSyntheticSwapFeeBps() external view returns (uint256) {
+        return s.syntheticSwapFeeBps;
+    }
+
+    /**
+     * @notice Get flash loan fee
+     * @return Fee in basis points (0-10000)
+     */
+    function getFlashLoanFeeBps() external view returns (uint256) {
+        return s.flashLoanFeeBps;
+    }
+
     // ========================
     // ANCHOR POOL & sUSY VIEWS
     // ========================
