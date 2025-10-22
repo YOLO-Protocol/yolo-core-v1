@@ -54,9 +54,9 @@ contract TestContract07_TreasuryForwarder is Test {
         yTSLA = new MockRewardToken("YOLO TESLA", "yTSLA");
 
         // Send some tokens to forwarder
-        usy.transfer(address(forwarder), 10_000e18);
-        yNVDA.transfer(address(forwarder), 5_000e18);
-        yTSLA.transfer(address(forwarder), 3_000e18);
+        require(usy.transfer(address(forwarder), 10_000e18), "USY transfer failed");
+        require(yNVDA.transfer(address(forwarder), 5_000e18), "yNVDA transfer failed");
+        require(yTSLA.transfer(address(forwarder), 3_000e18), "yTSLA transfer failed");
     }
 
     // ============================================================
