@@ -63,6 +63,9 @@ contract TimeLock is ReentrancyGuard {
     /// @notice Emitted when an admin is revoked
     event RevokedAdmin(address indexed revokedAdmin);
 
+    /// @notice Emitted when a pending admin proposal is cancelled
+    event PendingAdminCancelled(address indexed cancelledAdmin);
+
     /// @notice Emitted when ether is transferred from contract
     event EtherTransfer(address indexed to, uint256 amount);
 
@@ -85,11 +88,14 @@ contract TimeLock is ReentrancyGuard {
     // ERRORS
     // ============================================================
 
+    error TimeLock__InvalidAddress();
     error TimeLock__DelayBelowMinimum();
     error TimeLock__DelayAboveMaximum();
     error TimeLock__OnlyTimeLockItself();
     error TimeLock__OnlyPendingAdmin();
     error TimeLock__OnlyAdmin();
+    error TimeLock__AlreadyAdmin();
+    error TimeLock__NotAdmin();
     error TimeLock__MustHaveAtLeastOneAdmin();
     error TimeLock__EtaBelowDelay();
     error TimeLock__TransactionNotQueued();
@@ -109,6 +115,7 @@ contract TimeLock is ReentrancyGuard {
      * @param _delayTime Initial delay in seconds (must be between MINIMUM_DELAY and MAXIMUM_DELAY)
      */
     constructor(address _admin, uint256 _delayTime) {
+        if (_admin == address(0)) revert TimeLock__InvalidAddress();
         if (_delayTime < MINIMUM_DELAY) revert TimeLock__DelayBelowMinimum();
         if (_delayTime > MAXIMUM_DELAY) revert TimeLock__DelayAboveMaximum();
 
@@ -157,14 +164,31 @@ contract TimeLock is ReentrancyGuard {
     /**
      * @notice Set new pending admin
      * @dev Can only be called by timelock itself (via executeTransaction)
+     *      Rejects zero address and already-admin addresses to prevent invalid state
      * @param _pendingAdmin Address of new pending admin
      */
     function setPendingAdmin(address _pendingAdmin) external {
         if (msg.sender != address(this)) revert TimeLock__OnlyTimeLockItself();
+        if (_pendingAdmin == address(0)) revert TimeLock__InvalidAddress();
+        if (isAdmin[_pendingAdmin]) revert TimeLock__AlreadyAdmin();
 
         pendingAdmins[_pendingAdmin] = true;
 
         emit NewPendingAdmin(_pendingAdmin);
+    }
+
+    /**
+     * @notice Cancel a pending admin proposal
+     * @dev Can only be called by timelock itself (via executeTransaction)
+     *      Useful for cleaning up pending proposals that were never accepted
+     * @param _pendingAdmin Address of pending admin to cancel
+     */
+    function cancelPendingAdmin(address _pendingAdmin) external {
+        if (msg.sender != address(this)) revert TimeLock__OnlyTimeLockItself();
+
+        pendingAdmins[_pendingAdmin] = false;
+
+        emit PendingAdminCancelled(_pendingAdmin);
     }
 
     // ============================================================
@@ -173,10 +197,12 @@ contract TimeLock is ReentrancyGuard {
 
     /**
      * @notice Accept admin role (pending admin only)
-     * @dev Caller must be in pendingAdmins mapping
+     * @dev Caller must be in pendingAdmins mapping and not already an admin
+     *      Prevents double-counting bug where existing admin accepts again
      */
     function acceptAdmin() external {
         if (!pendingAdmins[msg.sender]) revert TimeLock__OnlyPendingAdmin();
+        if (isAdmin[msg.sender]) revert TimeLock__AlreadyAdmin();
 
         isAdmin[msg.sender] = true;
         totalAdmins += 1;
@@ -197,6 +223,24 @@ contract TimeLock is ReentrancyGuard {
         totalAdmins -= 1;
 
         emit RevokedAdmin(msg.sender);
+    }
+
+    /**
+     * @notice Force-revoke an admin (via timelock)
+     * @dev Can only be called by timelock itself (via executeTransaction)
+     *      Enables governance to remove uncooperative or compromised admins
+     *      Must maintain at least one admin
+     * @param admin Address of admin to revoke
+     */
+    function revokeAdmin(address admin) external {
+        if (msg.sender != address(this)) revert TimeLock__OnlyTimeLockItself();
+        if (!isAdmin[admin]) revert TimeLock__NotAdmin();
+        if (totalAdmins <= 1) revert TimeLock__MustHaveAtLeastOneAdmin();
+
+        isAdmin[admin] = false;
+        totalAdmins -= 1;
+
+        emit RevokedAdmin(admin);
     }
 
     // ============================================================
