@@ -115,10 +115,9 @@ library InterestRateMath {
     /**
      * @notice Calculate principal from normalized principal
      * @dev Principal does NOT grow with index - only debt grows
-     *      currentLiquidityIndexRay is intentionally unused because principal is constant by design
+     *      The third parameter is intentionally unused because principal is constant by design
      * @param normalizedPrincipalRay Stored principal (18 decimals)
      * @param userLiquidityIndexRay User's entry index when position was created/updated (27 decimals)
-     * @param currentLiquidityIndexRay Current global index (UNUSED - kept for interface consistency)
      * @return currentPrincipal Actual principal amount (18 decimals)
      */
     function calculateCurrentPrincipal(
