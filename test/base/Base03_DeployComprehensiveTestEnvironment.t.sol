@@ -392,7 +392,8 @@ contract Base03_DeployComprehensiveTestEnvironment is Base02_DeployYoloHook {
         _configureLendingPair(yNVDA, address(usdt), 5500, 6000); // Nvidia / USDT: 55% LTV
         _configureLendingPair(yNVDA, address(weth), 5000, 5500); // Nvidia / WETH: 50% LTV
         _configureLendingPair(yNVDA, address(wbtc), 5000, 5500); // Nvidia / WBTC: 50% LTV
-        _configureLendingPair(yNVDA, address(sUsde), 5300, 5800); // Nvidia / sUSDe: 53% LTV
+        _configureLendingPair(yNVDA, address(ptUsde), 7500, 8000); // Nvidia / PT-USDe: 75% LTV (for leverage tests)
+        _configureLendingPair(yNVDA, address(sUsde), 7500, 8000); // Nvidia / sUSDe: 75% LTV (for leverage tests)
 
         // ===================
         // CRYPTO
@@ -412,8 +413,8 @@ contract Base03_DeployComprehensiveTestEnvironment is Base02_DeployYoloHook {
         _configureLendingPair(yETH, address(dai), 7000, 7500); // yETH / DAI: 70% LTV
         _configureLendingPair(yETH, address(weth), 8000, 8500); // yETH / WETH: 80% LTV (same asset)
         _configureLendingPair(yETH, address(wbtc), 6500, 7000); // yETH / WBTC: 65% LTV
-        _configureLendingPair(yETH, address(ptUsde), 6800, 7300); // yETH / PT-USDe: 68% LTV
-        _configureLendingPair(yETH, address(sUsde), 6800, 7300); // yETH / sUSDe: 68% LTV
+        _configureLendingPair(yETH, address(ptUsde), 7500, 8000); // yETH / PT-USDe: 75% LTV (for leverage tests)
+        _configureLendingPair(yETH, address(sUsde), 7500, 8000); // yETH / sUSDe: 75% LTV (for leverage tests)
 
         // ========================================
         // STEP 10: Fund YLP Vault with USY
