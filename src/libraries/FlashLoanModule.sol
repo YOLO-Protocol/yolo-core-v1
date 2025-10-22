@@ -107,23 +107,29 @@ library FlashLoanModule {
         // Call borrower's callback
         IFlashBorrower(borrower).onFlashLoan(msg.sender, token, amount, fee, data);
 
-        // Get balance after callback
-        uint256 balanceAfter = IERC20(token).balanceOf(address(this));
+        // Verify repayment and calculate actual fee
+        uint256 actualFee;
+        {
+            uint256 balanceAfter = IERC20(token).balanceOf(address(this));
+            uint256 actualReturned = balanceAfter - balanceBefore;
 
-        // Verify repayment (hook must have received amount + fee)
-        // Note: We compare balances because borrower must transfer tokens back
-        if (balanceAfter < balanceBefore + amount + fee) {
-            revert FlashLoanModule__InsufficientRepayment();
+            // Verify minimum repayment (must return at least amount + expected fee)
+            if (actualReturned < amount + fee) {
+                revert FlashLoanModule__InsufficientRepayment();
+            }
+
+            // Calculate actual fee/tip received (captures overpayments)
+            actualFee = actualReturned - amount;
         }
 
-        // Burn principal (restores original supply)
+        // Burn principal only (restores original supply)
         _burnSynthetic(s, token, address(this), amount);
 
-        // Mint fee to treasury (fee is permanent supply increase)
-        if (fee > 0 && s.treasury != address(0)) {
-            _mintSynthetic(s, token, s.treasury, fee);
+        // Transfer actual fee + any tips to treasury (borrower already paid in real tokens)
+        if (actualFee > 0 && s.treasury != address(0)) {
+            IERC20(token).safeTransfer(s.treasury, actualFee);
         }
-        return (true, fee);
+        return (true, actualFee);
     }
 
     // ============================================================
@@ -161,6 +167,9 @@ library FlashLoanModule {
         fees = new uint256[](length);
         uint256[] memory balancesBefore = new uint256[](length);
 
+        // Cache role hash to reduce stack depth
+        bool isPrivileged = IACLManager(s.ACL_MANAGER).hasRole(keccak256("PRIVILEGED_FLASHLOANER"), caller);
+
         // Phase 1: Validate and mint all tokens
         for (uint256 i = 0; i < length; i++) {
             address token = tokens[i];
@@ -182,12 +191,7 @@ library FlashLoanModule {
             }
 
             // Calculate fee (zero for privileged flashloaners)
-            // Check caller (original msg.sender), not current msg.sender (which is YoloHook)
-            if (IACLManager(s.ACL_MANAGER).hasRole(keccak256("PRIVILEGED_FLASHLOANER"), caller)) {
-                fees[i] = 0; // Privileged flashloaners get zero fees
-            } else {
-                fees[i] = (amount * s.flashLoanFeeBps) / 10000; // Normal fee for others
-            }
+            fees[i] = isPrivileged ? 0 : (amount * s.flashLoanFeeBps) / 10000;
 
             // Store balance before
             balancesBefore[i] = IERC20(token).balanceOf(address(this));
@@ -203,20 +207,27 @@ library FlashLoanModule {
         for (uint256 i = 0; i < length; i++) {
             address token = tokens[i];
             uint256 amount = amounts[i];
-            uint256 fee = fees[i];
 
-            // Verify repayment
-            uint256 balanceAfter = IERC20(token).balanceOf(address(this));
-            if (balanceAfter < balancesBefore[i] + amount + fee) {
-                revert FlashLoanModule__InsufficientRepayment();
+            // Scoped block to reduce stack depth
+            {
+                uint256 balanceAfter = IERC20(token).balanceOf(address(this));
+                uint256 actualReturned = balanceAfter - balancesBefore[i];
+
+                // Verify minimum repayment (must return at least amount + expected fee)
+                if (actualReturned < amount + fees[i]) {
+                    revert FlashLoanModule__InsufficientRepayment();
+                }
+
+                // Update fees array with actual fee received (captures overpayments/tips)
+                fees[i] = actualReturned - amount;
             }
 
-            // Burn principal
+            // Burn principal only
             _burnSynthetic(s, token, address(this), amount);
 
-            // Mint fee to treasury
-            if (fee > 0 && s.treasury != address(0)) {
-                _mintSynthetic(s, token, s.treasury, fee);
+            // Transfer actual fee + any tips to treasury (borrower already paid in real tokens)
+            if (fees[i] > 0 && s.treasury != address(0)) {
+                IERC20(token).safeTransfer(s.treasury, fees[i]);
             }
         }
 
