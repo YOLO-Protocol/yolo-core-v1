@@ -104,7 +104,7 @@ library SyntheticSwapModule {
 
         currencyIn.take(poolManager, address(this), netIn, true);
         if (feeAmount > 0) {
-            currencyIn.take(poolManager, s.treasury, feeAmount, true);
+            currencyIn.take(poolManager, s.treasury, feeAmount, false);
         }
 
         IYoloSyntheticAsset(tokenOut).mint(address(this), amountOut);

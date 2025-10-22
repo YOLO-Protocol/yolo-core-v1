@@ -4,6 +4,9 @@ pragma solidity ^0.8.26;
 import {IACLManager} from "../interfaces/IACLManager.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
+import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 
 /**
  * @title TreasuryForwarder
@@ -15,8 +18,9 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  *      - Public distribution callable by anyone (permissionless)
  *      - Emergency withdrawal by REWARDS_ADMIN
  */
-contract TreasuryForwarder {
+contract TreasuryForwarder is IUnlockCallback {
     using SafeERC20 for IERC20;
+    using CurrencyLibrary for Currency;
 
     // ============================================================
     // CONSTANTS
@@ -51,6 +55,9 @@ contract TreasuryForwarder {
     /// @notice ACL Manager for role-based access control
     IACLManager public immutable ACL_MANAGER;
 
+    /// @notice Uniswap V4 Pool Manager for claiming EIP-6909 tokens
+    IPoolManager public immutable POOL_MANAGER;
+
     /// @notice Array of registered reward tokens
     address[] public registeredRewards;
 
@@ -69,6 +76,7 @@ contract TreasuryForwarder {
     event RecipientsUpdated(address indexed rewardToken, Recipient[] recipients);
     event Distributed(address indexed rewardToken, uint256 totalAmount);
     event EmergencyWithdrawal(address indexed token, address indexed to, uint256 amount);
+    event PoolManagerClaimsClaimed(address[] tokens, uint256[] amounts);
 
     // ============================================================
     // ERRORS
@@ -79,6 +87,7 @@ contract TreasuryForwarder {
     error TreasuryForwarder__RewardAlreadyRegistered();
     error TreasuryForwarder__RewardNotRegistered();
     error TreasuryForwarder__InvalidAllocation();
+    error TreasuryForwarder__TokenNotRegisteredReward();
 
     // ============================================================
     // MODIFIERS
@@ -95,9 +104,11 @@ contract TreasuryForwarder {
     // CONSTRUCTOR
     // ============================================================
 
-    constructor(address _aclManager) {
+    constructor(address _aclManager, address _poolManager) {
         if (_aclManager == address(0)) revert TreasuryForwarder__InvalidAddress();
+        if (_poolManager == address(0)) revert TreasuryForwarder__InvalidAddress();
         ACL_MANAGER = IACLManager(_aclManager);
+        POOL_MANAGER = IPoolManager(_poolManager);
     }
 
     // ============================================================
@@ -218,6 +229,65 @@ contract TreasuryForwarder {
     function distributeSingleAsset(address rewardToken) external {
         if (!isReward[rewardToken]) revert TreasuryForwarder__RewardNotRegistered();
         _distributeSingle(rewardToken);
+    }
+
+    /**
+     * @notice Claim EIP-6909 tokens from PoolManager and convert to ERC20
+     * @dev Callable by anyone (permissionless)
+     *      Converts PoolManager claim tokens to actual spendable ERC20 tokens
+     *      Uses unlock callback pattern required by Uniswap V4
+     *      Only works for registered reward tokens (security check)
+     * @param tokens Array of token addresses to claim from PoolManager
+     */
+    function claimPoolManagerTokens(address[] calldata tokens) external {
+        // Request unlock from PoolManager, which will call unlockCallback
+        POOL_MANAGER.unlock(abi.encode(tokens));
+    }
+
+    /**
+     * @notice Callback invoked by PoolManager when unlock is called
+     * @dev Performs burn + take operations inside the unlocked context
+     *      Only callable by PoolManager
+     * @param data Encoded token addresses to claim
+     * @return Empty bytes (no data to return)
+     */
+    function unlockCallback(bytes calldata data) external override returns (bytes memory) {
+        // Security: Only PoolManager can call this
+        if (msg.sender != address(POOL_MANAGER)) revert TreasuryForwarder__Unauthorized();
+
+        // Decode tokens array
+        address[] memory tokens = abi.decode(data, (address[]));
+        uint256 length = tokens.length;
+        uint256[] memory amounts = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            address token = tokens[i];
+
+            // Security: Only allow claiming registered reward tokens
+            if (!isReward[token]) revert TreasuryForwarder__TokenNotRegisteredReward();
+
+            // Convert address to Currency and get EIP-6909 token ID
+            Currency currency = Currency.wrap(token);
+            uint256 currencyId = currency.toId();
+
+            // Check claim balance in PoolManager (EIP-6909)
+            uint256 claimBalance = POOL_MANAGER.balanceOf(address(this), currencyId);
+
+            if (claimBalance > 0) {
+                // Step 1: Burn the EIP-6909 claim tokens
+                POOL_MANAGER.burn(address(this), currencyId, claimBalance);
+
+                // Step 2: Take the underlying ERC20 tokens from PoolManager
+                // This actually transfers the tokens to this contract
+                POOL_MANAGER.take(currency, address(this), claimBalance);
+
+                amounts[i] = claimBalance;
+            }
+        }
+
+        emit PoolManagerClaimsClaimed(tokens, amounts);
+
+        return bytes(""); // No data to return
     }
 
     // ============================================================
