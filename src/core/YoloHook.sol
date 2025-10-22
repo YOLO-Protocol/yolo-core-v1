@@ -118,84 +118,109 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     error YoloHook__NoPrivilegedLiquidators();
 
     // ========================
-    // MODIFIERS
+    // INTERNAL ACCESS CONTROL CHECKS
     // ========================
+    // NOTE: These internal functions reduce bytecode size by avoiding modifier inlining
 
     /**
-     * @notice Ensure caller has PAUSER role
-     * @dev Used for emergency pause/unpause functions
+     * @dev Check caller has PAUSER role (internal to save bytecode)
      */
-    modifier onlyPauser() {
+    function _checkPauser() private view {
         if (!ACL_MANAGER.hasRole(PAUSER_ROLE, msg.sender)) {
             revert YoloHook__CallerNotAuthorized();
         }
-        _;
     }
 
     /**
-     * @notice Ensure caller has ASSETS_ADMIN role
-     * @dev Used for creating synthetic assets and configuring asset parameters
+     * @dev Check caller has ASSETS_ADMIN role (internal to save bytecode)
      */
-    modifier onlyAssetsAdmin() {
+    function _checkAssetsAdmin() private view {
         if (!ACL_MANAGER.hasRole(ASSETS_ADMIN_ROLE, msg.sender)) {
             revert YoloHook__CallerNotAuthorized();
         }
-        _;
     }
 
     /**
-     * @notice Ensure caller has RISK_ADMIN role
-     * @dev Used for configuring risk parameters (LTV, interest rates, liquidation penalties)
+     * @dev Check caller has RISK_ADMIN role (internal to save bytecode)
      */
-    modifier onlyRiskAdmin() {
+    function _checkRiskAdmin() private view {
         if (!ACL_MANAGER.hasRole(RISK_ADMIN_ROLE, msg.sender)) {
             revert YoloHook__CallerNotAuthorized();
         }
-        _;
     }
 
     /**
-     * @notice Ensure caller has DEFAULT_ADMIN_ROLE
-     * @dev Used for critical operations like contract upgrades
-     *      DEFAULT_ADMIN_ROLE is 0x00 (inherited from OpenZeppelin AccessControl)
+     * @dev Check caller has DEFAULT_ADMIN_ROLE (internal to save bytecode)
      */
-    modifier onlyDefaultAdmin() {
+    function _checkDefaultAdmin() private view {
         if (!ACL_MANAGER.hasRole(0x00, msg.sender)) {
             revert YoloHook__CallerNotAuthorized();
         }
-        _;
     }
 
     /**
-     * @notice Ensure protocol is not paused
-     * @dev Used to protect user-facing functions during emergency pause
+     * @dev Check protocol is not paused (internal to save bytecode)
      */
-    modifier whenNotPaused() {
+    function _checkNotPaused() private view {
         if (s._paused) {
             revert YoloHook__ProtocolPaused();
         }
-        _;
     }
 
     /**
-     * @notice Ensure protocol is paused
-     * @dev Used to ensure unpause is only called when protocol is paused
+     * @dev Check protocol is paused (internal to save bytecode)
      */
-    modifier whenPaused() {
+    function _checkPaused() private view {
         if (!s._paused) {
             revert YoloHook__ProtocolNotPaused();
         }
-        _;
     }
 
     /**
-     * @notice Ensure caller has LOOPER role
-     * @dev Used for privileged operations that only looper contracts can perform
+     * @dev Check caller has LOOPER role (internal to save bytecode)
      */
-    modifier onlyLooper() {
+    function _checkLooper() private view {
         if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
             revert YoloHook__CallerNotAuthorized();
         }
+    }
+
+    // ========================
+    // MODIFIERS
+    // ========================
+
+    modifier onlyPauser() {
+        _checkPauser();
+        _;
+    }
+
+    modifier onlyAssetsAdmin() {
+        _checkAssetsAdmin();
+        _;
+    }
+
+    modifier onlyRiskAdmin() {
+        _checkRiskAdmin();
+        _;
+    }
+
+    modifier onlyDefaultAdmin() {
+        _checkDefaultAdmin();
+        _;
+    }
+
+    modifier whenNotPaused() {
+        _checkNotPaused();
+        _;
+    }
+
+    modifier whenPaused() {
+        _checkPaused();
+        _;
+    }
+
+    modifier onlyLooper() {
+        _checkLooper();
         _;
     }
 
