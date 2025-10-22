@@ -188,6 +188,34 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     // ========================
+    // INTERNAL HELPERS
+    // ========================
+
+    /**
+     * @notice Require caller is either the account owner or has LOOPER_ROLE
+     * @dev Reduces bytecode by consolidating repeated authorization checks
+     * @param onBehalfOf The account being acted on behalf of
+     */
+    function _requireLooperOrSelf(address onBehalfOf) private view {
+        if (onBehalfOf != msg.sender) {
+            if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
+                revert YoloHook__CallerNotAuthorized();
+            }
+        }
+    }
+
+    /**
+     * @notice Generate pairId for a synthetic-collateral pair
+     * @dev Reduces bytecode by consolidating repeated keccak256 calls
+     * @param syntheticAsset The synthetic asset address
+     * @param collateralAsset The collateral asset address
+     * @return pairId The unique identifier for the pair
+     */
+    function _pairId(address syntheticAsset, address collateralAsset) private pure returns (bytes32) {
+        return keccak256(abi.encodePacked(syntheticAsset, collateralAsset));
+    }
+
+    // ========================
     // CONSTRUCTOR
     // ========================
 
@@ -689,7 +717,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         view
         returns (DataTypes.PairConfiguration memory)
     {
-        bytes32 pairId = keccak256(abi.encodePacked(syntheticAsset, collateralAsset));
+        bytes32 pairId = _pairId(syntheticAsset, collateralAsset);
         return s._pairConfigs[pairId];
     }
 
@@ -842,11 +870,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         address onBehalfOf
     ) external whenNotPaused nonReentrant {
         // Authorization: only LOOPER_ROLE can borrow on behalf of others
-        if (onBehalfOf != msg.sender) {
-            if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
-                revert YoloHook__CallerNotAuthorized();
-            }
-        }
+        _requireLooperOrSelf(onBehalfOf);
 
         s.borrowSyntheticAsset(yoloAsset, borrowAmount, collateral, collateralAmount, onBehalfOf);
     }
@@ -872,11 +896,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         address onBehalfOf
     ) external whenNotPaused nonReentrant {
         // Authorization: only LOOPER_ROLE can repay on behalf of others
-        if (onBehalfOf != msg.sender) {
-            if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
-                revert YoloHook__CallerNotAuthorized();
-            }
-        }
+        _requireLooperOrSelf(onBehalfOf);
 
         s.repaySyntheticAsset(collateral, yoloAsset, repayAmount, autoClaimOnFullRepayment, onBehalfOf);
     }
@@ -908,11 +928,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         nonReentrant
     {
         // Authorization: only LOOPER_ROLE can deposit on behalf of others
-        if (onBehalfOf != msg.sender) {
-            if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
-                revert YoloHook__CallerNotAuthorized();
-            }
-        }
+        _requireLooperOrSelf(onBehalfOf);
 
         s.depositCollateral(collateral, yoloAsset, amount, onBehalfOf);
     }
@@ -936,11 +952,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         address receiver
     ) external whenNotPaused nonReentrant {
         // Authorization: only LOOPER_ROLE can withdraw on behalf of others
-        if (onBehalfOf != msg.sender) {
-            if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
-                revert YoloHook__CallerNotAuthorized();
-            }
-        }
+        _requireLooperOrSelf(onBehalfOf);
 
         s.withdrawCollateral(collateral, yoloAsset, amount, onBehalfOf, receiver);
     }
@@ -1038,7 +1050,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         uint256 newMaxMintableCap,
         uint256 newMaxSupplyCap
     ) external onlyRiskAdmin {
-        bytes32 pairId = keccak256(abi.encodePacked(syntheticAsset, collateralAsset));
+        bytes32 pairId = _pairId(syntheticAsset, collateralAsset);
         LendingPairModule.updatePairCaps(s, pairId, newMaxMintableCap, newMaxSupplyCap);
     }
 
@@ -1053,7 +1065,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         external
         onlyRiskAdmin
     {
-        bytes32 pairId = keccak256(abi.encodePacked(syntheticAsset, collateralAsset));
+        bytes32 pairId = _pairId(syntheticAsset, collateralAsset);
         LendingPairModule.updateLiquidationPenalty(s, pairId, newLiquidationPenalty);
     }
 
@@ -1069,7 +1081,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         external
         onlyAssetsAdmin
     {
-        bytes32 pairId = keccak256(abi.encodePacked(syntheticAsset, collateralAsset));
+        bytes32 pairId = _pairId(syntheticAsset, collateralAsset);
         LendingPairModule.updatePairExpiry(s, pairId, isExpirable, expirePeriod);
     }
 
