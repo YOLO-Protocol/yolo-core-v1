@@ -457,7 +457,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
     function test_Action01_Case12_updateOracle() public {
         MockYoloOracle newOracle = new MockYoloOracle();
 
-        vm.prank(riskAdmin);
+        // updateOracle now requires DEFAULT_ADMIN (test contract has this role)
         yoloHook.updateOracle(IYoloOracle(address(newOracle)));
 
         // Verify oracle updated
@@ -471,7 +471,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
     function test_Action01_Case13_updateYLPVault() public {
         address newVault = makeAddr("newVault");
 
-        vm.prank(assetsAdmin);
+        // updateYLPVault now requires DEFAULT_ADMIN (test contract has this role)
         yoloHook.updateYLPVault(newVault);
 
         // Verify vault updated
@@ -516,7 +516,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
     // ============================================================
 
     function test_Action01_Case16_invalidOracleReverts() public {
-        vm.prank(riskAdmin);
+        // updateOracle now requires DEFAULT_ADMIN (test contract has this role)
         vm.expectRevert(YoloHook.YoloHook__InvalidOracle.selector);
         yoloHook.updateOracle(IYoloOracle(address(0)));
     }
@@ -526,7 +526,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
     // ============================================================
 
     function test_Action01_Case17_invalidYLPVaultReverts() public {
-        vm.prank(assetsAdmin);
+        // updateYLPVault now requires DEFAULT_ADMIN (test contract has this role)
         vm.expectRevert(YoloHook.YoloHook__InvalidAddress.selector);
         yoloHook.updateYLPVault(address(0));
     }
