@@ -539,7 +539,7 @@ contract YoloLooper is IERC3156FlashBorrower {
 
         // STEP 1: Repay debt on behalf of user (frees collateral)
         IERC20(syntheticAsset).forceApprove(address(YOLO_HOOK), repayAmount);
-        YOLO_HOOK.repay(syntheticAsset, collateral, repayAmount, user);
+        YOLO_HOOK.repay(syntheticAsset, collateral, repayAmount, false, user);
 
         // STEP 2: Calculate minimum collateral needed to repay flash loan
         // Get oracle prices to estimate swap ratios
@@ -577,17 +577,42 @@ contract YoloLooper is IERC3156FlashBorrower {
         // STEP 6: Repay flash loan
         IERC20(syntheticAsset).safeTransfer(address(YOLO_HOOK), amount + fee);
 
-        // STEP 7: If we have excess synthetic, use it to repay more debt
+        // STEP 7: Handle excess synthetic
         if (syntheticAmount > (amount + fee)) {
             uint256 excessSynthetic = syntheticAmount - (amount + fee);
-            IERC20(syntheticAsset).forceApprove(address(YOLO_HOOK), excessSynthetic);
 
-            // Repay additional debt with the excess
-            YOLO_HOOK.repay(syntheticAsset, collateral, excessSynthetic, user);
+            // Check if there's remaining debt after the initial repayment
+            uint256 remainingDebt = YOLO_HOOK.getPositionDebt(user, collateral, syntheticAsset);
+
+            if (remainingDebt > 0) {
+                // Use excess to repay more debt
+                uint256 repaymentAmount = excessSynthetic > remainingDebt ? remainingDebt : excessSynthetic;
+                IERC20(syntheticAsset).forceApprove(address(YOLO_HOOK), repaymentAmount);
+                YOLO_HOOK.repay(syntheticAsset, collateral, repaymentAmount, false, user);
+
+                // Update excess after repayment
+                excessSynthetic = excessSynthetic > repaymentAmount ? excessSynthetic - repaymentAmount : 0;
+            }
+
+            // If there's still excess synthetic (or no debt to repay), refund to user
+            if (excessSynthetic > 0) {
+                IERC20(syntheticAsset).safeTransfer(user, excessSynthetic);
+            }
         }
 
-        // STEP 8: If we withdrew less than freed amount, the excess stays in position (already optimal)
-        // No need to redeposit as we only withdrew what we needed
+        // STEP 8: If debt is fully repaid, withdraw ALL remaining collateral
+        uint256 finalDebt = YOLO_HOOK.getPositionDebt(user, collateral, syntheticAsset);
+        if (finalDebt == 0) {
+            // Get final position to check remaining collateral
+            DataTypes.UserPosition memory finalPosition = YOLO_HOOK.getUserPosition(user, collateral, syntheticAsset);
+            if (finalPosition.collateralSuppliedAmount > 0) {
+                // Withdraw all remaining collateral and send to user
+                YOLO_HOOK.withdrawCollateral(
+                    collateral, syntheticAsset, finalPosition.collateralSuppliedAmount, user, user
+                );
+            }
+        }
+        // Otherwise, excess collateral stays in position (already optimal for partial deleverage)
     }
 
     // ============================================================

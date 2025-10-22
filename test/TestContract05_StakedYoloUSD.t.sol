@@ -336,7 +336,7 @@ contract MockYoloHook is IYoloHook {
 
     // CDP Operations (stub implementations for IYoloHook compliance)
     function borrow(address, uint256, address, uint256, address) external pure {}
-    function repay(address, address, uint256, address) external pure {}
+    function repay(address, address, uint256, bool, address) external pure {}
     function depositCollateral(address, address, uint256, address) external pure {}
 
     function withdrawCollateral(address, address, uint256, address, address) external pure {}

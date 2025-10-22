@@ -363,9 +363,25 @@ contract TestAction09_YoloLooperLeverage is Base03_DeployComprehensiveTestEnviro
         assertEq(positionAfter.normalizedDebtRay, 0, "Debt should be fully repaid");
         assertEq(positionAfter.collateralSuppliedAmount, 0, "Collateral should be fully withdrawn");
 
-        // Borrower should recover approximately all collateral
+        // Borrower should recover approximately the same USD value as initial collateral
+        // User receives collateral + excess synthetic from the 2% buffer
         uint256 recoveredCollateral = IERC20(ptUsde).balanceOf(borrower1);
-        assertApproxEqRel(recoveredCollateral, totalCollateral, 1e16, "Should recover all collateral");
+        uint256 recoveredSynthetic = IERC20(yNVDA).balanceOf(borrower1);
+
+        // Calculate USD values using oracle prices
+        uint256 collateralPrice = yoloOracleReal.getAssetPrice(address(ptUsde));
+        uint256 syntheticPrice = yoloOracleReal.getAssetPrice(yNVDA);
+
+        // Initial value in USD
+        uint256 initialValueUSD = (initialCollateral * collateralPrice) / 1e18;
+
+        // Recovered value in USD (collateral + synthetic)
+        uint256 recoveredCollateralValueUSD = (recoveredCollateral * collateralPrice) / 1e18;
+        uint256 recoveredSyntheticValueUSD = (recoveredSynthetic * syntheticPrice) / 1e18;
+        uint256 totalRecoveredValueUSD = recoveredCollateralValueUSD + recoveredSyntheticValueUSD;
+
+        // Should recover ~100% of initial value (allowing 1% tolerance for swaps/rounding)
+        assertApproxEqRel(totalRecoveredValueUSD, initialValueUSD, 1e16, "Should recover ~99-100% of initial USD value");
     }
 
     /**

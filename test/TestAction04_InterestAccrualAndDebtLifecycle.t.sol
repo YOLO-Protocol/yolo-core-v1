@@ -281,7 +281,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
 
         // Repay
         vm.prank(borrower1);
-        yoloHook.repay(yUSD, address(usdc), repayAmount, borrower1);
+        yoloHook.repay(yUSD, address(usdc), repayAmount, true, borrower1);
 
         // Treasury should have received the interest
         uint256 treasuryBalanceAfter = YoloSyntheticAsset(yUSD).balanceOf(treasury);
@@ -325,7 +325,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
 
         // Full repay
         vm.prank(borrower1);
-        yoloHook.repay(yUSD, address(usdc), fullDebt, borrower1);
+        yoloHook.repay(yUSD, address(usdc), fullDebt, true, borrower1);
 
         // Borrower should receive collateral back
         uint256 borrowerCollateralAfter = usdc.balanceOf(borrower1);
@@ -727,7 +727,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         vm.prank(borrower1);
         YoloSyntheticAsset(yUSD).approve(address(yoloHook), debt1);
         vm.prank(borrower1);
-        yoloHook.repay(yUSD, address(usdc), debt1, borrower1);
+        yoloHook.repay(yUSD, address(usdc), debt1, true, borrower1);
 
         uint256 treasuryAfter1 = YoloSyntheticAsset(yUSD).balanceOf(treasury);
         uint256 interest1 = treasuryAfter1 - treasuryBefore;
@@ -739,7 +739,7 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         vm.prank(borrower2);
         YoloSyntheticAsset(yUSD).approve(address(yoloHook), debt2);
         vm.prank(borrower2);
-        yoloHook.repay(yUSD, address(usdc), debt2, borrower2);
+        yoloHook.repay(yUSD, address(usdc), debt2, true, borrower2);
 
         uint256 treasuryAfter2 = YoloSyntheticAsset(yUSD).balanceOf(treasury);
         uint256 interest2 = treasuryAfter2 - treasuryAfter1;
@@ -877,9 +877,9 @@ contract TestAction04_InterestAccrualAndDebtLifecycle is Base02_DeployYoloHook {
         uint256 balanceAfterBorrow = usdc.balanceOf(borrower1);
         assertEq(balanceAfterBorrow, initialBalance - 10_000e6, "Collateral deposited");
 
-        // Repay all debt - this automatically claims collateral (claimCollateral=true hardcoded)
+        // Repay all debt - this automatically claims collateral (autoClaimOnFullRepayment=true)
         YoloSyntheticAsset(yUSD).approve(address(yoloHook), type(uint256).max);
-        yoloHook.repay(yUSD, address(usdc), 0, borrower1); // 0 = full repayment
+        yoloHook.repay(yUSD, address(usdc), 0, true, borrower1); // 0 = full repayment
 
         // Check 1: Verify collateral was already returned during repay
         uint256 balanceAfterRepay = usdc.balanceOf(borrower1);

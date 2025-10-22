@@ -97,8 +97,15 @@ interface IYoloHook {
     /// @param yoloAsset Synthetic asset to repay
     /// @param collateral Collateral asset
     /// @param repayAmount Amount to repay (0 = full repayment)
+    /// @param autoClaimOnFullRepayment Whether to automatically return collateral if debt becomes 0
     /// @param onBehalfOf Address whose debt to reduce (tokens burned from msg.sender)
-    function repay(address yoloAsset, address collateral, uint256 repayAmount, address onBehalfOf) external;
+    function repay(
+        address yoloAsset,
+        address collateral,
+        uint256 repayAmount,
+        bool autoClaimOnFullRepayment,
+        address onBehalfOf
+    ) external;
 
     /// @notice Deposit additional collateral to existing position
     /// @dev Requires existing position - LOOPER_ROLE required when onBehalfOf != msg.sender

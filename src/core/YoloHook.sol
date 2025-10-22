@@ -857,17 +857,20 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      *      - If onBehalfOf != msg.sender, caller must have LOOPER_ROLE
      *      - Tokens are burned from msg.sender (payer)
      *      - Debt reduction is applied to onBehalfOf's position (beneficiary)
-     *      - Collateral returned to onBehalfOf if fully repaid
+     *      - Collateral returned to onBehalfOf if fully repaid (when autoClaimOnFullRepayment = true)
      * @param yoloAsset Synthetic asset to repay
      * @param collateral Collateral asset
      * @param repayAmount Amount to repay (18 decimals)
+     * @param autoClaimOnFullRepayment Whether to automatically return collateral if debt becomes 0
      * @param onBehalfOf Address whose debt to reduce (tokens burned from msg.sender)
      */
-    function repay(address yoloAsset, address collateral, uint256 repayAmount, address onBehalfOf)
-        external
-        whenNotPaused
-        nonReentrant
-    {
+    function repay(
+        address yoloAsset,
+        address collateral,
+        uint256 repayAmount,
+        bool autoClaimOnFullRepayment,
+        address onBehalfOf
+    ) external whenNotPaused nonReentrant {
         // Authorization: only LOOPER_ROLE can repay on behalf of others
         if (onBehalfOf != msg.sender) {
             if (!ACL_MANAGER.hasRole(LOOPER_ROLE, msg.sender)) {
@@ -875,7 +878,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             }
         }
 
-        s.repaySyntheticAsset(collateral, yoloAsset, repayAmount, true, onBehalfOf); // true = claim collateral if fully repaid
+        s.repaySyntheticAsset(collateral, yoloAsset, repayAmount, autoClaimOnFullRepayment, onBehalfOf);
     }
 
     /**

@@ -660,7 +660,7 @@ library LendingPairModule {
      * @param collateral Collateral asset
      * @param yoloAsset Synthetic asset to repay
      * @param repayAmount Amount to repay (0 = full repayment)
-     * @param claimCollateral Whether to claim collateral if fully repaid
+     * @param autoClaimOnFullRepayment Whether to automatically return collateral if debt becomes 0
      * @param onBehalfOf Address whose debt to reduce (tokens burned from msg.sender)
      */
     function repaySyntheticAsset(
@@ -668,7 +668,7 @@ library LendingPairModule {
         address collateral,
         address yoloAsset,
         uint256 repayAmount,
-        bool claimCollateral,
+        bool autoClaimOnFullRepayment,
         address onBehalfOf
     ) external {
         // Position lookup uses onBehalfOf (whose debt we're reducing)
@@ -702,7 +702,7 @@ library LendingPairModule {
             _processRepayment(s, position, pairConfig, yoloAsset, actualRepayAmount, actualDebt);
 
         // Handle full repayment if applicable (collateral goes back to position owner)
-        if (position.normalizedDebtRay == 0 && claimCollateral) {
+        if (position.normalizedDebtRay == 0 && autoClaimOnFullRepayment) {
             uint256 collateralToReturn = position.collateralSuppliedAmount;
             position.collateralSuppliedAmount = 0;
             IERC20(collateral).safeTransfer(onBehalfOf, collateralToReturn);
