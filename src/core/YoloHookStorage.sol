@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DataTypes} from "../libraries/DataTypes.sol";
 import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
+import {IStabilityTracker} from "../interfaces/IStabilityTracker.sol";
 
 /**
  * @title YoloHookStorage
@@ -122,6 +123,13 @@ struct AppStorage {
 
     /// @notice Flash loan fee in basis points (0-10000, e.g., 9 = 0.09%)
     uint256 flashLoanFeeBps;
+    // ============================================================
+    // STABILITY INCENTIVES (OPTIONAL MODULE)
+    // ============================================================
+
+    /// @notice Stability tracker for USY-USDC peg incentives (optional pluggable module)
+    /// @dev Tracks swaps that move USY price closer to or further from $1.00 peg
+    IStabilityTracker stabilityTracker;
 }
 
 /**
