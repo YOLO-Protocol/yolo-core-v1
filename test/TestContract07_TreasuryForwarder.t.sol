@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {TreasuryForwarder} from "../src/treasury/TreasuryForwarder.sol";
 import {ACLManager} from "../src/access/ACLManager.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Base01_DeployUniswapV4Pool} from "./base/Base01_DeployUniswapV4Pool.t.sol";
 
 contract MockRewardToken is ERC20 {
     constructor(string memory name, string memory symbol) ERC20(name, symbol) {
@@ -16,7 +17,7 @@ contract MockRewardToken is ERC20 {
     }
 }
 
-contract TestContract07_TreasuryForwarder is Test {
+contract TestContract07_TreasuryForwarder is Base01_DeployUniswapV4Pool {
     TreasuryForwarder public forwarder;
     ACLManager public aclManager;
 
@@ -31,7 +32,10 @@ contract TestContract07_TreasuryForwarder is Test {
 
     bytes32 public constant REWARDS_ADMIN = keccak256("REWARDS_ADMIN");
 
-    function setUp() public {
+    function setUp() public override {
+        // Call parent setUp to deploy PoolManager
+        super.setUp();
+
         // Create accounts
         rewardsAdmin = makeAddr("rewardsAdmin");
         recipient1 = makeAddr("recipient1");
@@ -45,8 +49,8 @@ contract TestContract07_TreasuryForwarder is Test {
         aclManager.createRole("REWARDS_ADMIN", 0x00);
         aclManager.grantRole(REWARDS_ADMIN, rewardsAdmin);
 
-        // Deploy TreasuryForwarder
-        forwarder = new TreasuryForwarder(address(aclManager));
+        // Deploy TreasuryForwarder with PoolManager
+        forwarder = new TreasuryForwarder(address(aclManager), address(manager));
 
         // Deploy mock tokens
         usy = new MockRewardToken("YOLO USD", "USY");
