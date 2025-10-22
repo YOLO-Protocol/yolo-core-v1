@@ -41,6 +41,7 @@ library SwapModule {
     error SwapModule__InvalidAmount();
     error SwapModule__InsufficientLiquidity();
     error SwapModule__InsufficientOutput();
+    error SwapModule__TreasuryTransferFailed();
 
     struct AnchorSwapResult {
         bytes4 selector;
@@ -291,7 +292,8 @@ library SwapModule {
 
             // Transfer treasury portion (skip if treasury not set)
             if (feeToTreasury > 0 && s.treasury != address(0)) {
-                IERC20(Currency.unwrap(currencyIn)).transfer(s.treasury, feeToTreasury);
+                bool success = IERC20(Currency.unwrap(currencyIn)).transfer(s.treasury, feeToTreasury);
+                if (!success) revert SwapModule__TreasuryTransferFailed();
             }
         }
 
