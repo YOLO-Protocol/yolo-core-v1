@@ -707,8 +707,8 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         if (token == address(0)) revert YoloHook__InvalidAddress();
         if (to == address(0)) revert YoloHook__InvalidAddress();
 
-        // Cannot withdraw protocol-critical tokens
-        if (token == s.usy || token == s.usdc || s._isYoloAsset[token]) {
+        // Cannot withdraw protocol-critical tokens (includes user collaterals)
+        if (token == s.usy || token == s.usdc || s._isYoloAsset[token] || s._isWhitelistedCollateral[token]) {
             revert YoloHook__InvalidRescue();
         }
 
