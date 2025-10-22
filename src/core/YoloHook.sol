@@ -102,6 +102,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     event AnchorAmplificationUpdated(uint256 newAmplification);
     event PrivilegedLiquidatorToggled(bool enabled);
     event YLPFundedWithUSY(address indexed callerAsset, uint256 amount);
+    event EmergencyWithdrawal(address indexed token, address indexed to, uint256 amount);
 
     // ========================
     // ERRORS
@@ -116,6 +117,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     error YoloHook__ImbalancedDeposit();
     error YoloHook__InvalidConfiguration();
     error YoloHook__NoPrivilegedLiquidators();
+    error YoloHook__InvalidRescue();
 
     // ========================
     // INTERNAL ACCESS CONTROL CHECKS
@@ -693,6 +695,31 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     /**
+     * @notice Emergency withdraw accidentally sent tokens
+     * @dev Only callable by RISK_ADMIN
+     *      Cannot withdraw protocol-critical tokens (USY, USDC, any synthetic assets)
+     *      Uses low-level call to minimize bytecode overhead
+     * @param token Token address to withdraw
+     * @param to Recipient address
+     * @param amount Amount to withdraw
+     */
+    function emergencyWithdraw(address token, address to, uint256 amount) external onlyRiskAdmin nonReentrant {
+        if (token == address(0)) revert YoloHook__InvalidAddress();
+        if (to == address(0)) revert YoloHook__InvalidAddress();
+
+        // Cannot withdraw protocol-critical tokens
+        if (token == s.usy || token == s.usdc || s._isYoloAsset[token]) {
+            revert YoloHook__InvalidRescue();
+        }
+
+        // Use low-level call to save bytecode
+        (bool success,) = token.call(abi.encodeWithSignature("transfer(address,uint256)", to, amount));
+        require(success, "Transfer failed");
+
+        emit EmergencyWithdrawal(token, to, amount);
+    }
+
+    /**
      * @notice Updates anchor swap fee
      * @dev Only callable by risk admin
      *      Changes take effect immediately for new swaps
@@ -739,6 +766,14 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     function getAllSyntheticAssets() external view returns (address[] memory) {
         return s._yoloAssets;
+    }
+
+    /**
+     * @notice Returns all whitelisted collateral assets
+     * @return Array of whitelisted collateral addresses
+     */
+    function getAllWhitelistedCollaterals() external view returns (address[] memory) {
+        return s._whitelistedCollaterals;
     }
 
     /**
