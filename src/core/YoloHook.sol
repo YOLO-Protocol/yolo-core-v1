@@ -96,7 +96,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     event OracleUpdated(address indexed newOracle);
     event YLPVaultUpdated(address indexed newVault);
     event TreasuryUpdated(address indexed newTreasury);
-    event SyntheticAssetUpgraded(address indexed syntheticAsset, address indexed newImplementation);
+    event ImplementationUpgraded(address indexed target, address indexed newImplementation);
     event AnchorSwapFeeUpdated(uint256 newFeeBps);
     event SyntheticSwapFeeUpdated(uint256 newFeeBps);
     event AnchorAmplificationUpdated(uint256 newAmplification);
@@ -149,6 +149,18 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     modifier onlyRiskAdmin() {
         if (!ACL_MANAGER.hasRole(RISK_ADMIN_ROLE, msg.sender)) {
+            revert YoloHook__CallerNotAuthorized();
+        }
+        _;
+    }
+
+    /**
+     * @notice Ensure caller has DEFAULT_ADMIN_ROLE
+     * @dev Used for critical operations like contract upgrades
+     *      DEFAULT_ADMIN_ROLE is 0x00 (inherited from OpenZeppelin AccessControl)
+     */
+    modifier onlyDefaultAdmin() {
+        if (!ACL_MANAGER.hasRole(0x00, msg.sender)) {
             revert YoloHook__CallerNotAuthorized();
         }
         _;
@@ -465,22 +477,29 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     /**
-     * @notice Upgrades a synthetic asset implementation
-     * @dev Only callable by default admin (via UUPS authorization)
-     *      YoloHook holds upgrade power over all synthetic assets it created
-     * @param syntheticAsset Address of the synthetic asset to upgrade
-     * @param newImplementation Address of the new implementation
+     * @notice Upgrade any YOLO protocol contract implementation
+     * @dev Only DEFAULT_ADMIN_ROLE can upgrade. Automatically validates contract type.
+     *      Supports: USY, sUSY, YLP, and any synthetic asset (yNVDA, yTSLA, etc.)
+     * @param target Contract proxy to upgrade
+     * @param newImplementation New implementation address
      */
-    function upgradeSyntheticAsset(address syntheticAsset, address newImplementation)
-        external
-        onlyAssetsAdmin
-        nonReentrant
-    {
-        if (!s._isYoloAsset[syntheticAsset]) revert YoloHook__NotYoloAsset();
+    function upgradeImplementation(address target, address newImplementation) external onlyDefaultAdmin nonReentrant {
         if (newImplementation == address(0)) revert YoloHook__InvalidAddress();
 
-        UUPSUpgradeable(syntheticAsset).upgradeToAndCall(newImplementation, "");
-        emit SyntheticAssetUpgraded(syntheticAsset, newImplementation);
+        // Validate target is a known protocol contract
+        bool isValid = false;
+
+        if (target == s.usy) isValid = true; // USY stablecoin
+        else if (target == s.sUSY) isValid = true; // sUSY LP token
+        else if (target == s.ylpVault) isValid = true; // YLP vault
+        else if (s._isYoloAsset[target]) isValid = true; // Any synthetic asset
+
+        if (!isValid) revert YoloHook__InvalidAddress();
+
+        // Execute upgrade
+        UUPSUpgradeable(target).upgradeToAndCall(newImplementation, "");
+
+        emit ImplementationUpgraded(target, newImplementation);
     }
 
     /**
@@ -1497,8 +1516,8 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     /**
      * @notice Authorizes contract upgrades
-     * @dev Only default admin can upgrade YoloHook
+     * @dev Only DEFAULT_ADMIN_ROLE can upgrade YoloHook
      * @param newImplementation Address of the new implementation contract
      */
-    function _authorizeUpgrade(address newImplementation) internal override onlyAssetsAdmin {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyDefaultAdmin {}
 }

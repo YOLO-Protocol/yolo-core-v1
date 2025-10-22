@@ -195,5 +195,13 @@ contract StakedYoloUSD is MintableIncentivizedERC20Upgradeable, UUPSUpgradeable 
     // UUPS UPGRADE AUTHORIZATION
     // ============================================================
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(ASSETS_ADMIN) {}
+    /**
+     * @notice Authorize upgrade (only via YoloHook)
+     * @dev Prevents direct upgrades, must go through YoloHook.upgradeImplementation()
+     */
+    function _authorizeUpgrade(address newImplementation) internal override {
+        if (msg.sender != YOLO_HOOK) {
+            revert StakedYoloUSD__Unauthorized();
+        }
+    }
 }

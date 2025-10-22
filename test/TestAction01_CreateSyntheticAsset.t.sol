@@ -483,8 +483,7 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
     // ============================================================
 
     function test_Action01_Case14_upgradeSyntheticAsset() public {
-        vm.startPrank(assetsAdmin);
-
+        vm.prank(assetsAdmin);
         address yETH = yoloHook.createSyntheticAsset(
             "Yolo Synthetic ETH", "yETH", 18, address(weth), address(syntheticAssetImpl), 0, 0
         );
@@ -492,10 +491,8 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
         // Deploy new implementation
         YoloSyntheticAsset newImpl = new YoloSyntheticAsset();
 
-        // Upgrade synthetic asset
-        yoloHook.upgradeSyntheticAsset(yETH, address(newImpl));
-
-        vm.stopPrank();
+        // Upgrade synthetic asset (now requires DEFAULT_ADMIN, which is this test contract)
+        yoloHook.upgradeImplementation(yETH, address(newImpl));
 
         // Verify asset still functions (proxy pattern)
         YoloSyntheticAsset synthToken = YoloSyntheticAsset(yETH);
@@ -510,9 +507,8 @@ contract TestAction01_CreateSyntheticAsset is Base02_DeployYoloHook {
         address randomAsset = makeAddr("randomAsset");
         YoloSyntheticAsset newImpl = new YoloSyntheticAsset();
 
-        vm.prank(assetsAdmin);
-        vm.expectRevert(YoloHook.YoloHook__NotYoloAsset.selector);
-        yoloHook.upgradeSyntheticAsset(randomAsset, address(newImpl));
+        vm.expectRevert(YoloHook.YoloHook__InvalidAddress.selector);
+        yoloHook.upgradeImplementation(randomAsset, address(newImpl));
     }
 
     // ============================================================
