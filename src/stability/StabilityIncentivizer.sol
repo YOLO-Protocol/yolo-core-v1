@@ -128,7 +128,7 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
 
     /// @notice Accounted balance = currentEpochFunding + ∑epochRewards - ∑epochClaimed
     /// @dev Internal accounting to detect new transfers
-    mapping(address => uint256) internal accountedBalance;
+    mapping(address => uint256) public accountedBalance;
 
     // ============================================================
     // ERRORS
@@ -330,12 +330,12 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
 
         // Remove old contribution if it was positive
         if (oldPoints > 0) {
-            total -= uint256(oldPoints);
+            total -= SafeCast.toUint256(oldPoints);
         }
 
         // Add new contribution if it's positive
         if (newPoints > 0) {
-            total += uint256(newPoints);
+            total += SafeCast.toUint256(newPoints);
         }
 
         totalPositivePointsPerEpoch[epoch] = total;
@@ -461,7 +461,7 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
         if (totalPoints == 0) revert StabilityIncentivizer__NoPointsInEpoch();
 
         // Calculate user's share: (userPoints / totalPoints) * totalRewards
-        uint256 userReward = (uint256(userPoints) * totalRewards) / totalPoints;
+        uint256 userReward = (SafeCast.toUint256(userPoints) * totalRewards) / totalPoints;
 
         if (userReward == 0) return; // No rewards to claim
 
@@ -518,7 +518,7 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
 
         if (totalPoints == 0) return;
 
-        uint256 userReward = (uint256(userPoints) * totalRewards) / totalPoints;
+        uint256 userReward = (SafeCast.toUint256(userPoints) * totalRewards) / totalPoints;
 
         if (userReward == 0) return;
 
@@ -554,7 +554,7 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
 
         if (totalPoints == 0) return 0;
 
-        return (uint256(userPoints) * totalRewards) / totalPoints;
+        return (SafeCast.toUint256(userPoints) * totalRewards) / totalPoints;
     }
 
     /**
@@ -571,7 +571,7 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
         if (totalPoints == 0) return 0;
 
         uint256 projectedRewards = currentEpochFunding[token];
-        return (uint256(userPoints) * projectedRewards) / totalPoints;
+        return (SafeCast.toUint256(userPoints) * projectedRewards) / totalPoints;
     }
 
     /**
