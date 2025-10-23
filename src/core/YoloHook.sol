@@ -1633,9 +1633,22 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     {
         // Stability tracking - capture reserves BEFORE swap
         if (address(s.stabilityTracker) != address(0)) {
-            // Extract original swapper (not router/looper)
-            // For now, use sender directly - routers can implement IOriginalSwapper interface later
-            address swapper = sender;
+            // V1.0 TEMPORARY SOLUTION: Using tx.origin for EOA attribution
+            // KNOWN LIMITATION: AA wallets, Safe wallets, CowSwap, and bundlers
+            // will show the relayer's EOA instead of the end user
+            //
+            // WHY tx.origin over sender:
+            // - Uniswap router has no claiming or distribution logic
+            // - Using sender would permanently lock rewards at router address
+            // - Using tx.origin at least credits a claimable EOA (even if sometimes wrong)
+            // - Both approaches fail for AA/bundlers - router sees relayers as sender too
+            //
+            // MITIGATION: Use excludeFromIncentives() to block known bundler/relayer addresses
+            //
+            // TODO V1.1: Replace with hookData decoding when custom router is deployed
+            // address swapper = _extractOriginalSwapper(hookData);
+
+            address swapper = tx.origin;
             s.stabilityTracker.beforeSwapUpdate(swapper, s.totalAnchorReserveUSDC, s.totalAnchorReserveUSY);
         }
 
@@ -1644,7 +1657,9 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
         // Stability tracking - capture reserves AFTER swap
         if (address(s.stabilityTracker) != address(0)) {
-            address swapper = sender;
+            // V1.0 TEMPORARY: tx.origin for EOA attribution (see comment above)
+            // TODO V1.1: address swapper = _extractOriginalSwapper(hookData);
+            address swapper = tx.origin;
             s.stabilityTracker.afterSwapUpdate(swapper, s.totalAnchorReserveUSDC, s.totalAnchorReserveUSY);
         }
 
