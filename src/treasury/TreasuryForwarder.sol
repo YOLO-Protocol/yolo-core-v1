@@ -94,7 +94,9 @@ contract TreasuryForwarder is IUnlockCallback {
     // ============================================================
 
     modifier onlyRewardsAdmin() {
-        if (!ACL_MANAGER.hasRole(REWARDS_ADMIN, msg.sender)) {
+        if (
+            !ACL_MANAGER.hasRole(REWARDS_ADMIN, msg.sender) && !ACL_MANAGER.hasRole(0x00, msg.sender) // DEFAULT_ADMIN
+        ) {
             revert TreasuryForwarder__Unauthorized();
         }
         _;

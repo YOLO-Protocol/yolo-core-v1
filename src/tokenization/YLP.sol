@@ -68,7 +68,11 @@ contract YLP is
     // MODIFIERS
     // ============================================================
     modifier onlyRiskAdmin() {
-        if (!ACL_MANAGER.hasRole(RISK_ADMIN_ROLE, msg.sender)) revert YLP__CallerNotAuthorized();
+        if (
+            !ACL_MANAGER.hasRole(RISK_ADMIN_ROLE, msg.sender) && !ACL_MANAGER.hasRole(0x00, msg.sender) // DEFAULT_ADMIN
+        ) {
+            revert YLP__CallerNotAuthorized();
+        }
         _;
     }
 

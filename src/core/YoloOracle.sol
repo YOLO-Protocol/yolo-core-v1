@@ -66,7 +66,9 @@ contract YoloOracle {
      * @dev YoloHook should be granted this role to set price sources when creating synthetic assets
      */
     modifier onlyOracleAdmin() {
-        if (!ACL_MANAGER.hasRole(ORACLE_ADMIN_ROLE, msg.sender)) {
+        if (
+            !ACL_MANAGER.hasRole(ORACLE_ADMIN_ROLE, msg.sender) && !ACL_MANAGER.hasRole(0x00, msg.sender) // DEFAULT_ADMIN
+        ) {
             revert YoloOracle__CallerNotAuthorized();
         }
         _;

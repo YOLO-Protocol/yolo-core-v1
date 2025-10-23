@@ -141,7 +141,9 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @dev Check caller has ASSETS_ADMIN role (internal to save bytecode)
      */
     function _checkAssetsAdmin() private view {
-        if (!ACL_MANAGER.hasRole(ASSETS_ADMIN_ROLE, msg.sender)) {
+        if (
+            !ACL_MANAGER.hasRole(ASSETS_ADMIN_ROLE, msg.sender) && !ACL_MANAGER.hasRole(0x00, msg.sender) // DEFAULT_ADMIN
+        ) {
             revert YoloHook__CallerNotAuthorized();
         }
     }
@@ -150,7 +152,9 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      * @dev Check caller has RISK_ADMIN role (internal to save bytecode)
      */
     function _checkRiskAdmin() private view {
-        if (!ACL_MANAGER.hasRole(RISK_ADMIN_ROLE, msg.sender)) {
+        if (
+            !ACL_MANAGER.hasRole(RISK_ADMIN_ROLE, msg.sender) && !ACL_MANAGER.hasRole(0x00, msg.sender) // DEFAULT_ADMIN
+        ) {
             revert YoloHook__CallerNotAuthorized();
         }
     }

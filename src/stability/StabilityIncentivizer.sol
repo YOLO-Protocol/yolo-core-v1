@@ -179,7 +179,9 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
     }
 
     modifier onlyRewardsAdmin() {
-        if (!ACL_MANAGER.hasRole(REWARDS_ADMIN, msg.sender)) {
+        if (
+            !ACL_MANAGER.hasRole(REWARDS_ADMIN, msg.sender) && !ACL_MANAGER.hasRole(0x00, msg.sender) // DEFAULT_ADMIN
+        ) {
             revert StabilityIncentivizer__Unauthorized();
         }
         _;

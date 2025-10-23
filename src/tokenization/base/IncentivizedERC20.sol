@@ -81,7 +81,9 @@ abstract contract IncentivizedERC20 is Context, IERC20, IERC20Metadata {
      * @dev Modifier to restrict functions to incentives admin only
      */
     modifier onlyIncentivesAdmin() {
-        if (!ACL_MANAGER.hasRole(INCENTIVES_ADMIN_ROLE, _msgSender())) {
+        if (
+            !ACL_MANAGER.hasRole(INCENTIVES_ADMIN_ROLE, _msgSender()) && !ACL_MANAGER.hasRole(0x00, _msgSender()) // DEFAULT_ADMIN
+        ) {
             revert IncentivizedERC20__OnlyIncentivesAdmin();
         }
         _;
