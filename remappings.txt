@@ -4,5 +4,5 @@ forge-std/=lib/forge-std/src/
 @openzeppelin/=node_modules/@openzeppelin/
 @openzeppelin/contracts=node_modules/@openzeppelin/contracts
 @openzeppelin/contracts-upgradeable=node_modules/@openzeppelin/contracts-upgradeable
-@yolo/=src/
+@yolo/core-v1/=src/
 solmate/=node_modules/solmate/
