@@ -135,6 +135,15 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
     mapping(address => uint256) public accountedBalance;
 
     // ============================================================
+    // STATE VARIABLES - EXCLUSION MECHANISM
+    // ============================================================
+
+    /// @notice Addresses excluded from earning incentives
+    /// @dev Used to exclude routers, bundlers, relayers, or malicious addresses
+    ///      Excluded addresses cannot earn points or claim rewards
+    mapping(address => bool) public notIncentivized;
+
+    // ============================================================
     // ERRORS
     // ============================================================
 
@@ -150,6 +159,8 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
     error StabilityIncentivizer__NoPositivePoints();
     error StabilityIncentivizer__NoPointsInEpoch();
     error StabilityIncentivizer__InvalidAddress();
+    error StabilityIncentivizer__AlreadyExcluded();
+    error StabilityIncentivizer__NotExcluded();
 
     // ============================================================
     // EVENTS
@@ -172,6 +183,10 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
     event EpochDurationUpdated(uint256 newDuration);
     event Paused(address indexed account);
     event Unpaused(address indexed account);
+    event AddressExcludedFromIncentives(
+        address indexed excludedAddress, uint256 currentEpochPointsZeroed, uint256 unclaimedRewardsReleased
+    );
+    event AddressIncludedInIncentives(address indexed includedAddress);
 
     // ============================================================
     // MODIFIERS
@@ -271,6 +286,14 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
         PendingSwap memory pending = _pendingSwaps[swapper];
         if (!pending.isPending) revert StabilityIncentivizer__NoPendingSwap();
 
+        // Clear pending swap first
+        delete _pendingSwaps[swapper];
+
+        // Skip point calculation if address is excluded from incentives
+        if (notIncentivized[swapper]) {
+            return;
+        }
+
         // Calculate prices (8 decimals)
         uint256 priceBefore = _calculateUSYPrice(pending.reserveUSDCBefore, pending.reserveUSYBefore);
         uint256 priceAfter = _calculateUSYPrice(reserveUSDC, reserveUSY);
@@ -285,9 +308,6 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
 
         // Update total positive points
         _updateTotalPositivePoints(currentEpoch, swapper, oldPoints, newPoints);
-
-        // Clear pending swap
-        delete _pendingSwaps[swapper];
 
         // Emit event
         emit StabilityPointsEarned(swapper, currentEpoch, points, priceBefore, priceAfter, reserveUSDC, reserveUSY);
@@ -647,5 +667,100 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
     function unpause() external onlyRewardsAdmin {
         paused = false;
         emit Unpaused(msg.sender);
+    }
+
+    // ============================================================
+    // ADMIN - EXCLUSION MANAGEMENT
+    // ============================================================
+
+    /**
+     * @notice Exclude an address from earning incentives
+     * @dev Used to exclude routers, bundlers, relayers, or malicious addresses
+     *      When excluded:
+     *      - Current epoch points are zeroed
+     *      - Unclaimed rewards from previous epochs are released back to current epoch pool
+     *      - Future swaps will not earn points
+     * @param user Address to exclude
+     */
+    function excludeFromIncentives(address user) external onlyRewardsAdmin {
+        if (user == address(0)) revert StabilityIncentivizer__InvalidAddress();
+        if (notIncentivized[user]) revert StabilityIncentivizer__AlreadyExcluded();
+
+        // Mark as excluded
+        notIncentivized[user] = true;
+
+        // Zero current epoch points and adjust total positive points
+        int256 currentPoints = userPointsPerEpoch[currentEpoch][user];
+        uint256 currentEpochPointsZeroed = 0;
+
+        if (currentPoints > 0) {
+            currentEpochPointsZeroed = SafeCast.toUint256(currentPoints);
+            userPointsPerEpoch[currentEpoch][user] = 0;
+
+            // Subtract from total positive points
+            uint256 totalPoints = totalPositivePointsPerEpoch[currentEpoch];
+            totalPositivePointsPerEpoch[currentEpoch] = totalPoints - currentEpochPointsZeroed;
+        } else if (currentPoints < 0) {
+            // If negative, just zero it
+            userPointsPerEpoch[currentEpoch][user] = 0;
+        }
+
+        // Release unclaimed rewards from all previous epochs back to current epoch funding
+        uint256 totalUnclaimedReleased = 0;
+
+        for (uint256 epoch = 0; epoch < currentEpoch; epoch++) {
+            int256 epochPoints = userPointsPerEpoch[epoch][user];
+            if (epochPoints <= 0) continue; // Skip if no positive points
+
+            uint256 userPositivePoints = SafeCast.toUint256(epochPoints);
+
+            // Check each reward token for unclaimed rewards
+            uint256 tokenCount = rewardTokens.length;
+            for (uint256 i = 0; i < tokenCount; i++) {
+                address token = rewardTokens[i];
+
+                // Skip if already claimed
+                if (hasClaimed[epoch][user][token]) continue;
+
+                // Calculate unclaimed amount
+                uint256 totalRewards = epochRewards[epoch][token];
+                uint256 totalPoints = totalPositivePointsPerEpoch[epoch];
+
+                if (totalPoints == 0) continue;
+
+                uint256 unclaimedAmount = (userPositivePoints * totalRewards) / totalPoints;
+
+                if (unclaimedAmount > 0) {
+                    // Mark as claimed (prevent double-claiming)
+                    hasClaimed[epoch][user][token] = true;
+
+                    // Add to current epoch funding (internal transfer - accountedBalance unchanged)
+                    currentEpochFunding[token] += unclaimedAmount;
+
+                    // NOTE: Do NOT update accountedBalance here!
+                    // This is an internal transfer from epochRewards to currentEpochFunding.
+                    // The funds were already counted in accountedBalance when first deposited.
+                    // Adding here would double-count and break _syncSingleReward detection.
+
+                    totalUnclaimedReleased += unclaimedAmount;
+                }
+            }
+        }
+
+        emit AddressExcludedFromIncentives(user, currentEpochPointsZeroed, totalUnclaimedReleased);
+    }
+
+    /**
+     * @notice Include an address back into incentives
+     * @dev Removes exclusion, allowing address to earn points again
+     * @param user Address to include
+     */
+    function includeInIncentives(address user) external onlyRewardsAdmin {
+        if (user == address(0)) revert StabilityIncentivizer__InvalidAddress();
+        if (!notIncentivized[user]) revert StabilityIncentivizer__NotExcluded();
+
+        notIncentivized[user] = false;
+
+        emit AddressIncludedInIncentives(user);
     }
 }
