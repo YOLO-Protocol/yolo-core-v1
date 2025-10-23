@@ -17,14 +17,18 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  *
  * INTEGRATOR NOTES:
  * 1. TreasuryForwarder sends funds directly via ERC20 transfer (no hooks/callbacks)
- * 2. Rewards are automatically synced on:
+ * 2. Automatic epoch rollover occurs when epoch duration passes, triggered by:
+ *    - beforeSwapUpdate() / afterSwapUpdate() (swap operations)
+ *    - claimReward() / claimAllRewards() (claiming operations)
+ *    - Manual rollEpoch() calls (permissionless, anyone can trigger)
+ * 3. Rewards are automatically synced on:
  *    - rollEpoch() (syncs all tokens before allocation)
  *    - claimReward() (syncs that specific token)
  *    - claimAllRewards() (syncs all tokens)
  *    - Manual syncRewards(tokens[]) calls (permissionless, anyone can trigger)
- * 3. registerRewardToken() automatically syncs existing balance to current epoch
- * 4. Unclaimed rewards from previous epochs do NOT affect new epoch funding calculations
- * 5. For retroactive token registration: existing balance is allocated to CURRENT epoch
+ * 4. registerRewardToken() automatically syncs existing balance to current epoch
+ * 5. Unclaimed rewards from previous epochs do NOT affect new epoch funding calculations
+ * 6. For retroactive token registration: existing balance is allocated to CURRENT epoch
  */
 contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -192,6 +196,13 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
         _;
     }
 
+    modifier checkEpoch() {
+        if (block.timestamp >= epochStartTime + epochDuration) {
+            _rollEpoch();
+        }
+        _;
+    }
+
     // ============================================================
     // CONSTRUCTOR
     // ============================================================
@@ -225,6 +236,7 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
     /**
      * @notice Called before anchor pool swap executes
      * @dev Stores reserve snapshot for later point calculation
+     *      Automatically rolls epoch if duration has passed
      * @param swapper Original trader address
      * @param reserveUSDC USDC reserve before swap (native decimals - 6 or 18)
      * @param reserveUSY USY reserve before swap (18 decimals)
@@ -234,6 +246,7 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
         override
         onlyYoloHook
         whenNotPaused
+        checkEpoch
     {
         _pendingSwaps[swapper] =
             PendingSwap({reserveUSDCBefore: reserveUSDC, reserveUSYBefore: reserveUSY, isPending: true});
@@ -242,6 +255,7 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
     /**
      * @notice Called after anchor pool swap executes
      * @dev Calculates price movement and awards/deducts points
+     *      Automatically rolls epoch if duration has passed
      * @param swapper Original trader address
      * @param reserveUSDC USDC reserve after swap (native decimals - 6 or 18)
      * @param reserveUSY USY reserve after swap (18 decimals)
@@ -251,6 +265,7 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
         override
         onlyYoloHook
         whenNotPaused
+        checkEpoch
     {
         // Retrieve before-swap data
         PendingSwap memory pending = _pendingSwaps[swapper];
@@ -409,7 +424,14 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
         if (block.timestamp < epochStartTime + epochDuration) {
             revert StabilityIncentivizer__EpochNotFinished();
         }
+        _rollEpoch();
+    }
 
+    /**
+     * @notice Internal epoch rollover logic
+     * @dev Called by rollEpoch() or checkEpoch modifier
+     */
+    function _rollEpoch() internal {
         // 1. Sync all reward tokens to capture any pending transfers
         for (uint256 i = 0; i < rewardTokens.length; i++) {
             _syncSingleReward(rewardTokens[i]);
@@ -441,10 +463,11 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
     /**
      * @notice Claim rewards for a specific token and epoch
      * @dev Automatically syncs the token before claiming to capture any pending funding
+     *      Automatically rolls epoch if duration has passed
      * @param epoch Epoch number to claim from
      * @param token Reward token address
      */
-    function claimReward(uint256 epoch, address token) external nonReentrant {
+    function claimReward(uint256 epoch, address token) external nonReentrant checkEpoch {
         // Automatically sync this token to capture any new funding
         _syncSingleReward(token);
 
@@ -481,10 +504,11 @@ contract StabilityIncentivizer is IStabilityTracker, ReentrancyGuard {
     /**
      * @notice Claim all available tokens for a specific epoch
      * @dev Automatically syncs all tokens before claiming to capture any pending funding
+     *      Automatically rolls epoch if duration has passed
      *      Uses nonReentrant guard to prevent reentrancy attacks via malicious reward tokens
      * @param epoch Epoch number to claim from
      */
-    function claimAllRewards(uint256 epoch) external nonReentrant {
+    function claimAllRewards(uint256 epoch) external nonReentrant checkEpoch {
         if (epoch >= currentEpoch) revert StabilityIncentivizer__EpochNotEnded();
 
         // Sync all reward tokens before claiming
