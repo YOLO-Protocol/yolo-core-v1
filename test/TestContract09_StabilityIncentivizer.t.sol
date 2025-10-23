@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {StabilityIncentivizer} from "../src/stability/StabilityIncentivizer.sol";
 import {ACLManager} from "../src/access/ACLManager.sol";
-import {IStabilityTracker} from "../src/interfaces/IStabilityTracker.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 // Mock reward token for testing
@@ -80,6 +79,11 @@ contract TestContract09_StabilityIncentivizer is Test {
 
     uint256 public constant EPOCH_DURATION = 7 days;
     uint8 public constant USDC_DECIMALS = 6;
+
+    // Helper function to safely transfer tokens in tests
+    function _safeTransfer(MockRewardToken token, address to, uint256 amount) internal {
+        require(token.transfer(to, amount), "Transfer failed");
+    }
 
     function setUp() public {
         // Create accounts
@@ -167,7 +171,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         MockRewardToken newToken = new MockRewardToken("New Token", "NEW");
 
         // Send tokens to incentivizer BEFORE registering
-        newToken.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(newToken, address(incentivizer), 1000e18);
 
         vm.prank(rewardsAdmin);
         incentivizer.registerRewardToken(address(newToken));
@@ -270,7 +274,7 @@ contract TestContract09_StabilityIncentivizer is Test {
 
     function test_Contract09_Case12_syncRewardsDetectsNewFunding() public {
         // Send tokens to incentivizer
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
 
         // Sync should detect the new balance
         address[] memory tokens = new address[](1);
@@ -282,8 +286,8 @@ contract TestContract09_StabilityIncentivizer is Test {
     }
 
     function test_Contract09_Case13_syncRewardsMultipleTokens() public {
-        rewardToken1.transfer(address(incentivizer), 1000e18);
-        rewardToken2.transfer(address(incentivizer), 2000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken2, address(incentivizer), 2000e18);
 
         address[] memory tokens = new address[](2);
         tokens[0] = address(rewardToken1);
@@ -295,7 +299,7 @@ contract TestContract09_StabilityIncentivizer is Test {
     }
 
     function test_Contract09_Case14_syncRewardsPermissionless() public {
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
 
         // Anyone can call syncRewards
         address[] memory tokens = new address[](1);
@@ -328,8 +332,8 @@ contract TestContract09_StabilityIncentivizer is Test {
 
     function test_Contract09_Case17_rollEpochAllocatesRewards() public {
         // Send rewards
-        rewardToken1.transfer(address(incentivizer), 1000e18);
-        rewardToken2.transfer(address(incentivizer), 2000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken2, address(incentivizer), 2000e18);
 
         // Sync rewards
         address[] memory tokens = new address[](2);
@@ -352,7 +356,7 @@ contract TestContract09_StabilityIncentivizer is Test {
 
     function test_Contract09_Case18_rollEpochAutoSyncsBeforeAllocation() public {
         // Send tokens WITHOUT manual sync
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
 
         // Roll epoch should auto-sync
         vm.warp(block.timestamp + EPOCH_DURATION);
@@ -372,7 +376,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         yoloHook.simulateSwap(trader1, 1_100_000e6, 1_000_000e18, 1_050_000e6, 1_000_000e18);
 
         // Send rewards and roll epoch
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
@@ -398,7 +402,7 @@ contract TestContract09_StabilityIncentivizer is Test {
 
         // Total: 8M points, trader1 = 62.5%, trader2 = 37.5%
 
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
@@ -425,7 +429,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         vm.prank(address(yoloHook));
         yoloHook.simulateSwap(trader1, 1_100_000e6, 1_000_000e18, 1_050_000e6, 1_000_000e18);
 
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
@@ -443,7 +447,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         vm.prank(address(yoloHook));
         yoloHook.simulateSwap(trader1, 1_000_000e6, 1_000_000e18, 1_100_000e6, 1_000_000e18);
 
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
@@ -458,8 +462,8 @@ contract TestContract09_StabilityIncentivizer is Test {
         yoloHook.simulateSwap(trader1, 1_100_000e6, 1_000_000e18, 1_050_000e6, 1_000_000e18);
 
         // Send both reward tokens
-        rewardToken1.transfer(address(incentivizer), 1000e18);
-        rewardToken2.transfer(address(incentivizer), 2000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken2, address(incentivizer), 2000e18);
 
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
@@ -484,7 +488,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         incentivizer.rollEpoch();
 
         // Send NEW funding AFTER epoch rolled (shouldn't affect epoch 1)
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
 
         // Claim should auto-sync but NOT affect epoch 1 rewards (returns early with userReward = 0)
         uint256 balanceBefore = rewardToken1.balanceOf(trader1);
@@ -509,7 +513,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         vm.prank(address(yoloHook));
         yoloHook.simulateSwap(trader1, 1_100_000e6, 1_000_000e18, 1_050_000e6, 1_000_000e18);
 
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
@@ -521,7 +525,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         vm.prank(address(yoloHook));
         yoloHook.simulateSwap(trader1, 1_100_000e6, 1_000_000e18, 1_050_000e6, 1_000_000e18);
 
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
@@ -536,7 +540,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         vm.prank(address(yoloHook));
         yoloHook.simulateSwap(trader1, 1_100_000e6, 1_000_000e18, 1_050_000e6, 1_000_000e18);
 
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
 
         address[] memory tokens = new address[](1);
         tokens[0] = address(rewardToken1);
@@ -556,7 +560,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         vm.prank(address(yoloHook));
         yoloHook.simulateSwap(trader2, 1_060_000e6, 1_000_000e18, 1_030_000e6, 1_000_000e18);
 
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
 
         address[] memory tokens = new address[](1);
         tokens[0] = address(rewardToken1);
@@ -622,12 +626,12 @@ contract TestContract09_StabilityIncentivizer is Test {
         vm.prank(address(yoloHook));
         yoloHook.simulateSwap(trader1, 1_100_000e6, 1_000_000e18, 1_050_000e6, 1_000_000e18);
 
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
         // Epoch 2: send MORE rewards WITHOUT trader1 claiming epoch 1
-        rewardToken1.transfer(address(incentivizer), 500e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 500e18);
         vm.warp(incentivizer.epochStartTime() + EPOCH_DURATION); // Warp from new epochStartTime
         incentivizer.rollEpoch();
 
@@ -641,7 +645,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         vm.prank(address(yoloHook));
         yoloHook.simulateSwap(trader1, 1_100_000e6, 1_000_000e18, 1_050_000e6, 1_000_000e18);
 
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
@@ -649,7 +653,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         vm.prank(address(yoloHook));
         yoloHook.simulateSwap(trader1, 1_080_000e6, 1_000_000e18, 1_040_000e6, 1_000_000e18);
 
-        rewardToken1.transfer(address(incentivizer), 2000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 2000e18);
         vm.warp(incentivizer.epochStartTime() + EPOCH_DURATION); // Warp from new epochStartTime
         incentivizer.rollEpoch();
 
@@ -680,7 +684,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         assertEq(rewardToken1.balanceOf(trader1), balanceBefore);
 
         // Now send rewards AFTER epoch ended - should go to currentEpochFunding (epoch 2)
-        rewardToken1.transfer(address(incentivizer), 500e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 500e18);
         address[] memory tokens = new address[](1);
         tokens[0] = address(rewardToken1);
         incentivizer.syncRewards(tokens);
@@ -734,7 +738,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         yoloHook.simulateSwap(trader1, 1_100_000e6, 1_000_000e18, 1_050_000e6, 1_000_000e18);
 
         // Send rewards and roll epoch
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
@@ -760,7 +764,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         vm.prank(address(yoloHook));
         yoloHook.simulateSwap(trader2, 1_060_000e6, 1_000_000e18, 1_030_000e6, 1_000_000e18);
 
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
@@ -794,14 +798,14 @@ contract TestContract09_StabilityIncentivizer is Test {
 
     function test_Contract09_Case44_accountedBalanceStaysConsistentAcrossEpochs() public {
         // Epoch 1: Send 1000, allocate to epoch 1
-        rewardToken1.transfer(address(incentivizer), 1000e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 1000e18);
         vm.warp(block.timestamp + EPOCH_DURATION);
         incentivizer.rollEpoch();
 
         assertEq(incentivizer.accountedBalance(address(rewardToken1)), 1000e18);
 
         // Epoch 2: Send 500 more
-        rewardToken1.transfer(address(incentivizer), 500e18);
+        _safeTransfer(rewardToken1, address(incentivizer), 500e18);
         vm.warp(incentivizer.epochStartTime() + EPOCH_DURATION); // Warp from new epochStartTime
         incentivizer.rollEpoch();
 
