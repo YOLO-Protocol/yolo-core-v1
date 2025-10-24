@@ -655,7 +655,87 @@ contract YoloIncentivesController is IIncentivesTracker, ReentrancyGuard {
             uint256 poolTokenCount = pool.activeRewardTokens.length;
             for (uint256 j = 0; j < poolTokenCount; j++) {
                 address token = pool.activeRewardTokens[j];
-                _updatePool(asset, token); // Settles rewards at current epoch's rate
+                _updatePool(asset, token); // Settles rewards at current epoch's rate (epoch-aware)
+            }
+        }
+
+        // STEP 2.5: Handle multi-epoch gaps
+        // Detect if multiple epochs passed without rollover
+        uint256 epochsPassed = (block.timestamp - epochStartTime) / EPOCH_DURATION;
+
+        if (epochsPassed > 1) {
+            // CRITICAL: Capture leftover emissions from current epoch BEFORE zeroing rates
+            // The current epoch had a rewardRate set, but we're about to skip to a future epoch
+            // Any unstreamed portion should go to dust for recycling
+            for (uint256 i = 0; i < tokenCount; i++) {
+                address token = rewardTokens[i];
+                uint256 rate = rewardRate[token];
+
+                if (rate > 0) {
+                    // Calculate the current epoch's end time
+                    uint256 currentEpochEnd = epochStartTime + EPOCH_DURATION;
+
+                    // Find the latest lastUpdateTime across all pools for this token
+                    // to determine how much of the epoch was NOT settled by Step 2
+                    uint256 latestUpdate = epochStartTime;
+                    for (uint256 j = 0; j < assetCount; j++) {
+                        address asset = registeredAssets[j];
+                        PoolInfo storage pool = poolInfo[asset];
+                        RewardState storage state = pool.rewardState[token];
+
+                        // Check if this pool tracks this token
+                        bool hasToken = false;
+                        for (uint256 k = 0; k < pool.activeRewardTokens.length; k++) {
+                            if (pool.activeRewardTokens[k] == token) {
+                                hasToken = true;
+                                break;
+                            }
+                        }
+
+                        if (hasToken && state.lastUpdateTime > latestUpdate && state.lastUpdateTime <= currentEpochEnd)
+                        {
+                            latestUpdate = state.lastUpdateTime;
+                        }
+                    }
+
+                    // Calculate leftover: time from latest settlement to epoch end
+                    if (latestUpdate < currentEpochEnd) {
+                        uint256 leftoverDuration = currentEpochEnd - latestUpdate;
+                        // rewardRate represents total per-second emissions across all pools
+                        uint256 leftover = (leftoverDuration * rate) / REWARD_RATE_PRECISION;
+
+                        // Add to dust for recycling in next epoch
+                        rewardDust[token] += leftover;
+                    }
+                }
+            }
+
+            // Now advance epoch markers for skipped epochs
+            // Intermediate epochs (e.g., epoch 3, 4) had no funding, so nothing to capture for them
+            uint256 epochsToSkip = epochsPassed - 1;
+            epochStartTime += EPOCH_DURATION * epochsToSkip;
+            currentEpoch += epochsToSkip;
+
+            // Zero all rates to prevent stale rate leakage
+            for (uint256 i = 0; i < tokenCount; i++) {
+                rewardRate[rewardTokens[i]] = 0;
+            }
+
+            // Update all pool reward states to new epoch start
+            for (uint256 i = 0; i < assetCount; i++) {
+                address asset = registeredAssets[i];
+                PoolInfo storage pool = poolInfo[asset];
+                uint256 poolTokenCount = pool.activeRewardTokens.length;
+
+                for (uint256 j = 0; j < poolTokenCount; j++) {
+                    address token = pool.activeRewardTokens[j];
+                    RewardState storage state = pool.rewardState[token];
+
+                    // Reset lastUpdateTime to new epoch start
+                    if (state.lastUpdateTime < epochStartTime) {
+                        state.lastUpdateTime = epochStartTime;
+                    }
+                }
             }
         }
 
@@ -721,9 +801,26 @@ contract YoloIncentivesController is IIncentivesTracker, ReentrancyGuard {
             return;
         }
 
+        // CRITICAL FIX: Cap calculation to current epoch boundary to prevent reward inflation
+        // Issue: Unbounded duration across multiple epochs causes inflated rewards
+        // Example: 1M epoch budget with 2-epoch delay → 2M rewards (100% inflation)
+        // Solution: Only calculate rewards for current epoch, capped at epoch end
+        uint256 epochEndTime = epochStartTime + EPOCH_DURATION;
+        uint256 calculationTime = block.timestamp > epochEndTime ? epochEndTime : block.timestamp;
+
+        // Calculate duration for reward calculation
+        uint256 duration;
+
+        // If lastUpdateTime is from previous epoch, only count from current epoch start
+        // This prevents multi-epoch accumulation when settlements are delayed
+        if (state.lastUpdateTime < epochStartTime) {
+            duration = calculationTime - epochStartTime;
+        } else {
+            duration = calculationTime - state.lastUpdateTime;
+        }
+
         // CRITICAL: Calculate reward BEFORE checking lpSupply
         // Each token uses its OWN lastUpdateTime to prevent zero-reward bug
-        uint256 duration = block.timestamp - state.lastUpdateTime;
         uint256 reward =
             (duration * rewardRate[rewardToken] * pool.allocPoint) / totalAllocPoint / REWARD_RATE_PRECISION;
 
@@ -732,12 +829,12 @@ contract YoloIncentivesController is IIncentivesTracker, ReentrancyGuard {
         if (lpSupply == 0) {
             // Pool has no stakers - add reward to dust for recycling next epoch
             rewardDust[rewardToken] += reward;
-            state.lastUpdateTime = block.timestamp;
+            state.lastUpdateTime = calculationTime;
             return;
         }
 
         state.accRewardPerShare += (reward * PRECISION) / lpSupply;
-        state.lastUpdateTime = block.timestamp;
+        state.lastUpdateTime = calculationTime;
     }
 
     // ============================================================
@@ -936,11 +1033,21 @@ contract YoloIncentivesController is IIncentivesTracker, ReentrancyGuard {
                 address token = tokens[j];
                 RewardState storage state = pool.rewardState[token];
 
-                // Calculate pending with simulated update
+                // Calculate pending with simulated update (epoch-aware)
                 uint256 accRewardPerShare = state.accRewardPerShare;
 
                 if (block.timestamp > state.lastUpdateTime && pool.totalSupply > 0 && totalAllocPoint > 0) {
-                    uint256 duration = block.timestamp - state.lastUpdateTime;
+                    // Cap calculation to current epoch boundary (matches _updatePool logic)
+                    uint256 epochEndTime = epochStartTime + EPOCH_DURATION;
+                    uint256 calculationTime = block.timestamp > epochEndTime ? epochEndTime : block.timestamp;
+
+                    uint256 duration;
+                    if (state.lastUpdateTime < epochStartTime) {
+                        duration = calculationTime - epochStartTime;
+                    } else {
+                        duration = calculationTime - state.lastUpdateTime;
+                    }
+
                     uint256 reward =
                         (duration * rewardRate[token] * pool.allocPoint) / totalAllocPoint / REWARD_RATE_PRECISION;
                     accRewardPerShare += (reward * PRECISION) / pool.totalSupply;

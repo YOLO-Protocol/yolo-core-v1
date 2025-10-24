@@ -759,4 +759,69 @@ contract TestContract10_YoloIncentivesController is Test {
         assertApproxEqRel(dust, expectedDust, 0.01e18, "Dust should capture all emissions (zero supply pools)");
         assertEq(controller.rewardRate(address(rewardTokenUSY)), 0, "Rate should be zeroed");
     }
+
+    // ============================================================
+    // CASE 21: Multi-Epoch Delay - No Reward Inflation
+    // ============================================================
+
+    function test_case21_multiEpochDelay_noInflation() public {
+        // This test verifies the FIX for the critical reward inflation bug
+        // BUG: Unbounded duration in _updatePool() caused rewards to multiply
+        //      Example: 1M funding + 5 epoch delay = 5M rewards (400% inflation)
+        // FIX: Epoch-aware _updatePool() + leftover capture prevents inflation
+
+        // Start the controller
+        vm.startPrank(rewardsAdmin);
+        controller.addPool(address(poolTokenA), 100);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rewardTokenUSY);
+        controller.setPoolRewardTokens(address(poolTokenA), tokens);
+
+        address[] memory excluded = new address[](0);
+        uint256 startTime = block.timestamp + 1;
+        controller.start(startTime, excluded);
+        vm.stopPrank();
+
+        vm.warp(startTime);
+
+        // Fund epoch 1 with 1M
+        _fundEpoch(rewardTokenUSY, 1_000_000e18);
+
+        // Roll to epoch 2 (funds become active)
+        vm.warp(startTime + EPOCH_DURATION);
+        controller.rollEpoch();
+        uint256 epoch2Start = block.timestamp;
+
+        // CRITICAL TEST: Warp through 5 full epochs WITHOUT any settlements
+        // This would previously cause massive inflation (5M from 1M budget)
+        uint256 epoch7Start = epoch2Start + (5 * EPOCH_DURATION);
+        vm.warp(epoch7Start);
+
+        // User finally stakes, triggering delayed settlement
+        poolTokenA.testMint(userA, 100e18);
+
+        // Fast forward to accumulate all possible rewards
+        vm.warp(epoch7Start + EPOCH_DURATION);
+
+        // Check claimable rewards
+        uint256 claimable = _getClaimable(userA, address(poolTokenA), address(rewardTokenUSY));
+
+        // ASSERTION: Rewards should NOT exceed original funding
+        // User staked very late, so should get minimal rewards from the funded epoch
+        // Definitely should NOT get 5M (which would indicate inflation bug)
+        uint256 maxAllowed = 1_000_000e18;
+        assertLe(claimable, maxAllowed, "CRITICAL: Rewards exceed funding (inflation bug not fixed!)");
+
+        // Also verify we're nowhere near the inflated amount
+        uint256 inflatedAmount = 5_000_000e18;
+        assertLt(claimable, inflatedAmount * 30 / 100, "Rewards should be much less than inflated amount");
+
+        // Check economic invariant: total distributed should not exceed total funded
+        uint256 dust = controller.rewardDust(address(rewardTokenUSY));
+        uint256 totalDistributed = claimable + dust;
+
+        // Some tolerance for the leftover capture logic
+        assertLe(totalDistributed, maxAllowed * 101 / 100, "Economic invariant violated: total distributed > funded");
+    }
 }
