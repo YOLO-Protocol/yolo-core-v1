@@ -53,4 +53,22 @@ contract MockMintableIncentivizedERC20 is MintableIncentivizedERC20 {
     function testTransfer(address from, address to, uint256 amount) external {
         _transfer(from, to, amount);
     }
+
+    /**
+     * @notice Test helper: mint without YoloHook restriction
+     * @param to The account to mint to
+     * @param amount The amount to mint
+     */
+    function testMint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    /**
+     * @notice Test helper: burn without YoloHook restriction
+     * @param from The account to burn from
+     * @param amount The amount to burn
+     */
+    function testBurn(address from, uint256 amount) external {
+        _burn(from, amount);
+    }
 }
