@@ -3,8 +3,6 @@ pragma solidity ^0.8.26;
 
 import {Base03_DeployComprehensiveTestEnvironment} from "./base/Base03_DeployComprehensiveTestEnvironment.t.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
-import {IYoloSyntheticAsset} from "../src/interfaces/IYoloSyntheticAsset.sol";
-import {MockYLPVault} from "../src/mocks/MockYLPVault.sol";
 
 /**
  * @title TestContract11_YoloSyntheticAssetShareSplit
@@ -114,7 +112,7 @@ contract TestContract11_YoloSyntheticAssetShareSplit is Base03_DeployComprehensi
 
         // Transfer to trigger cost basis rescale
         vm.prank(alice);
-        yETH_asset.transfer(bob, 1e18);
+        assertTrue(yETH_asset.transfer(bob, 1e18), "Transfer should succeed");
 
         // Cost basis should rescale to half (same total value, double shares)
         uint128 avgPriceAfter = yETH_asset.avgPriceX8(alice);
@@ -408,7 +406,7 @@ contract TestContract11_YoloSyntheticAssetShareSplit is Base03_DeployComprehensi
 
         // Transfer to trigger rescale
         vm.prank(alice);
-        yETH_asset.transfer(bob, 1e18);
+        assertTrue(yETH_asset.transfer(bob, 1e18), "Transfer should succeed");
 
         // Cost basis should rescale: avgBefore * 1.0e18 / 1.1e18 ≈ avgBefore * 10/11
         uint128 avgAfter = yETH_asset.avgPriceX8(alice);
@@ -516,9 +514,9 @@ contract TestContract11_YoloSyntheticAssetShareSplit is Base03_DeployComprehensi
 
         // Trigger rescale for both users
         vm.prank(alice);
-        yETH_asset.transfer(charlie, 1e18);
+        assertTrue(yETH_asset.transfer(charlie, 1e18), "Transfer should succeed");
         vm.prank(bob);
-        yETH_asset.transfer(charlie, 1e18);
+        assertTrue(yETH_asset.transfer(charlie, 1e18), "Transfer should succeed");
 
         // Global cost basis should remain consistent (same total value, different shares)
         uint256 globalCostAfter = yETH_asset.getTotalCostBasisX8();
@@ -605,7 +603,7 @@ contract TestContract11_YoloSyntheticAssetShareSplit is Base03_DeployComprehensi
         // Alice transfers to Bob
         uint256 bobBalanceBefore = yETH_asset.balanceOf(bob);
         vm.prank(alice);
-        yETH_asset.transfer(bob, 50e18);
+        assertTrue(yETH_asset.transfer(bob, 50e18), "Transfer should succeed");
 
         // Verify transfer worked correctly
         uint256 bobBalanceAfter = yETH_asset.balanceOf(bob);

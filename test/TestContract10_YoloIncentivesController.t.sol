@@ -447,10 +447,10 @@ contract TestContract10_YoloIncentivesController is Test {
         uint256 userARewards = _getClaimable(userA, address(poolTokenA), address(rewardTokenUSY));
 
         // First period: 3 days at 1000/2000 allocation
-        uint256 period1 = (1_000_000e18 * 1000 / 2000) * 3 days / EPOCH_DURATION;
+        uint256 period1 = (1_000_000e18 * 1000 * 3 days) / (2000 * EPOCH_DURATION);
 
         // Second period: 4 days at 200/1200 allocation
-        uint256 period2 = (1_000_000e18 * 200 / 1200) * 4 days / EPOCH_DURATION;
+        uint256 period2 = (1_000_000e18 * 200 * 4 days) / (1200 * EPOCH_DURATION);
 
         uint256 expected = period1 + period2;
         assertApproxEqRel(userARewards, expected, 0.02e18, "Rewards should reflect both allocation periods");
