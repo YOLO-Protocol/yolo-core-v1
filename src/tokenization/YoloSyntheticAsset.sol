@@ -152,34 +152,41 @@ contract YoloSyntheticAsset is
      * @param amount Amount to burn
      */
     function _settleAndBurn(address from, uint256 amount) internal {
-        // Update cost basis FIRST if liquidityIndex changed (ensures avgPriceX8 is current)
+        // Rescale cost basis FIRST to ensure avgPriceX8 reflects current liquidityIndex
+        // This is critical: if a corporate action (split/dividend) changed liquidityIndex,
+        // we need the rescaled average for correct PnL calculation
         if (!_isProtocolAccount(from)) {
             _updateCostBasisIfNeeded(from);
         }
 
+        // Capture state with RESCALED average
         uint256 prevBalance = balanceOf(from);
         uint128 prevAvg = avgPriceX8[from];
 
-        // PnL settlement only for yAssets (not USY), non-protocol accounts with cost basis
+        // Burn tokens (may burn slightly more due to ceiling division)
+        // Note: _burn also calls _updateCostBasisIfNeeded, but it's idempotent and returns early
+        _burn(from, amount);
+
+        // Calculate ACTUAL amount burned
+        uint256 newBalance = balanceOf(from);
+        uint256 actualBurned = prevBalance - newBalance;
+
+        // PnL settlement only for yAssets (not USY), non-protocol accounts with cost basis, using ACTUAL burned
         if (_shouldTrackCostBasis() && !_isProtocolAccount(from) && prevAvg > 0) {
             uint256 currentPriceX8 = _getOracle().getAssetPrice(address(this));
             if (currentPriceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
             int256 deltaX8 = SafeCast.toInt256(currentPriceX8) - SafeCast.toInt256(uint256(prevAvg));
             int256 pnlUSY = deltaX8 >= 0
-                ? SafeCast.toInt256((SafeCast.toUint256(deltaX8) * amount) / 1e8)  // FLOOR for profit
-                : -SafeCast.toInt256((SafeCast.toUint256(-deltaX8) * amount + 1e8 - 1) / 1e8); // CEIL for loss
+                ? SafeCast.toInt256((SafeCast.toUint256(deltaX8) * actualBurned) / 1e8)  // Use actual!
+                : -SafeCast.toInt256((SafeCast.toUint256(-deltaX8) * actualBurned + 1e8 - 1) / 1e8);
 
             IYoloHook(YOLO_HOOK).settlePnLFromSynthetic(from, pnlUSY);
         }
 
-        // 1) Burn FIRST (so parent hooks run on consistent state)
-        _burn(from, amount);
-
-        // 2) Skip cost-basis tracking for protocol accounts or USY
+        // Skip cost-basis tracking for protocol accounts or USY
         if (_isProtocolAccount(from) || !_shouldTrackCostBasis()) return;
 
-        uint256 newBalance = prevBalance - amount;
         uint128 newAvg = newBalance == 0 ? 0 : prevAvg;
         avgPriceX8[from] = newAvg;
 
@@ -322,10 +329,11 @@ contract YoloSyntheticAsset is
     /**
      * @notice Execute a cash dividend via DRIP (Dividend Reinvestment Plan)
      * @dev Only callable by YoloHook. Auto-reinvests dividend as additional shares
-     * @param dividendAmountWAD Total dividend amount in WAD (18 decimals)
+     * @param dividendPerShareWAD Cash dividend per share in WAD (18 decimals)
+     *        Example: $0.02 per share = 0.02e18
      */
-    function executeCashDividend(uint256 dividendAmountWAD) external onlyYoloHook whenNotPaused {
-        if (dividendAmountWAD == 0) return; // No-op for zero dividend
+    function executeCashDividend(uint256 dividendPerShareWAD) external onlyYoloHook whenNotPaused {
+        if (dividendPerShareWAD == 0) return; // No-op for zero dividend
 
         uint256 currentSupply = totalSupply();
         if (currentSupply == 0) revert YoloSyntheticAsset__InvalidPrice(); // Cannot distribute to zero holders
@@ -337,16 +345,18 @@ contract YoloSyntheticAsset is
         // Normalize price to WAD (18 decimals)
         uint256 priceWAD = _normalizeOraclePrice(priceX8);
 
-        // Calculate additional shares from dividend with WAD precision (ceiling division)
-        // Example: $2 dividend @ $100/share = (2e18 * 1e18) / 100e18 = 0.02e18 shares
-        // Without * WAD, 2e18 / 100e18 = 0 (truncates to zero!)
-        uint256 additionalShares = (dividendAmountWAD * WAD + priceWAD - 1) / priceWAD;
+        // Adjust liquidityIndex to reflect DRIP: newIndex = oldIndex * (price + dividendPerShare) / price
+        // Example: $0.02 per share dividend @ $100/share
+        //   = liquidityIndex * (100 + 0.02) / 100
+        //   = liquidityIndex * 1.0002
+        //   = 0.02% increase in all balances
+        // This simplified formula prevents overflow and is easier to audit
+        liquidityIndex = (liquidityIndex * (priceWAD + dividendPerShareWAD)) / priceWAD;
 
-        // Adjust liquidityIndex to reflect DRIP: newIndex = oldIndex * (supply + additionalShares) / supply
-        // This is equivalent to a stock dividend of (additionalShares / supply) percentage
-        liquidityIndex = (liquidityIndex * (currentSupply + additionalShares)) / currentSupply;
+        // Calculate additionalShares for event (informational only, not used in state)
+        uint256 additionalShares = (currentSupply * dividendPerShareWAD) / priceWAD;
 
-        emit CashDividendExecuted(dividendAmountWAD, additionalShares, liquidityIndex);
+        emit CashDividendExecuted(dividendPerShareWAD, additionalShares, liquidityIndex);
     }
 
     /**
@@ -414,9 +424,15 @@ contract YoloSyntheticAsset is
      * @dev Internal mint with oracle price
      */
     function _mintWithOraclePrice(address to, uint256 amount) internal {
-        // Check supply cap
+        // Calculate what the actual minted amount will be (due to ceiling division)
+        // scaledAmount = ceiling(amount * WAD / liquidityIndex)
+        // actualMinted = scaledAmount * liquidityIndex / WAD
+        uint256 scaledAmount = (amount * WAD + liquidityIndex - 1) / liquidityIndex;
+        uint256 estimatedActual = (scaledAmount * liquidityIndex) / WAD;
+
+        // Check supply cap against ACTUAL amount that will be minted
         if (maxSupply > 0) {
-            uint256 newSupply = totalSupply() + amount;
+            uint256 newSupply = totalSupply() + estimatedActual;
             if (newSupply > maxSupply) revert YoloSyntheticAsset__ExceedsMaxSupply();
         }
 
@@ -578,6 +594,9 @@ contract YoloSyntheticAsset is
     function _mint(address account, uint256 amount) internal virtual override {
         if (account == address(0)) revert IncentivizedERC20__InvalidAddress();
 
+        // Capture balance BEFORE mint
+        uint256 balanceBefore = balanceOf(account);
+
         _beforeTokenTransfer(address(0), account, amount);
 
         // Convert actual amount to scaled amount (ceiling division to favor protocol)
@@ -587,17 +606,20 @@ contract YoloSyntheticAsset is
         _totalSupply = _totalSupply + scaledAmount;
         _userState[account].balance = _userState[account].balance + scaledAmount;
 
-        // Calculate actual balances for incentives
+        // Calculate ACTUAL balance after mint and delta
+        uint256 balanceAfter = balanceOf(account);
+        uint256 actualMinted = balanceAfter - balanceBefore;
+
+        // Calculate actual total for incentives
         uint256 actualTotal = (_totalSupply * liquidityIndex) / WAD;
-        uint256 actualBalance = (_userState[account].balance * liquidityIndex) / WAD;
 
-        // Update incentives with actual amounts (ratio stays identical)
-        _updateIncentives(address(0), account, actualTotal, 0, SafeCast.toUint128(actualBalance));
+        // Update incentives with actual amounts
+        _updateIncentives(address(0), account, actualTotal, 0, SafeCast.toUint128(balanceAfter));
 
-        // Emit Transfer with actual amount
-        emit Transfer(address(0), account, amount);
+        // Emit Transfer with ACTUAL minted amount (not requested amount)
+        emit Transfer(address(0), account, actualMinted);
 
-        _afterTokenTransfer(address(0), account, amount);
+        _afterTokenTransfer(address(0), account, actualMinted);
     }
 
     /**
@@ -611,6 +633,9 @@ contract YoloSyntheticAsset is
 
         // Update cost basis if needed BEFORE _beforeTokenTransfer (hook logic may depend on avgPriceX8)
         _updateCostBasisIfNeeded(account);
+
+        // Capture balance BEFORE burn
+        uint256 balanceBefore = balanceOf(account);
 
         _beforeTokenTransfer(account, address(0), amount);
 
@@ -626,17 +651,20 @@ contract YoloSyntheticAsset is
             _totalSupply = _totalSupply - scaledAmount;
         }
 
-        // Calculate actual balances for incentives
+        // Calculate ACTUAL balance after burn and delta
+        uint256 balanceAfter = balanceOf(account);
+        uint256 actualBurned = balanceBefore - balanceAfter;
+
+        // Calculate actual total for incentives
         uint256 actualTotal = (_totalSupply * liquidityIndex) / WAD;
-        uint256 actualBalance = (_userState[account].balance * liquidityIndex) / WAD;
 
         // Update incentives with actual amounts
-        _updateIncentives(account, address(0), actualTotal, SafeCast.toUint128(actualBalance), 0);
+        _updateIncentives(account, address(0), actualTotal, SafeCast.toUint128(balanceAfter), 0);
 
-        // Emit Transfer with actual amount
-        emit Transfer(account, address(0), amount);
+        // Emit Transfer with ACTUAL burned amount (not requested amount)
+        emit Transfer(account, address(0), actualBurned);
 
-        _afterTokenTransfer(account, address(0), amount);
+        _afterTokenTransfer(account, address(0), actualBurned);
     }
 
     /**
@@ -650,132 +678,117 @@ contract YoloSyntheticAsset is
         if (from == address(0)) revert IncentivizedERC20__InvalidAddress();
         if (to == address(0)) revert IncentivizedERC20__InvalidAddress();
 
-        // Update cost basis for both parties BEFORE any logic (ensures avgPriceX8 reflects liquidityIndex)
+        // Update cost basis BEFORE reading balances (ensures avgPriceX8 reflects liquidityIndex)
         if (!_isProtocolAccount(from)) _updateCostBasisIfNeeded(from);
         if (!_isProtocolAccount(to)) _updateCostBasisIfNeeded(to);
 
-        // ===== CASE 1: Protocol → User (Buy Flow) =====
-        // User receives synthetic assets from protocol at current oracle price
-        if (_isProtocolAccount(from) && !_isProtocolAccount(to) && _shouldTrackCostBasis()) {
-            uint256 toBalance = balanceOf(to);
-            uint128 prevToAvg = avgPriceX8[to];
+        // Capture PRE-transfer balances and cost basis
+        uint256 fromBalanceBefore = balanceOf(from);
+        uint256 toBalanceBefore = balanceOf(to);
+        uint128 prevFromAvg = avgPriceX8[from];
+        uint128 prevToAvg = avgPriceX8[to];
 
-            // Get current oracle price for this synthetic asset
+        _beforeTokenTransfer(from, to, amount);
+
+        // Perform scaled balance update
+        uint128 scaledAmount = SafeCast.toUint128((amount * WAD + liquidityIndex - 1) / liquidityIndex);
+        uint128 fromScaledBefore = _userState[from].balance;
+        uint128 toScaledBefore = _userState[to].balance;
+
+        if (fromScaledBefore < scaledAmount) revert IncentivizedERC20__InsufficientBalance();
+
+        unchecked {
+            _userState[from].balance = fromScaledBefore - scaledAmount;
+        }
+        _userState[to].balance = toScaledBefore + scaledAmount;
+
+        // Calculate ACTUAL amounts transferred (may differ from `amount` due to ceiling division)
+        uint256 fromBalanceAfter = balanceOf(from);
+        uint256 toBalanceAfter = balanceOf(to);
+        uint256 actualTransferred = fromBalanceBefore - fromBalanceAfter;
+
+        // Update incentives with actual balances
+        uint256 actualTotal = (_totalSupply * liquidityIndex) / WAD;
+        _updateIncentives(
+            from, to, actualTotal, SafeCast.toUint128(fromBalanceAfter), SafeCast.toUint128(toBalanceAfter)
+        );
+
+        // Emit Transfer with ACTUAL amount
+        emit Transfer(from, to, actualTransferred);
+
+        // Cost basis and PnL updates using ACTUAL transferred amount
+
+        // ===== CASE 1: Protocol → User (Buy Flow) =====
+        if (_isProtocolAccount(from) && !_isProtocolAccount(to) && _shouldTrackCostBasis()) {
             uint256 priceX8 = _getOracle().getAssetPrice(address(this));
             if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
-            // Calculate new weighted average with ceiling division
+            // Calculate new weighted average using ACTUAL transferred amount
             uint128 newToAvg;
-            if (toBalance == 0) {
+            if (toBalanceBefore == 0) {
                 newToAvg = SafeCast.toUint128(priceX8);
             } else {
-                uint256 existingCost = uint256(prevToAvg) * toBalance;
-                uint256 incomingCost = priceX8 * amount;
+                uint256 existingCost = uint256(prevToAvg) * toBalanceBefore;
+                uint256 incomingCost = priceX8 * actualTransferred; // Use actual!
                 uint256 totalCost = existingCost + incomingCost;
-                uint256 totalQuantity = toBalance + amount;
-                newToAvg = SafeCast.toUint128((totalCost + totalQuantity - 1) / totalQuantity); // ceiling
+                newToAvg = SafeCast.toUint128((totalCost + toBalanceAfter - 1) / toBalanceAfter);
             }
 
             avgPriceX8[to] = newToAvg;
-            _updateGlobalCost(toBalance, prevToAvg, toBalance + amount, newToAvg);
-            emit CostBasisUpdated(to, toBalance + amount, newToAvg);
+            _updateGlobalCost(toBalanceBefore, prevToAvg, toBalanceAfter, newToAvg);
+            emit CostBasisUpdated(to, toBalanceAfter, newToAvg);
         }
         // ===== CASE 2: User → Protocol (Sell Flow) =====
-        // Settle P&L for user at current oracle price before protocol receives tokens
         else if (!_isProtocolAccount(from) && _isProtocolAccount(to)) {
-            uint256 fromBalance = balanceOf(from);
-            uint128 prevFromAvg = avgPriceX8[from];
-
-            // Realize P&L only for yAssets (not USY) with cost basis
+            // Realize P&L only for yAssets with cost basis, using ACTUAL amount
             if (_shouldTrackCostBasis() && prevFromAvg > 0) {
                 uint256 priceX8 = _getOracle().getAssetPrice(address(this));
                 if (priceX8 == 0) revert YoloSyntheticAsset__InvalidPrice();
 
                 int256 deltaX8 = SafeCast.toInt256(priceX8) - SafeCast.toInt256(uint256(prevFromAvg));
-                // FLOOR for profit, CEIL for loss (matches burn logic)
                 int256 pnlUSY = deltaX8 >= 0
-                    ? SafeCast.toInt256((SafeCast.toUint256(deltaX8) * amount) / 1e8)
-                    : -SafeCast.toInt256((SafeCast.toUint256(-deltaX8) * amount + 1e8 - 1) / 1e8);
+                    ? SafeCast.toInt256((SafeCast.toUint256(deltaX8) * actualTransferred) / 1e8)  // Use actual!
+                    : -SafeCast.toInt256((SafeCast.toUint256(-deltaX8) * actualTransferred + 1e8 - 1) / 1e8);
 
                 IYoloHook(YOLO_HOOK).settlePnLFromSynthetic(from, pnlUSY);
             }
 
-            // Update/clear sender's average and global cost (only for yAssets)
-            uint256 newFromBalance = fromBalance - amount;
-            uint128 newFromAvg = (_shouldTrackCostBasis() && newFromBalance == 0) ? 0 : prevFromAvg;
+            // Clear cost basis if balance is now zero
+            uint128 newFromAvg = (_shouldTrackCostBasis() && fromBalanceAfter == 0) ? 0 : prevFromAvg;
             if (_shouldTrackCostBasis() && newFromAvg != prevFromAvg) {
                 avgPriceX8[from] = newFromAvg;
-                emit CostBasisUpdated(from, newFromBalance, newFromAvg);
+                emit CostBasisUpdated(from, fromBalanceAfter, newFromAvg);
             }
-            _updateGlobalCost(fromBalance, prevFromAvg, newFromBalance, newFromAvg);
+            _updateGlobalCost(fromBalanceBefore, prevFromAvg, fromBalanceAfter, newFromAvg);
         }
         // ===== CASE 3: User ↔ User (Normal Transfer) =====
-        // Handle cost basis transfer for user-to-user transfers (skip for protocol accounts)
         else if (_shouldTrackCostBasis() && !_isProtocolAccount(from) && !_isProtocolAccount(to)) {
-            uint256 fromBalance = balanceOf(from);
-            uint256 toBalance = balanceOf(to);
-            uint128 prevFromAvg = avgPriceX8[from];
-            uint128 prevToAvg = avgPriceX8[to];
-
-            // Update recipient's weighted average
-            if (toBalance == 0) {
-                // Recipient has no tokens - inherit sender's average
-                avgPriceX8[to] = avgPriceX8[from];
-            } else if (avgPriceX8[from] > 0) {
-                // Calculate new weighted average for recipient with ceiling division
-                uint256 carriedCost = uint256(avgPriceX8[from]) * amount;
-                uint256 existingCost = uint256(avgPriceX8[to]) * toBalance;
+            // Update recipient's weighted average using ACTUAL transferred amount
+            if (toBalanceBefore == 0) {
+                avgPriceX8[to] = prevFromAvg;
+            } else if (prevFromAvg > 0) {
+                uint256 carriedCost = uint256(prevFromAvg) * actualTransferred; // Use actual!
+                uint256 existingCost = uint256(prevToAvg) * toBalanceBefore;
                 uint256 totalCost = existingCost + carriedCost;
-                uint256 totalQuantity = toBalance + amount;
-                avgPriceX8[to] = SafeCast.toUint128((totalCost + totalQuantity - 1) / totalQuantity);
+                avgPriceX8[to] = SafeCast.toUint128((totalCost + toBalanceAfter - 1) / toBalanceAfter);
             }
 
             // Clear sender's average if transferring entire balance
-            if (fromBalance == amount && avgPriceX8[from] > 0) {
+            if (fromBalanceAfter == 0 && prevFromAvg > 0) {
                 avgPriceX8[from] = 0;
                 emit CostBasisUpdated(from, 0, 0);
             }
 
-            // Emit update event for recipient if their cost basis changed
-            if (toBalance == 0 || avgPriceX8[from] > 0) {
-                emit CostBasisUpdated(to, toBalance + amount, avgPriceX8[to]);
+            // Emit update events
+            if (toBalanceBefore == 0 || prevFromAvg > 0) {
+                emit CostBasisUpdated(to, toBalanceAfter, avgPriceX8[to]);
             }
 
-            _updateGlobalCost(fromBalance, prevFromAvg, fromBalance - amount, avgPriceX8[from]);
-            _updateGlobalCost(toBalance, prevToAvg, toBalance + amount, avgPriceX8[to]);
+            _updateGlobalCost(fromBalanceBefore, prevFromAvg, fromBalanceAfter, avgPriceX8[from]);
+            _updateGlobalCost(toBalanceBefore, prevToAvg, toBalanceAfter, avgPriceX8[to]);
         }
 
-        _beforeTokenTransfer(from, to, amount);
-
-        // Convert actual amount to scaled amount (ceiling division to favor protocol)
-        uint128 scaledAmount = SafeCast.toUint128((amount * WAD + liquidityIndex - 1) / liquidityIndex);
-
-        // Cache pre-transfer scaled balances
-        uint128 fromBalanceBefore = _userState[from].balance;
-        uint128 toBalanceBefore = _userState[to].balance;
-
-        if (fromBalanceBefore < scaledAmount) revert IncentivizedERC20__InsufficientBalance();
-
-        // Update balances with scaled amounts
-        unchecked {
-            _userState[from].balance = fromBalanceBefore - scaledAmount;
-        }
-        _userState[to].balance = toBalanceBefore + scaledAmount;
-
-        // Calculate actual balances for incentives
-        uint256 actualTotal = (_totalSupply * liquidityIndex) / WAD;
-        uint256 fromActualBalance = (_userState[from].balance * liquidityIndex) / WAD;
-        uint256 toActualBalance = (_userState[to].balance * liquidityIndex) / WAD;
-
-        // Update incentives with actual amounts
-        _updateIncentives(
-            from, to, actualTotal, SafeCast.toUint128(fromActualBalance), SafeCast.toUint128(toActualBalance)
-        );
-
-        // Emit Transfer with actual amount
-        emit Transfer(from, to, amount);
-
-        _afterTokenTransfer(from, to, amount);
+        _afterTokenTransfer(from, to, actualTransferred);
     }
 
     function _updateGlobalCost(uint256 previousBalance, uint128 previousAvg, uint256 newBalance, uint128 newAvg)
