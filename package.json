@@ -4,16 +4,16 @@
   "description": "YOLO Protocol V1 - Yield-Optimized Leverage Onchain (YOLO) Modular DeFi Infrastructure built as a Uniswap V4 Hook",
   "main": "index.js",
   "scripts": {
-    "build": "forge build",
-    "test": "forge test",
-    "test:verbose": "forge test -vvv",
-    "test:gas": "forge test --gas-report",
-    "coverage": "forge coverage",
+    "build": "forge fmt && forge build",
+    "test": "forge fmt && forge test",
+    "test:verbose": "forge fmt && forge test -vvv",
+    "test:gas": "forge fmt && forge test --gas-report",
+    "coverage": "forge fmt && forge coverage",
     "lint": "forge fmt --check",
     "lint:fix": "forge fmt",
     "clean": "forge clean",
-    "deploy:local": "forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast",
-    "verify": "forge verify-contract"
+    "deploy:local": "forge fmt && forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast",
+    "verify": "forge fmt && forge verify-contract"
   },
   "keywords": [
     "defi",
