@@ -15,6 +15,9 @@ interface IYoloSyntheticAsset is IERC20, IERC20Metadata {
     event CostBasisUpdated(address indexed user, uint256 newBalance, uint128 newAvgPriceX8);
     event TradingStatusChanged(bool enabled);
     event MaxSupplyUpdated(uint256 newMaxSupply);
+    event StockSplitExecuted(uint256 numerator, uint256 denominator, uint256 newLiquidityIndex);
+    event CashDividendExecuted(uint256 dividendAmountWAD, uint256 additionalShares, uint256 newLiquidityIndex);
+    event StockDividendExecuted(uint256 percentageWAD, uint256 newLiquidityIndex);
 
     // Mint/Burn functions (only callable by YoloHook)
     function mint(address to, uint256 amount) external;
@@ -38,6 +41,16 @@ interface IYoloSyntheticAsset is IERC20, IERC20Metadata {
     // Admin functions (role-based)
     function setTradingEnabled(bool enabled) external;
     function setMaxSupply(uint256 _maxSupply) external;
+
+    // Corporate actions (only callable by YoloHook)
+    function executeStockSplit(uint256 numerator, uint256 denominator) external;
+    function executeCashDividend(uint256 dividendAmountWAD) external;
+    function executeStockDividend(uint256 percentageWAD) external;
+
+    // Corporate action queries
+    function liquidityIndex() external view returns (uint256);
+    function scaledBalanceOf(address account) external view returns (uint256);
+    function scaledTotalSupply() external view returns (uint256);
 
     // EIP-2612 permit
     function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
