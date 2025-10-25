@@ -471,6 +471,9 @@ contract YoloSyntheticAsset is
 
         avgPriceX8[to] = newAvg;
         _updateGlobalCost(prevBalance, prevAvg, prevBalance + actualMinted, newAvg);
+        if (_lastLiquidityIndex[to] == 0 && _userState[to].balance > 0) {
+            _lastLiquidityIndex[to] = liquidityIndex;
+        }
         emit CostBasisUpdated(to, prevBalance + actualMinted, newAvg);
     }
 
@@ -573,7 +576,9 @@ contract YoloSyntheticAsset is
         uint128 newAvgPrice = SafeCast.toUint128(scaledPrice);
 
         uint256 currentBalance = balanceOf(user);
-        _updateGlobalCost(currentBalance, oldAvgPrice, currentBalance, newAvgPrice);
+        uint256 previousBalanceEquivalent =
+            currentBalance == 0 ? 0 : (currentBalance * userLastIndex + liquidityIndex - 1) / liquidityIndex;
+        _updateGlobalCost(previousBalanceEquivalent, oldAvgPrice, currentBalance, newAvgPrice);
 
         avgPriceX8[user] = newAvgPrice;
         _lastLiquidityIndex[user] = liquidityIndex;
@@ -619,6 +624,10 @@ contract YoloSyntheticAsset is
         // Emit Transfer with ACTUAL minted amount (not requested amount)
         emit Transfer(address(0), account, actualMinted);
 
+        if (_lastLiquidityIndex[account] == 0 && _userState[account].balance > 0) {
+            _lastLiquidityIndex[account] = liquidityIndex;
+        }
+
         _afterTokenTransfer(address(0), account, actualMinted);
     }
 
@@ -663,6 +672,10 @@ contract YoloSyntheticAsset is
 
         // Emit Transfer with ACTUAL burned amount (not requested amount)
         emit Transfer(account, address(0), actualBurned);
+
+        if (balanceAfter == 0) {
+            _lastLiquidityIndex[account] = 0;
+        }
 
         _afterTokenTransfer(account, address(0), actualBurned);
     }
@@ -735,6 +748,9 @@ contract YoloSyntheticAsset is
             }
 
             avgPriceX8[to] = newToAvg;
+            if (_lastLiquidityIndex[to] == 0 && _userState[to].balance > 0) {
+                _lastLiquidityIndex[to] = liquidityIndex;
+            }
             _updateGlobalCost(toBalanceBefore, prevToAvg, toBalanceAfter, newToAvg);
             emit CostBasisUpdated(to, toBalanceAfter, newToAvg);
         }
@@ -766,6 +782,9 @@ contract YoloSyntheticAsset is
             // Update recipient's weighted average using ACTUAL transferred amount
             if (toBalanceBefore == 0) {
                 avgPriceX8[to] = prevFromAvg;
+                if (_lastLiquidityIndex[to] == 0 && _userState[to].balance > 0) {
+                    _lastLiquidityIndex[to] = liquidityIndex;
+                }
             } else if (prevFromAvg > 0) {
                 uint256 carriedCost = uint256(prevFromAvg) * actualTransferred; // Use actual!
                 uint256 existingCost = uint256(prevToAvg) * toBalanceBefore;
@@ -777,6 +796,7 @@ contract YoloSyntheticAsset is
             if (fromBalanceAfter == 0 && prevFromAvg > 0) {
                 avgPriceX8[from] = 0;
                 emit CostBasisUpdated(from, 0, 0);
+                _lastLiquidityIndex[from] = 0;
             }
 
             // Emit update events
