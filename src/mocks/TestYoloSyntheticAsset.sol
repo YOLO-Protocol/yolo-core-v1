@@ -300,5 +300,30 @@ contract TestYoloSyntheticAsset is MintableIncentivizedERC20Upgradeable, EIP712B
         }
     }
 
+    // Stub implementations for corporate actions (not used in tests)
+    function executeStockSplit(uint256, uint256) external pure {
+        revert("Not implemented in test mock");
+    }
+
+    function executeCashDividend(uint256) external pure {
+        revert("Not implemented in test mock");
+    }
+
+    function executeStockDividend(uint256) external pure {
+        revert("Not implemented in test mock");
+    }
+
+    function liquidityIndex() external pure returns (uint256) {
+        return 1e18; // Always return WAD (1.0) for tests
+    }
+
+    function scaledBalanceOf(address account) external view returns (uint256) {
+        return balanceOf(account); // Mock: scaled = actual (index = 1.0)
+    }
+
+    function scaledTotalSupply() external view returns (uint256) {
+        return totalSupply(); // Mock: scaled = actual (index = 1.0)
+    }
+
     uint256[43] private __gap;
 }
