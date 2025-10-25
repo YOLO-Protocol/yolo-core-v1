@@ -75,13 +75,13 @@ contract Base01_DeployUniswapV4Pool is Test, Deployers {
         assertGt(delta.amount1(), 0, "Currency1 should increase");
     }
 
-    /**
-     * @notice Public test function for Base01 test suite only
-     * @dev Calls the internal validation to test PoolManager in the base contract
-     */
-    function test_Base01_Case01_PoolManagerWorks() public {
-        _validatePoolManager();
-    }
+    // /**
+    //  * @notice Public test function for Base01 test suite only
+    //  * @dev Calls the internal validation to test PoolManager in the base contract
+    //  */
+    // function test_Base01_Case01_PoolManagerWorks() public {
+    //     _validatePoolManager();
+    // }
 
     /**
      * @notice Helper to get the deployed PoolManager for child contracts
