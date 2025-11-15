@@ -78,6 +78,10 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     /// @dev Allows deposit/borrow/repay operations for onBehalfOf addresses (e.g., leverage loops)
     bytes32 public constant LOOPER_ROLE = keccak256("LOOPER");
 
+    /// @notice Role for leverage TradeOrchestrator contracts
+    /// @dev Gates all leveraged trading storage mutations and settlement flows
+    bytes32 public constant TRADE_OPERATOR_ROLE = keccak256("TRADE_OPERATOR");
+
     // ========================
     // IMMUTABLE STORAGE
     // ========================
