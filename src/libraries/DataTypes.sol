@@ -199,4 +199,40 @@ library DataTypes {
         uint256 minUsyOut;
         uint256 minUsdcOut;
     }
+
+    // ============================================================
+    // LEVERAGED TRADING
+    // ============================================================
+
+    /**
+     * @notice Direction enum for leveraged trades
+     */
+    enum TradeDirection {
+        LONG,
+        SHORT
+    }
+
+    /**
+     * @notice Minimal state tracked on-chain for leveraged trades
+     * @dev Full funding/borrow math lives in TradeOrchestrator modules
+     * @param user Address that owns the position
+     * @param direction LONG or SHORT
+     * @param leverageBps Leverage multiplier in basis points (5_000 = 5x)
+     * @param collateralUsy Collateral currently locked in USY
+     * @param syntheticAssetPositionSize Current size of the synthetic asset exposure (in asset decimals)
+     * @param entryPriceX8 Entry price stored with 8 decimals
+     * @param openedAt Timestamp when trade was opened
+     * @param lastSettledAt Timestamp of the last orchestrator settlement (partial close, rebalance, etc.)
+     */
+    struct TradePosition {
+        address user;
+        address tradeOrchestrator;
+        TradeDirection direction;
+        uint32 leverageBps;
+        uint256 collateralUsy;
+        uint256 syntheticAssetPositionSize;
+        uint256 entryPriceX8;
+        uint64 openedAt;
+        uint64 lastSettledAt;
+    }
 }

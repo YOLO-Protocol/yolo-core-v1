@@ -860,6 +860,15 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     /**
+     * @notice Get all leveraged trades owned by a user
+     * @param user User address
+     * @return Leveraged trade positions (may be empty)
+     */
+    function getUserTrades(address user) external view returns (DataTypes.TradePosition[] memory) {
+        return s.tradePositions[user];
+    }
+
+    /**
      * @notice Get valid synthetic assets for a collateral
      * @param collateral Collateral asset address
      * @return Array of synthetic addresses valid for this collateral

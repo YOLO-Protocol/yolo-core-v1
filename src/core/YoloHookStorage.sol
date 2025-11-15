@@ -83,6 +83,8 @@ struct AppStorage {
     mapping(address => DataTypes.UserPositionKey[]) userPositionKeys;
     /// @notice Treasury address for interest payments
     address treasury;
+    /// @notice Leveraged trade positions per user (managed via TRADE_OPERATOR_ROLE)
+    mapping(address => DataTypes.TradePosition[]) tradePositions;
     // ============================================================
     // POOL REGISTRY
     // ============================================================
