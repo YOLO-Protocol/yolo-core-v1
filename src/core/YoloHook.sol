@@ -585,6 +585,18 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         s.updateMaxSupply(syntheticToken, newMaxSupply);
     }
 
+    /**
+     * @notice Updates the leveraged trading configuration for a synthetic asset
+     * @param syntheticToken Address of the synthetic asset
+     * @param config New configuration struct
+     */
+    function updateAssetPerpConfiguration(address syntheticToken, DataTypes.PerpConfiguration calldata config)
+        external
+        onlyAssetsAdmin
+    {
+        s.updatePerpConfiguration(syntheticToken, config);
+    }
+
     // ============================================================
     // LENDING PAIR CONFIGURATION
     // ============================================================

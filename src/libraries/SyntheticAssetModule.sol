@@ -22,6 +22,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  */
 library SyntheticAssetModule {
     using PoolIdLibrary for PoolKey;
+
+    uint32 internal constant SECONDS_PER_DAY = 86_400;
     // ============================================================
     // EVENTS
     // ============================================================
@@ -57,6 +59,13 @@ library SyntheticAssetModule {
      */
     event SyntheticAssetMaxSupplyUpdated(address indexed syntheticToken, uint256 newMaxSupply);
 
+    /**
+     * @notice Emitted when a synthetic asset's perp configuration changes
+     * @param syntheticToken Address of the synthetic token
+     * @param config New perpetual trading configuration
+     */
+    event SyntheticAssetPerpConfigUpdated(address indexed syntheticToken, DataTypes.PerpConfiguration config);
+
     // ============================================================
     // ERRORS
     // ============================================================
@@ -67,6 +76,7 @@ library SyntheticAssetModule {
     error SyntheticAssetModule__AssetAlreadyExists();
     error SyntheticAssetModule__AssetNotFound();
     error SyntheticAssetModule__InvalidAddress();
+    error SyntheticAssetModule__InvalidPerpConfig();
 
     // ============================================================
     // SYNTHETIC ASSET CREATION
@@ -235,6 +245,41 @@ library SyntheticAssetModule {
 
         s._assetConfigs[syntheticToken].maxSupply = newMaxSupply;
         emit SyntheticAssetMaxSupplyUpdated(syntheticToken, newMaxSupply);
+    }
+
+    /**
+     * @notice Updates the leveraged trading configuration for an asset
+     * @dev Validates session bounds and directional caps before storing
+     * @param s Reference to AppStorage
+     * @param syntheticToken Address of the synthetic token being configured
+     * @param config New configuration struct
+     */
+    function updatePerpConfiguration(
+        AppStorage storage s,
+        address syntheticToken,
+        DataTypes.PerpConfiguration calldata config
+    ) external {
+        if (!s._isYoloAsset[syntheticToken]) revert SyntheticAssetModule__AssetNotFound();
+
+        // Require directional caps to live within the total OI cap when enabled
+        if (
+            config.maxLongOpenInterestUsd > config.maxOpenInterestUsd
+                || config.maxShortOpenInterestUsd > config.maxOpenInterestUsd
+        ) {
+            revert SyntheticAssetModule__InvalidPerpConfig();
+        }
+
+        // Day session timestamps represent seconds since midnight UTC and must be within a 24h window
+        if (config.daySessionStart >= SECONDS_PER_DAY || config.daySessionEnd > SECONDS_PER_DAY) {
+            revert SyntheticAssetModule__InvalidPerpConfig();
+        }
+
+        if (config.daySessionEnd != 0 && config.daySessionStart >= config.daySessionEnd) {
+            revert SyntheticAssetModule__InvalidPerpConfig();
+        }
+
+        s._assetConfigs[syntheticToken].perpConfig = config;
+        emit SyntheticAssetPerpConfigUpdated(syntheticToken, config);
     }
 
     // ============================================================
