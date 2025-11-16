@@ -88,7 +88,18 @@ library BootstrapModule {
             maxSupply: 0,
             maxFlashLoanAmount: type(uint256).max,
             isActive: true,
-            createdAt: block.timestamp
+            createdAt: block.timestamp,
+            perpConfig: DataTypes.PerpConfiguration({
+                enabled: false,
+                maxOpenInterestUsd: 0,
+                maxLongOpenInterestUsd: 0,
+                maxShortOpenInterestUsd: 0,
+                maxLeverageBpsDay: 0,
+                maxLeverageBpsNight: 0,
+                daySessionStart: 0,
+                daySessionEnd: 0,
+                marketState: DataTypes.TradeMarketState.OFFLINE
+            })
         });
 
         // Approvals for settlement
