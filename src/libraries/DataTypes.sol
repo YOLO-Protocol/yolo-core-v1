@@ -23,6 +23,7 @@ library DataTypes {
      * @param maxFlashLoanAmount Maximum amount that can be flash loaned (0 = unlimited)
      * @param isActive Whether the asset is active for trading
      * @param createdAt Timestamp when asset was created
+     * @param perpConfig Optional leveraged-trading configuration (default disabled)
      */
     struct AssetConfiguration {
         address syntheticToken;
@@ -31,6 +32,7 @@ library DataTypes {
         uint256 maxFlashLoanAmount;
         bool isActive;
         uint256 createdAt;
+        PerpConfiguration perpConfig;
     }
 
     // ============================================================
@@ -213,6 +215,15 @@ library DataTypes {
     }
 
     /**
+     * @notice Market state enum for leveraged trading
+     */
+    enum TradeMarketState {
+        OPEN,
+        CLOSE_ONLY,
+        OFFLINE
+    }
+
+    /**
      * @notice Minimal state tracked on-chain for leveraged trades
      * @dev Full funding/borrow math lives in TradeOrchestrator modules
      * @param user Address that owns the position
@@ -234,5 +245,29 @@ library DataTypes {
         uint256 entryPriceX8;
         uint64 openedAt;
         uint64 lastSettledAt;
+    }
+
+    /**
+     * @notice Per-asset configuration for leveraged trading
+     * @param enabled Whether perp-style trading is enabled for this synthetic
+     * @param maxOpenInterestUsd Total OI cap (USD notional)
+     * @param maxLongOpenInterestUsd Directional long cap
+     * @param maxShortOpenInterestUsd Directional short cap
+     * @param maxLeverageBpsDay Max leverage during day session (basis points)
+     * @param maxLeverageBpsNight Max leverage during night session (basis points)
+     * @param daySessionStart UTC seconds since midnight when day leverage applies
+     * @param daySessionEnd UTC seconds since midnight when day leverage ends
+     * @param marketState Circuit breaker enum (open / close-only / offline)
+     */
+    struct PerpConfiguration {
+        bool enabled;
+        uint256 maxOpenInterestUsd;
+        uint256 maxLongOpenInterestUsd;
+        uint256 maxShortOpenInterestUsd;
+        uint32 maxLeverageBpsDay;
+        uint32 maxLeverageBpsNight;
+        uint32 daySessionStart;
+        uint32 daySessionEnd;
+        TradeMarketState marketState;
     }
 }

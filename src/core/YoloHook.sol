@@ -199,6 +199,15 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         }
     }
 
+    /**
+     * @dev Check caller has TRADE_OPERATOR role (leveraged trading modules)
+     */
+    function _checkTradeOperator() private view {
+        if (!ACL_MANAGER.hasRole(TRADE_OPERATOR_ROLE, msg.sender)) {
+            revert YoloHook__CallerNotAuthorized();
+        }
+    }
+
     // ========================
     // MODIFIERS
     // ========================
@@ -235,6 +244,11 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     modifier onlyLooper() {
         _checkLooper();
+        _;
+    }
+
+    modifier onlyTradeOperator() {
+        _checkTradeOperator();
         _;
     }
 
