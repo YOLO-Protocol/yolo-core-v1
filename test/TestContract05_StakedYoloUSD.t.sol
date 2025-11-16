@@ -353,7 +353,18 @@ contract MockYoloHook is IYoloHook {
             maxSupply: 0,
             maxFlashLoanAmount: 0,
             isActive: false,
-            createdAt: 0
+            createdAt: 0,
+            perpConfig: DataTypes.PerpConfiguration({
+                enabled: false,
+                maxOpenInterestUsd: 0,
+                maxLongOpenInterestUsd: 0,
+                maxShortOpenInterestUsd: 0,
+                maxLeverageBpsDay: 0,
+                maxLeverageBpsNight: 0,
+                daySessionStart: 0,
+                daySessionEnd: 0,
+                marketState: DataTypes.TradeMarketState.OFFLINE
+            })
         });
     }
 
