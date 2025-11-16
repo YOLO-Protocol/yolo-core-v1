@@ -224,6 +224,17 @@ library DataTypes {
     }
 
     /**
+     * @notice Action enum for the unified trade update entrypoint
+     */
+    enum TradeUpdateAction {
+        OPEN,
+        CLOSE,
+        PARTIAL_CLOSE,
+        TOP_UP,
+        LIQUIDATE
+    }
+
+    /**
      * @notice Minimal state tracked on-chain for leveraged trades
      * @dev Full funding/borrow math lives in TradeOrchestrator modules
      * @param user Address that owns the position
@@ -238,6 +249,7 @@ library DataTypes {
     struct TradePosition {
         address user;
         address tradeOrchestrator;
+        address syntheticAsset;
         TradeDirection direction;
         uint32 leverageBps;
         uint256 collateralUsy;
@@ -245,6 +257,16 @@ library DataTypes {
         uint256 entryPriceX8;
         uint64 openedAt;
         uint64 lastSettledAt;
+    }
+
+    /**
+     * @notice Aggregated per-asset trading state
+     * @param totalLongOpenInterestUsd Sum of long notional exposure
+     * @param totalShortOpenInterestUsd Sum of short notional exposure
+     */
+    struct TradeAssetState {
+        uint256 totalLongOpenInterestUsd;
+        uint256 totalShortOpenInterestUsd;
     }
 
     /**
@@ -269,5 +291,35 @@ library DataTypes {
         uint32 daySessionStart;
         uint32 daySessionEnd;
         TradeMarketState marketState;
+    }
+
+    /**
+     * @notice Input struct for updateTradePosition entrypoint
+     * @param user Position owner
+     * @param syntheticAsset Traded asset
+     * @param action Requested action enum
+     * @param direction Expected direction (LONG/SHORT)
+     * @param leverageBps Requested leverage (only checked for open/top-up)
+     * @param index Position index in the user's array
+     * @param expectedCollateralUsy Optimistic collateral snapshot
+     * @param expectedSyntheticSize Optimistic synthetic exposure snapshot
+     * @param collateralDelta Signed delta applied to collateral
+     * @param syntheticDelta Signed delta applied to synthetic size
+     * @param executionPriceX8 Oracle price used for this action
+     * @param settledAt Timestamp asserted by orchestrator
+     */
+    struct TradeUpdate {
+        address user;
+        address syntheticAsset;
+        TradeUpdateAction action;
+        TradeDirection direction;
+        uint32 leverageBps;
+        uint256 index;
+        uint256 expectedCollateralUsy;
+        uint256 expectedSyntheticSize;
+        int256 collateralDelta;
+        int256 syntheticDelta;
+        uint256 executionPriceX8;
+        uint64 settledAt;
     }
 }

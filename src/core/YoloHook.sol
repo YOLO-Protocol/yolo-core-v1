@@ -22,6 +22,7 @@ import {SwapModule} from "../libraries/SwapModule.sol";
 import {SyntheticSwapModule} from "../libraries/SyntheticSwapModule.sol";
 import {BootstrapModule} from "../libraries/BootstrapModule.sol";
 import {DecimalNormalization} from "../libraries/DecimalNormalization.sol";
+import {TradeModule} from "../libraries/TradeModule.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -51,6 +52,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
 
     using SyntheticAssetModule for AppStorage;
     using LendingPairModule for AppStorage;
+    using TradeModule for AppStorage;
     using DecimalNormalization for uint256;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
@@ -110,6 +112,14 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     event PrivilegedLiquidatorToggled(bool enabled);
     event YLPFundedWithUSY(address indexed callerAsset, uint256 amount);
     event EmergencyWithdrawal(address indexed token, address indexed to, uint256 amount);
+    event TradePositionUpdated(
+        address indexed user,
+        address indexed syntheticAsset,
+        DataTypes.TradeUpdateAction action,
+        uint256 index,
+        int256 collateralDelta,
+        int256 syntheticDelta
+    );
 
     // ========================
     // ERRORS
@@ -598,6 +608,26 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     // ============================================================
+    // LEVERAGED TRADING (TRADE MODULE)
+    // ============================================================
+
+    /**
+     * @notice Mutates a leveraged trade via the TradeModule
+     * @param update Structured trade mutation parameters
+     */
+    function updateTradePosition(DataTypes.TradeUpdate calldata update)
+        external
+        whenNotPaused
+        onlyTradeOperator
+        nonReentrant
+    {
+        (uint256 idx, int256 collateralDelta, int256 syntheticDelta) = s.updateTradePosition(update, msg.sender);
+        emit TradePositionUpdated(
+            update.user, update.syntheticAsset, update.action, idx, collateralDelta, syntheticDelta
+        );
+    }
+
+    // ============================================================
     // LENDING PAIR CONFIGURATION
     // ============================================================
 
@@ -1009,6 +1039,23 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             emit YLPFundedWithUSY(msg.sender, gain);
         }
         IYLPVault(s.ylpVault).settlePnL(user, msg.sender, pnlUSY);
+    }
+
+    /**
+     * @notice Allows TradeOrchestrators to settle leveraged-trade PnL against YLP
+     * @param user Trader receiving or paying PnL
+     * @param syntheticAsset Underlying synthetic asset the trade references
+     * @param pnlUSY Signed PnL in USY (positive = user profit, negative = user loss)
+     */
+    function settlePnLFromPerps(address user, address syntheticAsset, int256 pnlUSY)
+        external
+        whenNotPaused
+        onlyTradeOperator
+    {
+        if (!s._isYoloAsset[syntheticAsset]) revert YoloHook__NotYoloAsset();
+        // NOTE: Perp orchestrators must transfer the user's collateral loss to YLP before calling this hook.
+        // Unlike synthetic burns, no USY minting occurs here to avoid double counting.
+        IYLPVault(s.ylpVault).settlePnL(user, syntheticAsset, pnlUSY);
     }
 
     /**

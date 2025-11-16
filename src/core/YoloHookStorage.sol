@@ -85,6 +85,8 @@ struct AppStorage {
     address treasury;
     /// @notice Leveraged trade positions per user (managed via TRADE_OPERATOR_ROLE)
     mapping(address => DataTypes.TradePosition[]) tradePositions;
+    /// @notice Aggregated open interest stats per synthetic asset
+    mapping(address => DataTypes.TradeAssetState) tradeAssetState;
     // ============================================================
     // POOL REGISTRY
     // ============================================================
