@@ -8,7 +8,6 @@ import {StablecoinModule} from "../libraries/StablecoinModule.sol";
 import {LendingPairModule} from "../libraries/LendingPairModule.sol";
 import {FlashLoanModule} from "../libraries/FlashLoanModule.sol";
 import {DecimalNormalization} from "../libraries/DecimalNormalization.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
 
 /**

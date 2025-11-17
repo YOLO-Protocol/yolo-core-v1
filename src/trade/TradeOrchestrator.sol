@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {SignedMath} from "@openzeppelin/contracts/utils/math/SignedMath.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IACLManager} from "../interfaces/IACLManager.sol";
@@ -37,6 +38,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
     uint256 private constant PRICE_DECIMALS = 1e8;
     uint256 private constant FUNDING_SCALE = 1e18;
     uint256 private constant FUNDING_RATE_SCALE = 1e8; // 1e-8 precision per hour
+    int256 private constant MAX_PRICE_EXPO = 38;
     uint256 private constant SECONDS_PER_YEAR = 365 days;
     uint256 private constant SECONDS_PER_HOUR = 1 hours;
 
@@ -61,6 +63,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
     error TradeOrchestrator__InsufficientUpdateFee();
     error TradeOrchestrator__MarketClosed();
     error TradeOrchestrator__InsufficientCollateral();
+    error TradeOrchestrator__CollateralTooSmall();
     error TradeOrchestrator__TreasuryNotSet();
     error TradeOrchestrator__InvalidFee();
 
@@ -72,13 +75,15 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         bytes32 pythPriceId;
         uint32 maxPriceAgeSec;
         uint16 maxDeviationBps;
-        uint16 makerSpreadBps;
-        uint16 takerSpreadBps;
+        uint16 longSpreadBps;
+        uint16 shortSpreadBps;
         uint32 fundingFactorPerHour;
         uint16 fixedBorrowBps;
         uint16 liquidationThresholdBps;
+        uint16 liquidationRewardBps;
         uint16 openFeeBps;
         uint16 closeFeeBps;
+        uint256 minCollateralUsy;
         bool feesEnabled;
         bool isActive;
     }
@@ -169,11 +174,15 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         bytes32 pythPriceId,
         uint32 maxPriceAgeSec,
         uint16 maxDeviationBps,
+        uint16 longSpreadBps,
+        uint16 shortSpreadBps,
         uint32 fundingFactorPerHour,
         uint16 fixedBorrowBps,
         uint16 liquidationThresholdBps,
+        uint16 liquidationRewardBps,
         uint16 openFeeBps,
         uint16 closeFeeBps,
+        uint256 minCollateralUsy,
         bool feesEnabled,
         bool isActive
     );
@@ -250,6 +259,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         }
         if (config.fixedBorrowBps > BPS_DENOMINATOR) revert TradeOrchestrator__InvalidFee();
         if (config.fundingFactorPerHour > FUNDING_RATE_SCALE) revert TradeOrchestrator__InvalidFee();
+        if (config.liquidationRewardBps > BPS_DENOMINATOR) revert TradeOrchestrator__InvalidFee();
+        if (config.longSpreadBps > BPS_DENOMINATOR) revert TradeOrchestrator__InvalidFee();
+        if (config.shortSpreadBps >= BPS_DENOMINATOR) revert TradeOrchestrator__InvalidFee();
         tradeAssetConfigs[syntheticAsset] = config;
 
         AssetState storage state = assetStates[syntheticAsset];
@@ -262,11 +274,15 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             config.pythPriceId,
             config.maxPriceAgeSec,
             config.maxDeviationBps,
+            config.longSpreadBps,
+            config.shortSpreadBps,
             config.fundingFactorPerHour,
             config.fixedBorrowBps,
             config.liquidationThresholdBps,
+            config.liquidationRewardBps,
             config.openFeeBps,
             config.closeFeeBps,
+            config.minCollateralUsy,
             config.feesEnabled,
             config.isActive
         );
@@ -295,9 +311,12 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         AssetState storage state = assetStates[params.syntheticAsset];
         _applyFundingInternal(params.syntheticAsset, state, config);
 
-        uint256 notionalUsd = _notionalUsd(size, priceInfo.priceX8);
+        uint256 executionPrice =
+            _applyDirectionalSpread(priceInfo.priceX8, config, params.direction == DataTypes.TradeDirection.LONG);
+        priceInfo.priceX8 = executionPrice;
+        uint256 notionalUsd = _notionalUsd(size, executionPrice);
         uint256 openFee = config.feesEnabled && config.openFeeBps != 0
-            ? Math.mulDiv(notionalUsd, config.openFeeBps, BPS_DENOMINATOR)
+            ? _mulDivUp(notionalUsd, config.openFeeBps, BPS_DENOMINATOR)
             : 0;
         if (collateral <= openFee) revert TradeOrchestrator__InsufficientCollateral();
 
@@ -306,6 +325,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             usy.safeTransfer(_getTreasury(), openFee);
         }
         collateral -= openFee;
+        if (config.minCollateralUsy != 0 && collateral < config.minCollateralUsy) {
+            revert TradeOrchestrator__CollateralTooSmall();
+        }
 
         uint32 leverageBps = params.leverageBps == 0 ? _computeLeverage(collateral, notionalUsd) : params.leverageBps;
         _enforceLeverage(params.syntheticAsset, leverageBps);
@@ -375,7 +397,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         PositionAccounting storage meta = positionAccounting[msg.sender][params.index];
         meta.lastPricePublishTime = SafeCast.toUint64(block.timestamp);
 
-        emit TradeAdjusted(msg.sender, params.syntheticAsset, params.index, uint256(collateralDelta));
+        emit TradeAdjusted(msg.sender, params.syntheticAsset, params.index, SafeCast.toUint256(collateralDelta));
     }
 
     function closePosition(ClosePositionParams calldata params, bytes[] calldata priceUpdateData)
@@ -521,13 +543,15 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         AssetState storage state = assetStates[params.syntheticAsset];
         _applyFundingInternal(params.syntheticAsset, state, params.config);
 
-        uint256 notionalUsd = _notionalUsd(sizeToClose, params.priceInfo.priceX8);
+        bool applyLongSpread = position.direction == DataTypes.TradeDirection.SHORT;
+        uint256 executionPrice = _applyDirectionalSpread(params.priceInfo.priceX8, params.config, applyLongSpread);
+        uint256 notionalUsd = _notionalUsd(sizeToClose, executionPrice);
         uint256 entryNotionalUsd = _notionalUsd(sizeToClose, position.entryPriceX8);
         uint256 collateralPortion = (position.collateralUsy * sizeToClose) / position.syntheticAssetPositionSize;
         PositionAccounting storage meta = positionAccounting[params.trader][params.index];
 
         (int256 pnlUsy, uint256 borrowFee, int256 fundingFee) =
-            _computeSettlement(position, meta, state, sizeToClose, params.priceInfo.priceX8);
+            _computeSettlement(position, meta, state, sizeToClose, executionPrice);
 
         DataTypes.TradeUpdateAction action;
         if (sizeToClose == position.syntheticAssetPositionSize) {
@@ -547,7 +571,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             expectedSyntheticSize: position.syntheticAssetPositionSize,
             collateralDelta: -SafeCast.toInt256(collateralPortion),
             syntheticDelta: -SafeCast.toInt256(sizeToClose),
-            executionPriceX8: params.priceInfo.priceX8,
+            executionPriceX8: executionPrice,
             settledAt: SafeCast.toUint64(block.timestamp)
         });
 
@@ -555,7 +579,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         _postCloseBookkeeping(params.trader, params.syntheticAsset, params.index, tradeCount, action);
         _updateExposure(state, position.direction, entryNotionalUsd, false);
 
-        int256 netPnl = pnlUsy - int256(borrowFee);
+        int256 netPnl = pnlUsy - SafeCast.toInt256(borrowFee);
         netPnl -= fundingFee;
 
         if (netPnl < 0) {
@@ -573,7 +597,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         }
 
         if (params.liquidation) {
-            uint256 reward = collateralPortion / 20;
+            uint256 reward = params.config.liquidationRewardBps == 0
+                ? 0
+                : Math.mulDiv(collateralPortion, params.config.liquidationRewardBps, BPS_DENOMINATOR);
             if (reward > 0 && params.rewardReceiver != address(0)) {
                 usy.safeTransfer(params.rewardReceiver, reward);
             }
@@ -584,7 +610,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             emit TradeLiquidated(params.trader, params.syntheticAsset, params.index, params.caller, netPnl);
         } else {
             if (collateralPortion > 0 && params.config.feesEnabled && params.config.closeFeeBps != 0) {
-                uint256 closeFee = Math.mulDiv(collateralPortion, params.config.closeFeeBps, BPS_DENOMINATOR);
+                uint256 closeFee = _mulDivUp(collateralPortion, params.config.closeFeeBps, BPS_DENOMINATOR);
                 if (closeFee > collateralPortion) {
                     closeFee = collateralPortion;
                 }
@@ -632,14 +658,14 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         PositionAccounting storage meta = positionAccounting[params.user][params.index];
         uint256 borrowFee = _previewPendingBorrow(meta, notionalUsd);
         int256 fundingFee = _previewPendingFunding(meta, state, position, notionalUsd);
-        int256 equity = int256(position.collateralUsy);
+        int256 equity = SafeCast.toInt256(position.collateralUsy);
         equity += _unrealizedPnl(position, priceInfo.priceX8, position.syntheticAssetPositionSize);
         equity -= SafeCast.toInt256(borrowFee);
         equity -= fundingFee;
         if (equity <= 0) {
             return;
         }
-        uint256 equityRatioBps = Math.mulDiv(uint256(equity), BPS_DENOMINATOR, notionalUsd);
+        uint256 equityRatioBps = Math.mulDiv(SafeCast.toUint256(equity), BPS_DENOMINATOR, notionalUsd);
         if (equityRatioBps >= config.liquidationThresholdBps) {
             revert TradeOrchestrator__NotLiquidatable();
         }
@@ -713,16 +739,34 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         info.publishTime = SafeCast.toUint64(price.publishTime);
     }
 
+    function _applyDirectionalSpread(uint256 basePriceX8, TradeAssetConfig memory config, bool longExposure)
+        private
+        pure
+        returns (uint256)
+    {
+        if (longExposure) {
+            if (config.longSpreadBps == 0) return basePriceX8;
+            return Math.mulDiv(basePriceX8, BPS_DENOMINATOR + config.longSpreadBps, BPS_DENOMINATOR);
+        }
+        if (config.shortSpreadBps == 0) return basePriceX8;
+        return Math.mulDiv(basePriceX8, BPS_DENOMINATOR - config.shortSpreadBps, BPS_DENOMINATOR);
+    }
+
     function _scalePrice(PythStructs.Price memory price) private pure returns (uint256) {
         int256 value = int256(price.price);
         if (value <= 0) revert TradeOrchestrator__InvalidPrice();
-        int32 expo = price.expo + 8;
-        if (expo > 0) {
-            value *= int256(10 ** uint32(uint32(expo)));
-        } else if (expo < 0) {
-            value /= int256(10 ** uint32(uint32(-expo)));
+        int256 expo = int256(price.expo) + 8;
+        if (expo > MAX_PRICE_EXPO || expo < -MAX_PRICE_EXPO) {
+            revert TradeOrchestrator__InvalidPrice();
         }
-        return uint256(value);
+        if (expo > 0) {
+            uint32 exponent = SafeCast.toUint32(SafeCast.toUint256(expo));
+            value *= int256(10 ** exponent);
+        } else if (expo < 0) {
+            uint32 exponent = SafeCast.toUint32(SafeCast.toUint256(-expo));
+            value /= int256(10 ** exponent);
+        }
+        return SafeCast.toUint256(value);
     }
 
     function _refundSurplus(uint256 feePaid) private {
@@ -773,16 +817,17 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             state.lastFundingAccrual = SafeCast.toUint64(block.timestamp);
             return;
         }
-        int256 imbalance = int256(longOi) - int256(shortOi);
-        int256 skewRatio = (imbalance * int256(FUNDING_RATE_SCALE)) / int256(totalOi);
-        if (skewRatio > int256(FUNDING_RATE_SCALE)) {
-            skewRatio = int256(FUNDING_RATE_SCALE);
-        } else if (skewRatio < -int256(FUNDING_RATE_SCALE)) {
-            skewRatio = -int256(FUNDING_RATE_SCALE);
+        int256 imbalance = SafeCast.toInt256(longOi) - SafeCast.toInt256(shortOi);
+        int256 fundingScaleInt = SafeCast.toInt256(FUNDING_RATE_SCALE);
+        int256 skewRatio = (imbalance * fundingScaleInt) / SafeCast.toInt256(totalOi);
+        if (skewRatio > fundingScaleInt) {
+            skewRatio = fundingScaleInt;
+        } else if (skewRatio < -fundingScaleInt) {
+            skewRatio = -fundingScaleInt;
         }
-        int256 ratePerHour = (skewRatio * int256(uint256(config.fundingFactorPerHour))) / int256(FUNDING_RATE_SCALE);
-        int256 delta = (ratePerHour * int256(block.timestamp - last) * int256(FUNDING_SCALE))
-            / int256(SECONDS_PER_HOUR * FUNDING_RATE_SCALE);
+        int256 ratePerHour = (skewRatio * SafeCast.toInt256(uint256(config.fundingFactorPerHour))) / fundingScaleInt;
+        int256 delta = (ratePerHour * SafeCast.toInt256(block.timestamp - last) * SafeCast.toInt256(FUNDING_SCALE))
+            / (SafeCast.toInt256(SECONDS_PER_HOUR) * fundingScaleInt);
         state.fundingAccumulator += delta;
         state.lastFundingAccrual = SafeCast.toUint64(block.timestamp);
         emit FundingApplied(syntheticAsset, state.fundingAccumulator, state.lastFundingAccrual);
@@ -806,7 +851,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 borrowFee = pendingBorrow;
                 meta.pendingBorrowUsy = 0;
             } else {
-                borrowFee = Math.mulDiv(pendingBorrow, sizeToClose, totalSize);
+                borrowFee = _mulDivUp(pendingBorrow, sizeToClose, totalSize);
                 meta.pendingBorrowUsy = pendingBorrow - borrowFee;
             }
         }
@@ -817,7 +862,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 fundingFee = pendingFunding;
                 meta.pendingFundingUsy = 0;
             } else {
-                fundingFee = (pendingFunding * int256(sizeToClose)) / int256(totalSize);
+                fundingFee = _roundChargeUp(pendingFunding * SafeCast.toInt256(sizeToClose), totalSize);
                 meta.pendingFundingUsy = pendingFunding - fundingFee;
             }
         }
@@ -852,9 +897,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         int256 fundingDelta = state.fundingAccumulator - meta.entryFundingIndex;
         if (fundingDelta != 0 && totalNotionalUsd != 0) {
             int256 signedExposure = position.direction == DataTypes.TradeDirection.LONG
-                ? int256(totalNotionalUsd)
-                : -int256(totalNotionalUsd);
-            pending += (fundingDelta * signedExposure) / int256(FUNDING_SCALE);
+                ? SafeCast.toInt256(totalNotionalUsd)
+                : -SafeCast.toInt256(totalNotionalUsd);
+            pending += _roundChargeUp(fundingDelta * signedExposure, FUNDING_SCALE);
         }
         meta.pendingFundingUsy = pending;
         meta.entryFundingIndex = state.fundingAccumulator;
@@ -869,8 +914,8 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         if (notionalUsd == 0 || rateBps == 0 || elapsedSeconds == 0) {
             return 0;
         }
-        uint256 annualized = Math.mulDiv(notionalUsd, rateBps, BPS_DENOMINATOR);
-        return Math.mulDiv(annualized, elapsedSeconds, SECONDS_PER_YEAR);
+        uint256 annualized = _mulDivUp(notionalUsd, rateBps, BPS_DENOMINATOR);
+        return _mulDivUp(annualized, elapsedSeconds, SECONDS_PER_YEAR);
     }
 
     function _unrealizedPnl(DataTypes.TradePosition memory position, uint256 priceX8, uint256 size)
@@ -882,9 +927,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             return 0;
         }
         int256 priceDelta = position.direction == DataTypes.TradeDirection.LONG
-            ? int256(priceX8) - int256(position.entryPriceX8)
-            : int256(position.entryPriceX8) - int256(priceX8);
-        return (int256(size) * priceDelta) / int256(PRICE_DECIMALS);
+            ? SafeCast.toInt256(priceX8) - SafeCast.toInt256(position.entryPriceX8)
+            : SafeCast.toInt256(position.entryPriceX8) - SafeCast.toInt256(priceX8);
+        return (SafeCast.toInt256(size) * priceDelta) / SafeCast.toInt256(PRICE_DECIMALS);
     }
 
     function _previewPendingBorrow(PositionAccounting storage meta, uint256 positionNotionalUsd)
@@ -918,9 +963,10 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         if (delta == 0) {
             return pending;
         }
-        int256 signedExposure =
-            position.direction == DataTypes.TradeDirection.LONG ? int256(totalNotionalUsd) : -int256(totalNotionalUsd);
-        return pending + (delta * signedExposure) / int256(FUNDING_SCALE);
+        int256 signedExposure = position.direction == DataTypes.TradeDirection.LONG
+            ? SafeCast.toInt256(totalNotionalUsd)
+            : -SafeCast.toInt256(totalNotionalUsd);
+        return pending + _roundChargeUp(delta * signedExposure, FUNDING_SCALE);
     }
 
     function _computeSettlement(
@@ -950,6 +996,36 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         } else {
             positionAccounting[user][index].lastPricePublishTime = SafeCast.toUint64(block.timestamp);
         }
+    }
+
+    function _roundChargeUp(int256 numerator, uint256 denominator) private pure returns (int256) {
+        if (numerator == 0) {
+            return 0;
+        }
+        assert(denominator != 0);
+        uint256 absNumerator = SignedMath.abs(numerator);
+        if (numerator > 0) {
+            uint256 quotient = absNumerator / denominator;
+            if (absNumerator % denominator != 0) {
+                quotient += 1;
+            }
+            return SafeCast.toInt256(quotient);
+        } else {
+            uint256 quotient = absNumerator / denominator;
+            return -SafeCast.toInt256(quotient);
+        }
+    }
+
+    function _mulDivUp(uint256 a, uint256 b, uint256 denominator) private pure returns (uint256) {
+        if (a == 0 || b == 0) {
+            return 0;
+        }
+        assert(denominator != 0);
+        uint256 result = Math.mulDiv(a, b, denominator);
+        if (mulmod(a, b, denominator) != 0) {
+            result += 1;
+        }
+        return result;
     }
 
     function _getTreasury() private view returns (address) {
