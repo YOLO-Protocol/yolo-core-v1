@@ -311,6 +311,10 @@ contract MockYoloHook is IYoloHook {
         return IYoloOracle(address(0));
     }
 
+    function treasury() external pure returns (address) {
+        return address(0);
+    }
+
     function usdc() external pure returns (address) {
         return address(0);
     }
@@ -386,6 +390,14 @@ contract MockYoloHook is IYoloHook {
 
     function getUserTrades(address) external pure returns (DataTypes.TradePosition[] memory) {
         return new DataTypes.TradePosition[](0);
+    }
+
+    function getUserTrade(address, uint256) external pure returns (DataTypes.TradePosition memory position) {
+        return position;
+    }
+
+    function getUserTradeCount(address) external pure returns (uint256) {
+        return 0;
     }
 
     function getAnchorAmplification() external pure returns (uint256) {
