@@ -21,7 +21,6 @@ import {StablecoinModule} from "../libraries/StablecoinModule.sol";
 import {SwapModule} from "../libraries/SwapModule.sol";
 import {SyntheticSwapModule} from "../libraries/SyntheticSwapModule.sol";
 import {BootstrapModule} from "../libraries/BootstrapModule.sol";
-import {DecimalNormalization} from "../libraries/DecimalNormalization.sol";
 import {TradeModule} from "../libraries/TradeModule.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
@@ -45,7 +44,7 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
  *      - UUPS upgradeability with admin-only authorization
  *      - Handles both anchor pool (USY-USDC StableSwap) and synthetic pools (oracle-based)
  */
-contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable {
+contract YoloHook is BaseHook, YoloHookStorage, ReentrancyGuard, UUPSUpgradeable {
     // ========================
     // LIBRARY USAGE
     // ========================
@@ -53,7 +52,6 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     using SyntheticAssetModule for AppStorage;
     using LendingPairModule for AppStorage;
     using TradeModule for AppStorage;
-    using DecimalNormalization for uint256;
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using CurrencySettler for Currency;
@@ -92,6 +90,9 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     /// @dev Immutable is proxy-safe (stored in bytecode, not storage)
     IACLManager public immutable ACL_MANAGER;
 
+    /// @notice Delegatecall target for read-only helpers
+    address public viewImplementation;
+
     // Note: State variables moved to YoloHookStorage for upgradeability
 
     // ========================
@@ -121,6 +122,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         int256 collateralDelta,
         int256 syntheticDelta
     );
+    event ViewImplementationUpdated(address indexed newImplementation);
 
     // ========================
     // ERRORS
@@ -138,6 +140,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     error YoloHook__InvalidRescue();
     error YoloHook__InvalidFeeSplit();
     error YoloHook__InvalidTradeIndex();
+    error YoloHook__ViewImplementationNotSet();
 
     // ========================
     // INTERNAL ACCESS CONTROL CHECKS
@@ -402,77 +405,10 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     /**
-     * @notice Check if protocol is currently paused
-     * @return True if protocol is paused, false otherwise
+     * @notice Exposes PoolManager address for integrations (e.g., vault add/remove liquidity)
      */
-    function paused() public view returns (bool) {
-        return s._paused;
-    }
-
-    /**
-     * @notice Returns the oracle module address
-     * @return Oracle module address
-     */
-    function yoloOracle() external view returns (IYoloOracle) {
-        return s.yoloOracle;
-    }
-
-    /**
-     * @notice Returns the USY stablecoin address
-     * @return USY stablecoin address
-     */
-    function usy() external view returns (address) {
-        return s.usy;
-    }
-
-    /**
-     * @notice Returns the YLP vault address
-     * @return YLP vault address
-     */
-    function ylpVault() external view returns (address) {
-        return s.ylpVault;
-    }
-
-    /**
-     * @notice Preview anchor pool swap output
-     * @dev Simulates a swap without executing it
-     *      Delegates to SwapModule for calculation
-     * @param zeroForOne Direction of swap (true = token0 -> token1)
-     * @param amountIn Input amount (in native decimals)
-     * @return amountOut Output amount (in 18 decimals normalized)
-     * @return feeAmount Fee amount (in 18 decimals normalized)
-     */
-    function previewAnchorSwap(bool zeroForOne, uint256 amountIn)
-        external
-        view
-        returns (uint256 amountOut, uint256 feeAmount)
-    {
-        return SwapModule.previewAnchorSwap(s, s._anchorPoolKey, zeroForOne, amountIn);
-    }
-
-    /**
-     * @notice Get total anchor pool reserve for USY
-     * @return Total USY reserve (18 decimals)
-     */
-    function totalAnchorReserveUSY() external view returns (uint256) {
-        return s.totalAnchorReserveUSY;
-    }
-
-    /**
-     * @notice Get total anchor pool reserve for USDC
-     * @return Total USDC reserve (18 decimals normalized)
-     */
-    function totalAnchorReserveUSDC() external view returns (uint256) {
-        return s.totalAnchorReserveUSDC;
-    }
-
-    /**
-     * @notice Get pending synthetic burn state
-     * @return token Synthetic asset awaiting burn
-     * @return amount Amount of synthetic asset pending burn
-     */
-    function getPendingSyntheticBurn() external view returns (address token, uint256 amount) {
-        return (s.pendingSyntheticToken, s.pendingSyntheticAmount);
+    function poolManagerAddress() external view returns (address) {
+        return address(poolManager);
     }
 
     // ========================
@@ -763,6 +699,16 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     /**
+     * @notice Sets the delegatecall target for read-only helpers
+     * @dev Only callable by default admin
+     * @param newImplementation Address of the YoloHookViews implementation (0 to disable)
+     */
+    function setViewImplementation(address newImplementation) external onlyDefaultAdmin {
+        viewImplementation = newImplementation;
+        emit ViewImplementationUpdated(newImplementation);
+    }
+
+    /**
      * @notice Toggle privileged liquidator mode
      * @dev Only callable by assets admin
      *      When enabled, only addresses with PRIVILEGED_LIQUIDATOR_ROLE can liquidate
@@ -868,189 +814,6 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         emit AnchorAmplificationUpdated(newAmplification);
     }
 
-    // ============================================================
-    // VIEW FUNCTIONS
-    // ============================================================
-
-    /**
-     * @notice Returns all created synthetic assets
-     * @return Array of synthetic asset addresses
-     */
-    function getAllSyntheticAssets() external view returns (address[] memory) {
-        return s._yoloAssets;
-    }
-
-    /**
-     * @notice Returns all whitelisted collateral assets
-     * @return Array of whitelisted collateral addresses
-     */
-    function getAllWhitelistedCollaterals() external view returns (address[] memory) {
-        return s._whitelistedCollaterals;
-    }
-
-    /**
-     * @notice Returns configuration for a synthetic asset
-     * @param syntheticToken Address of the synthetic token
-     * @return Configuration struct
-     */
-    function getAssetConfiguration(address syntheticToken) external view returns (DataTypes.AssetConfiguration memory) {
-        return s._assetConfigs[syntheticToken];
-    }
-
-    /**
-     * @notice Returns configuration for a lending pair
-     * @param syntheticAsset The synthetic asset
-     * @param collateralAsset The collateral asset
-     * @return Configuration struct
-     */
-    function getPairConfiguration(address syntheticAsset, address collateralAsset)
-        external
-        view
-        returns (DataTypes.PairConfiguration memory)
-    {
-        bytes32 pairId = _pairId(syntheticAsset, collateralAsset);
-        return s._pairConfigs[pairId];
-    }
-
-    /**
-     * @notice Get user's position keys for iteration
-     * @param user User address
-     * @return Array of position keys (user's active positions)
-     */
-    function getUserPositionKeys(address user) external view returns (DataTypes.UserPositionKey[] memory) {
-        return s.userPositionKeys[user];
-    }
-
-    /**
-     * @notice Get valid collaterals for a synthetic asset
-     * @param syntheticAsset Synthetic asset address
-     * @return Array of collateral addresses valid for this synthetic
-     */
-    function getSyntheticCollaterals(address syntheticAsset) external view returns (address[] memory) {
-        return s._syntheticToCollaterals[syntheticAsset];
-    }
-
-    /**
-     * @notice Get a single leveraged trade owned by a user
-     * @param user User address
-     * @param index Trade index
-     * @return Trade position struct
-     */
-    function getUserTrade(address user, uint256 index) external view returns (DataTypes.TradePosition memory) {
-        DataTypes.TradePosition[] storage positions = s.tradePositions[user];
-        if (index >= positions.length) {
-            revert YoloHook__InvalidTradeIndex();
-        }
-        return positions[index];
-    }
-
-    /**
-     * @notice Get total number of leveraged trades owned by a user
-     * @param user User address
-     * @return Count of trade positions
-     */
-    function getUserTradeCount(address user) external view returns (uint256) {
-        return s.tradePositions[user].length;
-    }
-
-    /**
-     * @notice Get valid synthetic assets for a collateral
-     * @param collateral Collateral asset address
-     * @return Array of synthetic addresses valid for this collateral
-     */
-    function getCollateralSynthetics(address collateral) external view returns (address[] memory) {
-        return s._collateralToSynthetics[collateral];
-    }
-
-    /**
-     * @notice Get anchor pool amplification coefficient
-     * @return Amplification coefficient (A parameter for StableSwap)
-     */
-    function getAnchorAmplification() external view returns (uint256) {
-        return s.anchorAmplificationCoefficient;
-    }
-
-    /**
-     * @notice Get anchor pool swap fee
-     * @return Swap fee in basis points (0-10000)
-     */
-    function getAnchorSwapFeeBps() external view returns (uint256) {
-        return s.anchorSwapFeeBps;
-    }
-
-    /**
-     * @notice Get synthetic pool swap fee
-     * @return Swap fee in basis points (0-10000)
-     */
-    function getSyntheticSwapFeeBps() external view returns (uint256) {
-        return s.syntheticSwapFeeBps;
-    }
-
-    /**
-     * @notice Get flash loan fee
-     * @return Fee in basis points (0-10000)
-     */
-    function getFlashLoanFeeBps() external view returns (uint256) {
-        return s.flashLoanFeeBps;
-    }
-
-    // ========================
-    // ANCHOR POOL & sUSY VIEWS
-    // ========================
-
-    /**
-     * @notice Get current anchor pool reserves (raw values)
-     * @dev USY in 18 decimals, USDC in native decimals (6 or 18 depending on chain)
-     * @return reserveUSY USY reserves (18 decimals)
-     * @return reserveUSDC USDC reserves (native decimals)
-     */
-    function getAnchorReserves() external view returns (uint256 reserveUSY, uint256 reserveUSDC) {
-        return (s.totalAnchorReserveUSY, s.totalAnchorReserveUSDC);
-    }
-
-    /**
-     * @notice Get anchor pool reserves normalized to 18 decimals
-     * @dev Both values returned in 18 decimals for consistent calculations
-     * @return reserveUSY18 USY reserves (18 decimals)
-     * @return reserveUSDC18 USDC reserves (18 decimals normalized)
-     */
-    function getAnchorReservesNormalized18() external view returns (uint256 reserveUSY18, uint256 reserveUSDC18) {
-        reserveUSY18 = s.totalAnchorReserveUSY; // Already 18 decimals
-        reserveUSDC18 = s.totalAnchorReserveUSDC.to18(s.usdcDecimals);
-    }
-
-    /**
-     * @notice Get USDC decimals (chain-dependent)
-     * @dev Retrieved during initialize() from USDC contract
-     * @return decimals USDC decimals (typically 6, but can be 18 on some chains)
-     */
-    function usdcDecimals() external view returns (uint8) {
-        return s.usdcDecimals;
-    }
-
-    /**
-     * @notice Get USDC token address
-     * @return usdc address
-     */
-    function usdc() external view returns (address) {
-        return s.usdc;
-    }
-
-    /**
-     * @notice Get the protocol treasury address
-     * @return treasuryAddress Address receiving protocol fees
-     */
-    function treasury() external view returns (address treasuryAddress) {
-        treasuryAddress = s.treasury;
-    }
-
-    /**
-     * @notice Exposes PoolManager address for integrations (e.g., vault add/remove liquidity)
-     */
-    function poolManagerAddress() external view returns (address) {
-        return address(poolManager);
-    }
-
     /**
      * @notice Mint USY into the YLP vault to fund negative PnL settlements
      * @dev Callable only by registered YOLO synthetic assets during burn settlement flows
@@ -1120,54 +883,6 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         uint256 loss = SafeCast.toUint256(-pnlUSY);
         uint256 shareAmount = (loss * shareBps) / 10_000;
         return shareAmount;
-    }
-
-    /**
-     * @notice Get sUSY token address
-     * @return sUSY address
-     */
-    function sUSY() external view returns (address) {
-        return s.sUSY;
-    }
-
-    /**
-     * @notice Preview sUSY minted for adding liquidity
-     * @dev Delegates to StablecoinModule for calculation
-     * @param usyIn18 USY amount to deposit (18 decimals)
-     * @param usdcIn18 USDC amount to deposit (18 decimals normalized)
-     * @return sUSYToMint Expected sUSY tokens (18 decimals)
-     */
-    function previewAddLiquidity(uint256 usyIn18, uint256 usdcIn18) external view returns (uint256 sUSYToMint) {
-        return StablecoinModule.previewAddLiquidity(s, usyIn18, usdcIn18);
-    }
-
-    /**
-     * @notice Preview token amounts for removing liquidity
-     * @dev Delegates to StablecoinModule for calculation
-     * @param sUSYAmount sUSY to burn
-     * @return usyOut18 USY to receive (18 decimals)
-     * @return usdcOut18 USDC to receive (18 decimals normalized)
-     */
-    function previewRemoveLiquidity(uint256 sUSYAmount) external view returns (uint256 usyOut18, uint256 usdcOut18) {
-        return StablecoinModule.previewRemoveLiquidity(s, sUSYAmount);
-    }
-
-    /**
-     * @notice Checks if address is a YOLO synthetic asset
-     * @param syntheticToken Address to check
-     * @return True if asset is a YOLO synthetic asset
-     */
-    function isYoloAsset(address syntheticToken) external view returns (bool) {
-        return s._isYoloAsset[syntheticToken];
-    }
-
-    /**
-     * @notice Checks if address is a whitelisted collateral
-     * @param collateralAsset Address to check
-     * @return True if asset is whitelisted as collateral
-     */
-    function isWhitelistedCollateral(address collateralAsset) external view returns (bool) {
-        return LendingPairModule.isWhitelistedCollateral(s, collateralAsset);
     }
 
     // ============================================================
@@ -1295,48 +1010,6 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         nonReentrant
     {
         LiquidationModule.liquidate(s, user, collateral, yoloAsset, repayAmount);
-    }
-
-    /**
-     * @notice Get user position data
-     * @param user User address
-     * @param collateral Collateral asset
-     * @param yoloAsset Synthetic asset
-     * @return position User position struct
-     */
-    function getUserPosition(address user, address collateral, address yoloAsset)
-        external
-        view
-        returns (DataTypes.UserPosition memory)
-    {
-        return s.positions[user][collateral][yoloAsset];
-    }
-
-    /**
-     * @notice Get current debt for a position with accrued interest
-     * @param user User address
-     * @param collateral Collateral asset
-     * @param yoloAsset Synthetic asset
-     * @return Current debt amount (18 decimals)
-     */
-    function getPositionDebt(address user, address collateral, address yoloAsset) external view returns (uint256) {
-        return LendingPairModule.getPositionDebt(s, user, collateral, yoloAsset);
-    }
-
-    /**
-     * @notice Get user account data across all positions
-     * @dev Delegates to LendingPairModule for calculation
-     * @param user User address
-     * @return totalCollateralUSD Total collateral value (8 decimals)
-     * @return totalDebtUSD Total debt value (8 decimals)
-     * @return ltv Current LTV in basis points
-     */
-    function getUserAccountData(address user)
-        external
-        view
-        returns (uint256 totalCollateralUSD, uint256 totalDebtUSD, uint256 ltv)
-    {
-        return LendingPairModule.getUserAccountData(s, user);
     }
 
     /**
@@ -1543,26 +1216,6 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
      */
     function updateMaxFlashLoanAmount(address syntheticToken, uint256 newMaxFlashLoanAmount) external onlyRiskAdmin {
         FlashLoanModule.updateMaxFlashLoanAmount(s, syntheticToken, newMaxFlashLoanAmount);
-    }
-
-    /**
-     * @notice Preview flash loan fee for a single asset
-     * @param token Synthetic asset address
-     * @param amount Amount to borrow
-     * @return fee Fee amount in token decimals
-     */
-    function previewFlashLoanFee(address token, uint256 amount) external view returns (uint256 fee) {
-        // Pass msg.sender as caller for accurate fee preview
-        return FlashLoanModule.previewFlashLoanFee(s, msg.sender, token, amount);
-    }
-
-    /**
-     * @notice Get maximum flash loan amount for an asset
-     * @param token Synthetic asset address
-     * @return maxAmount Maximum flash loan amount (0 = disabled, >0 = cap, type(uint256).max = unlimited)
-     */
-    function maxFlashLoan(address token) external view returns (uint256 maxAmount) {
-        return FlashLoanModule.maxFlashLoan(s, token);
     }
 
     // ============================================================
@@ -1846,6 +1499,29 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     ) internal override returns (bytes4, int128) {
         SwapModule.afterSwapCleanup(s);
         return (this.afterSwap.selector, 0);
+    }
+
+    // ============================================================
+    // VIEW DELEGATION
+    // ============================================================
+
+    fallback() external {
+        _delegateView();
+    }
+
+    function _delegateView() private {
+        address impl = viewImplementation;
+        if (impl == address(0)) {
+            revert YoloHook__ViewImplementationNotSet();
+        }
+        assembly {
+            calldatacopy(0, 0, calldatasize())
+            let result := delegatecall(gas(), impl, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            switch result
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
+        }
     }
 
     // ============================================================
