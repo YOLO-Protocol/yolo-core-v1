@@ -1098,8 +1098,8 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             return 0;
         }
         uint256 shareBps = s.tradeProfitShareBps;
-        address treasury = s.treasury;
-        if (shareBps == 0 || treasury == address(0)) {
+        address treasuryAddr = s.treasury;
+        if (shareBps == 0 || treasuryAddr == address(0)) {
             return 0;
         }
         uint256 loss = SafeCast.toUint256(-pnlUSY);
