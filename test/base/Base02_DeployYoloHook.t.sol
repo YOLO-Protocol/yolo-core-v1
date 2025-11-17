@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Base01_DeployUniswapV4Pool} from "./Base01_DeployUniswapV4Pool.t.sol";
 import {YoloHook} from "../../src/core/YoloHook.sol";
+import {YoloHookViews} from "../../src/core/YoloHookViews.sol";
 import {YoloSyntheticAsset} from "../../src/tokenization/YoloSyntheticAsset.sol";
 import {StakedYoloUSD} from "../../src/tokenization/StakedYoloUSD.sol";
 import {YLP} from "../../src/tokenization/YLP.sol";
@@ -10,6 +11,7 @@ import {ACLManager} from "../../src/access/ACLManager.sol";
 import {MockERC20} from "../../src/mocks/MockERC20.sol";
 import {MockYoloOracle} from "../../src/mocks/MockYoloOracle.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
+import {IYoloHook} from "../../src/interfaces/IYoloHook.sol";
 
 /**
  * @title Base02_DeployYoloHook
@@ -22,8 +24,10 @@ contract Base02_DeployYoloHook is Base01_DeployUniswapV4Pool {
     // STATE VARIABLES (PUBLIC)
     // ============================================================
 
-    YoloHook public yoloHook;
+    YoloHook public yoloHookProxy;
     YoloHook public yoloHookImpl;
+    YoloHookViews public yoloHookViews;
+    IYoloHook public yoloHook;
     ACLManager public aclManager;
     MockYoloOracle public oracle;
     YLP public ylpImpl;
@@ -85,12 +89,19 @@ contract Base02_DeployYoloHook is Base01_DeployUniswapV4Pool {
 
         // Deploy UUPS proxy at specific address
         deployCodeTo("ERC1967Proxy.sol:ERC1967Proxy", abi.encode(hookImplAddress, initData), hookProxyAddress);
-        yoloHook = YoloHook(hookProxyAddress);
+        yoloHookProxy = YoloHook(hookProxyAddress);
+
+        // Deploy and setup YoloHookViews.sol on YoloHook
+        yoloHookViews = new YoloHookViews();
+        yoloHookProxy.setViewImplementation(address(yoloHookViews));
+
+        // Convert to interface
+        yoloHook = IYoloHook(address(yoloHookProxy));
 
         // Get deployed token addresses
-        usy = yoloHook.usy();
-        sUSY = yoloHook.sUSY();
-        ylpVault = yoloHook.ylpVault();
+        usy = IYoloHook(address(yoloHookProxy)).usy();
+        sUSY = IYoloHook(address(yoloHookProxy)).sUSY();
+        ylpVault = IYoloHook(address(yoloHookProxy)).ylpVault();
     }
 
     // ============================================================

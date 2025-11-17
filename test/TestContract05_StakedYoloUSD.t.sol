@@ -288,6 +288,24 @@ contract MockYoloHook is IYoloHook {
         return _usdcDecimals;
     }
 
+    function totalAnchorReserveUSY() external view returns (uint256) {
+        return _reserveUSY;
+    }
+
+    function totalAnchorReserveUSDC() external view returns (uint256) {
+        return _reserveUSDC;
+    }
+
+    function getPendingSyntheticBurn() external pure returns (address token, uint256 amount) {
+        return (address(0), 0);
+    }
+
+    function burnPendingSynthetic() external pure {}
+
+    function previewAnchorSwap(bool, uint256) external pure returns (uint256 amountOut, uint256 feeAmount) {
+        return (0, 0);
+    }
+
     function previewAddLiquidity(uint256 usyIn18, uint256 usdcIn18) external pure returns (uint256 sUSYToMint) {
         // Simple mock: return sum for testing
         return usyIn18 + usdcIn18;
@@ -334,6 +352,10 @@ contract MockYoloHook is IYoloHook {
         return (0, 0);
     }
 
+    function unlockCallback(bytes calldata) external pure returns (bytes memory) {
+        return "";
+    }
+
     function isYoloAsset(address) external pure returns (bool) {
         return true;
     }
@@ -346,9 +368,52 @@ contract MockYoloHook is IYoloHook {
         return new address[](0);
     }
 
+    function createSyntheticAsset(string calldata, string calldata, uint8, address, address, uint256, uint256)
+        external
+        pure
+        returns (address syntheticToken)
+    {
+        return address(0);
+    }
+
+    function deactivateSyntheticAsset(address) external pure {}
+
+    function reactivateSyntheticAsset(address) external pure {}
+
     function getAllWhitelistedCollaterals() external pure returns (address[] memory) {
         return new address[](0);
     }
+
+    function whitelistCollateral(address) external pure {}
+
+    function configureLendingPair(
+        address,
+        address,
+        address,
+        address,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        bool,
+        uint256
+    ) external pure returns (bytes32 pairId) {
+        return bytes32(0);
+    }
+
+    function updateRiskParameters(bytes32, uint256, uint256, uint256) external pure {}
+
+    function updateBorrowRate(bytes32, uint256) external pure {}
+
+    function updateOracle(IYoloOracle) external pure {}
+
+    function updateYLPVault(address) external pure {}
+
+    function upgradeImplementation(address, address) external pure {}
 
     function getAssetConfiguration(address) external pure returns (DataTypes.AssetConfiguration memory) {
         return DataTypes.AssetConfiguration({
@@ -375,6 +440,10 @@ contract MockYoloHook is IYoloHook {
     function paused() external pure returns (bool) {
         return false;
     }
+
+    function pause() external pure {}
+
+    function unpause() external pure {}
 
     function getUserPositionKeys(address) external pure returns (DataTypes.UserPositionKey[] memory) {
         return new DataTypes.UserPositionKey[](0);
@@ -408,6 +477,18 @@ contract MockYoloHook is IYoloHook {
         return 4; // Mock 0.04%
     }
 
+    function MINIMUM_LIQUIDITY() external pure returns (uint256) {
+        return 1000;
+    }
+
+    function LOOPER_ROLE() external pure returns (bytes32) {
+        return keccak256("LOOPER");
+    }
+
+    function PRIVILEGED_FLASHLOANER_ROLE() external pure returns (bytes32) {
+        return keccak256("PRIVILEGED_FLASHLOANER");
+    }
+
     function getSyntheticSwapFeeBps() external pure returns (uint256) {
         return 30; // Mock 0.30%
     }
@@ -419,9 +500,12 @@ contract MockYoloHook is IYoloHook {
     // CDP Operations (stub implementations for IYoloHook compliance)
     function borrow(address, uint256, address, uint256, address) external pure {}
     function repay(address, address, uint256, bool, address) external pure {}
+    function renewPosition(address, address) external pure {}
     function depositCollateral(address, address, uint256, address) external pure {}
 
     function withdrawCollateral(address, address, uint256, address, address) external pure {}
+
+    function liquidate(address, address, address, uint256) external pure {}
 
     function getPositionDebt(address, address, address) external pure returns (uint256) {
         return 0;
@@ -429,6 +513,14 @@ contract MockYoloHook is IYoloHook {
 
     function getUserPosition(address, address, address) external pure returns (DataTypes.UserPosition memory position) {
         return position; // Return empty position
+    }
+
+    function getUserAccountData(address)
+        external
+        pure
+        returns (uint256 totalCollateralUSD, uint256 totalDebtUSD, uint256 ltv)
+    {
+        return (0, 0, 0);
     }
 
     function getPairConfiguration(address, address)
@@ -443,13 +535,44 @@ contract MockYoloHook is IYoloHook {
         return true;
     }
 
+    function flashLoanBatch(address, address[] calldata, uint256[] calldata, bytes calldata)
+        external
+        pure
+        returns (bool)
+    {
+        return true;
+    }
+
     function leverageFlashLoan(address, address, uint256, bytes calldata) external pure returns (bool) {
         return true;
     }
+
+    function maxFlashLoan(address) external pure returns (uint256 maxAmount) {
+        return type(uint256).max;
+    }
+
+    function previewFlashLoanFee(address, uint256) external pure returns (uint256 fee) {
+        return 0;
+    }
+
+    function updateMaxFlashLoanAmount(address, uint256) external pure {}
+
+    function updateFlashLoanFee(uint256) external pure {}
+
+    function togglePrivilegedLiquidator(bool) external pure {}
 
     function updateTradePosition(DataTypes.TradeUpdate calldata) external pure returns (uint256, int256, int256) {
         return (0, 0, 0);
     }
 
     function settlePnLFromPerps(address, address, int256) external pure {}
+
+    function sUSY() external pure returns (address) {
+        return address(0);
+    }
+
+    function ylpVault() external pure returns (address) {
+        return address(0);
+    }
 }
+
