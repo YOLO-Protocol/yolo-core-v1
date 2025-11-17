@@ -16,6 +16,9 @@ interface IYoloHook {
     /// @notice Get YoloOracle address (centralized oracle for all synthetic assets)
     function yoloOracle() external view returns (IYoloOracle);
 
+    /// @notice Get protocol treasury address
+    function treasury() external view returns (address);
+
     /// @notice Get current anchor pool reserves (raw values)
     /// @return reserveUSY USY reserves (18 decimals)
     /// @return reserveUSDC USDC reserves (native decimals - chain dependent)

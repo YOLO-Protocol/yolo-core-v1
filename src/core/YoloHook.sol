@@ -1022,6 +1022,14 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     /**
+     * @notice Get the protocol treasury address
+     * @return treasuryAddress Address receiving protocol fees
+     */
+    function treasury() external view returns (address treasuryAddress) {
+        treasuryAddress = s.treasury;
+    }
+
+    /**
      * @notice Exposes PoolManager address for integrations (e.g., vault add/remove liquidity)
      */
     function poolManagerAddress() external view returns (address) {
