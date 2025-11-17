@@ -126,6 +126,15 @@ interface IYoloHook {
     /// @return Leveraged trade positions
     function getUserTrades(address user) external view returns (DataTypes.TradePosition[] memory);
 
+    /// @notice Returns a single leveraged trade for a user by index
+    /// @param user User address
+    /// @param index Trade index
+    function getUserTrade(address user, uint256 index) external view returns (DataTypes.TradePosition memory);
+
+    /// @notice Returns the total number of leveraged trades owned by a user
+    /// @param user User address
+    function getUserTradeCount(address user) external view returns (uint256);
+
     /// @notice Unified entry point for leveraged trade state mutations
     /// @param update Structured update parameters
     /// @return idx Index impacted by the mutation
