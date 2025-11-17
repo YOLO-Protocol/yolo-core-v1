@@ -109,6 +109,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     event SyntheticSwapFeeUpdated(uint256 newFeeBps);
     event AnchorAmplificationUpdated(uint256 newAmplification);
     event AnchorFeeTreasuryShareUpdated(uint256 oldShareBps, uint256 newShareBps);
+    event TradeProfitShareUpdated(uint256 oldShareBps, uint256 newShareBps);
     event PrivilegedLiquidatorToggled(bool enabled);
     event YLPFundedWithUSY(address indexed callerAsset, uint256 amount);
     event EmergencyWithdrawal(address indexed token, address indexed to, uint256 amount);
@@ -842,6 +843,18 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     /**
+     * @notice Updates profit sharing for positive leveraged PnL
+     * @dev Only callable by risk admin
+     * @param newShareBps Treasury share in basis points (0-10000)
+     */
+    function setTradeProfitShare(uint256 newShareBps) external onlyRiskAdmin {
+        if (newShareBps > 10_000) revert YoloHook__InvalidFeeSplit();
+        uint256 oldShare = s.tradeProfitShareBps;
+        s.tradeProfitShareBps = newShareBps;
+        emit TradeProfitShareUpdated(oldShare, newShareBps);
+    }
+
+    /**
      * @notice Updates anchor amplification coefficient
      * @dev Only callable by risk admin
      *      Changes take effect immediately for new swaps
@@ -1040,6 +1053,10 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
             emit YLPFundedWithUSY(msg.sender, gain);
         }
         IYLPVault(s.ylpVault).settlePnL(user, msg.sender, pnlUSY);
+        uint256 treasuryShare = _treasuryShareFromLoss(pnlUSY);
+        if (treasuryShare > 0) {
+            IYLPVault(s.ylpVault).settlePnL(s.treasury, msg.sender, SafeCast.toInt256(treasuryShare));
+        }
     }
 
     /**
@@ -1057,6 +1074,29 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         // NOTE: Perp orchestrators must transfer the user's collateral loss to YLP before calling this hook.
         // Unlike synthetic burns, no USY minting occurs here to avoid double counting.
         IYLPVault(s.ylpVault).settlePnL(user, syntheticAsset, pnlUSY);
+        uint256 treasuryShare = _treasuryShareFromLoss(pnlUSY);
+        if (treasuryShare > 0) {
+            IYLPVault(s.ylpVault).settlePnL(s.treasury, syntheticAsset, SafeCast.toInt256(treasuryShare));
+        }
+    }
+
+    /**
+     * @notice Calculates treasury share taken from YLP profits (user losses)
+     * @param pnlUSY Signed PnL (negative when user loses)
+     * @return share Amount of USY owed to treasury
+     */
+    function _treasuryShareFromLoss(int256 pnlUSY) private view returns (uint256 share) {
+        if (pnlUSY >= 0) {
+            return 0;
+        }
+        uint256 shareBps = s.tradeProfitShareBps;
+        address treasury = s.treasury;
+        if (shareBps == 0 || treasury == address(0)) {
+            return 0;
+        }
+        uint256 loss = SafeCast.toUint256(-pnlUSY);
+        uint256 shareAmount = (loss * shareBps) / 10_000;
+        return shareAmount;
     }
 
     /**

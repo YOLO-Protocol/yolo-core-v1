@@ -121,6 +121,8 @@ struct AppStorage {
     address pendingSyntheticToken;
     /// @notice Pending synthetic amount awaiting burn
     uint256 pendingSyntheticAmount;
+    /// @notice Treasury share of positive trade PnL in basis points (0-10000)
+    uint256 tradeProfitShareBps;
     // ============================================================
     // FLASH LOAN CONFIGURATION
     // ============================================================
