@@ -944,13 +944,6 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         return positions[index];
     }
 
-    function getUserTrade(address user, uint256 index) external view returns (DataTypes.TradePosition memory) {
-        DataTypes.TradePosition[] storage positions = s.tradePositions[user];
-        if (index >= positions.length) {
-            revert YoloHook__InvalidTradeIndex();
-        }
-        return positions[index];
-    }
     /**
      * @notice Get total number of leveraged trades owned by a user
      * @param user User address
