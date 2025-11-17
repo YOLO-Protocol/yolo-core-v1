@@ -6,3 +6,4 @@ forge-std/=lib/forge-std/src/
 @openzeppelin/contracts-upgradeable=node_modules/@openzeppelin/contracts-upgradeable
 @yolo/core-v1/=src/
 solmate/=node_modules/solmate/
+@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity/
