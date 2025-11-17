@@ -384,6 +384,10 @@ contract MockYoloHook is IYoloHook {
         return new address[](0);
     }
 
+    function getUserTrades(address) external pure returns (DataTypes.TradePosition[] memory) {
+        return new DataTypes.TradePosition[](0);
+    }
+
     function getAnchorAmplification() external pure returns (uint256) {
         return 100; // Mock amplification
     }
@@ -430,4 +434,10 @@ contract MockYoloHook is IYoloHook {
     function leverageFlashLoan(address, address, uint256, bytes calldata) external pure returns (bool) {
         return true;
     }
+
+    function updateTradePosition(DataTypes.TradeUpdate calldata) external pure returns (uint256, int256, int256) {
+        return (0, 0, 0);
+    }
+
+    function settlePnLFromPerps(address, address, int256) external pure {}
 }

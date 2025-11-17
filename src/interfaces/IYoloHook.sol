@@ -118,6 +118,26 @@ interface IYoloHook {
     /// @return Fee in basis points (0-10000)
     function getFlashLoanFeeBps() external view returns (uint256);
 
+    /// @notice Returns all leveraged trades owned by a user
+    /// @param user User address
+    /// @return Leveraged trade positions
+    function getUserTrades(address user) external view returns (DataTypes.TradePosition[] memory);
+
+    /// @notice Unified entry point for leveraged trade state mutations
+    /// @param update Structured update parameters
+    /// @return idx Index impacted by the mutation
+    /// @return collateralDelta Signed collateral delta applied
+    /// @return syntheticDelta Signed synthetic delta applied
+    function updateTradePosition(DataTypes.TradeUpdate calldata update)
+        external
+        returns (uint256 idx, int256 collateralDelta, int256 syntheticDelta);
+
+    /// @notice Settles leveraged-trade PnL (called by TradeOrchestrators)
+    /// @param user Trader receiving or paying PnL
+    /// @param syntheticAsset Underlying synthetic asset
+    /// @param pnlUSY Signed PnL amount (18 decimals)
+    function settlePnLFromPerps(address user, address syntheticAsset, int256 pnlUSY) external;
+
     // ============================================================
     // CDP OPERATIONS
     // ============================================================
