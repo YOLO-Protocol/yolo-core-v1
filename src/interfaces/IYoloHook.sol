@@ -13,6 +13,12 @@ interface IYoloHook {
     /// @notice Get USY token address
     function usy() external view returns (address);
 
+    /// @notice Get sUSY token address
+    function sUSY() external view returns (address);
+
+    /// @notice Get YLP address
+    function ylpVault() external view returns (address);
+
     /// @notice Get YoloOracle address (centralized oracle for all synthetic assets)
     function yoloOracle() external view returns (IYoloOracle);
 
@@ -29,6 +35,22 @@ interface IYoloHook {
     /// @return reserveUSY18 USY reserves (18 decimals)
     /// @return reserveUSDC18 USDC reserves (18 decimals normalized)
     function getAnchorReservesNormalized18() external view returns (uint256 reserveUSY18, uint256 reserveUSDC18);
+
+    /// @notice Get total anchor pool USY reserve
+    /// @return Total USY reserve (18 decimals)
+    function totalAnchorReserveUSY() external view returns (uint256);
+
+    /// @notice Get total anchor pool USDC reserve
+    /// @return Total USDC reserve (native decimals)
+    function totalAnchorReserveUSDC() external view returns (uint256);
+
+    /// @notice Get pending synthetic burn data
+    /// @return token Pending synthetic token address
+    /// @return amount Pending synthetic burn amount
+    function getPendingSyntheticBurn() external view returns (address token, uint256 amount);
+
+    /// @notice Burn pending synthetic tokens
+    function burnPendingSynthetic() external;
 
     /// @notice Get USDC decimals (retrieved during initialize())
     function usdcDecimals() external view returns (uint8);
@@ -48,6 +70,16 @@ interface IYoloHook {
     /// @param user Account whose position is being settled
     /// @param pnlUSY Profit/loss in USY (positive = user profit; negative = user loss)
     function settlePnLFromSynthetic(address user, int256 pnlUSY) external;
+
+    /// @notice Preview anchor pool swap
+    /// @param zeroForOne True if swapping token0 for token1
+    /// @param amountIn Amount to swap
+    /// @return amountOut Expected output amount
+    /// @return feeAmount Fee amount
+    function previewAnchorSwap(bool zeroForOne, uint256 amountIn)
+        external
+        view
+        returns (uint256 amountOut, uint256 feeAmount);
 
     /// @notice Preview sUSY minted for adding liquidity
     /// @dev Uses min-share formula, enforces balanced deposits
@@ -72,6 +104,11 @@ interface IYoloHook {
         external
         returns (uint256 usyOut, uint256 usdcOut);
 
+    /// @notice Uniswap V4 unlock callback
+    /// @param data Encoded callback data
+    /// @return Encoded result data
+    function unlockCallback(bytes calldata data) external returns (bytes memory);
+
     /// @notice Returns true if the address is a YOLO synthetic asset
     function isYoloAsset(address syntheticToken) external view returns (bool);
 
@@ -81,14 +118,110 @@ interface IYoloHook {
     /// @notice Get all synthetic assets
     function getAllSyntheticAssets() external view returns (address[] memory);
 
+    /// @notice Create a new synthetic asset
+    /// @param name Token name (e.g., "Yolo Synthetic ETH")
+    /// @param symbol Token symbol (e.g., "yETH")
+    /// @param decimals Token decimals (typically 18)
+    /// @param oracleSource Price feed source for the synthetic asset
+    /// @param implementation YoloSyntheticAsset implementation address
+    /// @param maxSupply Maximum supply cap (0 for unlimited)
+    /// @param maxFlashLoanAmount Maximum flash loan amount (0 for unlimited)
+    /// @return syntheticToken Address of deployed synthetic token proxy
+    function createSyntheticAsset(
+        string calldata name,
+        string calldata symbol,
+        uint8 decimals,
+        address oracleSource,
+        address implementation,
+        uint256 maxSupply,
+        uint256 maxFlashLoanAmount
+    ) external returns (address syntheticToken);
+
+    /// @notice Deactivate a synthetic asset
+    /// @param syntheticToken Address of the synthetic token
+    function deactivateSyntheticAsset(address syntheticToken) external;
+
+    /// @notice Reactivate a synthetic asset
+    /// @param syntheticToken Address of the synthetic token
+    function reactivateSyntheticAsset(address syntheticToken) external;
+
     /// @notice Get all whitelisted collaterals
     function getAllWhitelistedCollaterals() external view returns (address[] memory);
+
+    /// @notice Whitelist a collateral asset
+    /// @param collateralAsset Address of collateral to whitelist
+    function whitelistCollateral(address collateralAsset) external;
+
+    /// @notice Configure a lending pair
+    /// @param syntheticAsset Synthetic asset address
+    /// @param collateralAsset Collateral asset address
+    /// @param depositToken Deposit token address
+    /// @param debtToken Debt token address
+    /// @param ltv Loan-to-Value ratio
+    /// @param liquidationThreshold Liquidation threshold
+    /// @param liquidationBonus Liquidation bonus
+    /// @param liquidationPenalty Liquidation penalty
+    /// @param borrowRate Borrow rate
+    /// @param maxMintableCap Maximum mintable cap
+    /// @param maxSupplyCap Maximum supply cap
+    /// @param minimumBorrowAmount Minimum borrow amount
+    /// @param isExpirable Whether the pair is expirable
+    /// @param expirePeriod Expire period
+    /// @return pairId Unique identifier for the pair
+    function configureLendingPair(
+        address syntheticAsset,
+        address collateralAsset,
+        address depositToken,
+        address debtToken,
+        uint256 ltv,
+        uint256 liquidationThreshold,
+        uint256 liquidationBonus,
+        uint256 liquidationPenalty,
+        uint256 borrowRate,
+        uint256 maxMintableCap,
+        uint256 maxSupplyCap,
+        uint256 minimumBorrowAmount,
+        bool isExpirable,
+        uint256 expirePeriod
+    ) external returns (bytes32 pairId);
+
+    /// @notice Update risk parameters for a lending pair
+    /// @param pairId Unique identifier for the pair
+    /// @param ltv New Loan-to-Value ratio
+    /// @param liquidationThreshold New liquidation threshold
+    /// @param liquidationBonus New liquidation bonus
+    function updateRiskParameters(bytes32 pairId, uint256 ltv, uint256 liquidationThreshold, uint256 liquidationBonus)
+        external;
+
+    /// @notice Update borrow rate for a lending pair
+    /// @param pairId Lending pair ID
+    /// @param newBorrowRate New borrow rate in basis points
+    function updateBorrowRate(bytes32 pairId, uint256 newBorrowRate) external;
+
+    /// @notice Update the oracle module
+    /// @param _yoloOracle New oracle address
+    function updateOracle(IYoloOracle _yoloOracle) external;
+
+    /// @notice Update the YLP vault
+    /// @param _ylpVault New YLP vault address
+    function updateYLPVault(address _ylpVault) external;
+
+    /// @notice Upgrade implementation of a protocol contract
+    /// @param target Target contract to upgrade
+    /// @param newImplementation New implementation address
+    function upgradeImplementation(address target, address newImplementation) external;
 
     /// @notice Get asset configuration
     function getAssetConfiguration(address syntheticAsset) external view returns (DataTypes.AssetConfiguration memory);
 
     /// @notice Check if protocol is paused
     function paused() external view returns (bool);
+
+    /// @notice Pause the protocol
+    function pause() external;
+
+    /// @notice Unpause the protocol
+    function unpause() external;
 
     /// @notice Get user's position keys for iteration
     /// @param user User address
@@ -112,6 +245,18 @@ interface IYoloHook {
     /// @notice Get anchor pool swap fee
     /// @return Swap fee in basis points (0-10000)
     function getAnchorSwapFeeBps() external view returns (uint256);
+
+    /// @notice Get minimum liquidity constant
+    /// @return Minimum liquidity locked on first deposit
+    function MINIMUM_LIQUIDITY() external view returns (uint256);
+
+    /// @notice Get LOOPER_ROLE constant
+    /// @return LOOPER_ROLE bytes32 value
+    function LOOPER_ROLE() external view returns (bytes32);
+
+    /// @notice Get PRIVILEGED_FLASHLOANER_ROLE constant
+    /// @return PRIVILEGED_FLASHLOANER_ROLE bytes32 value
+    function PRIVILEGED_FLASHLOANER_ROLE() external view returns (bytes32);
 
     /// @notice Get synthetic pool swap fee
     /// @return Swap fee in basis points (0-10000)
@@ -185,6 +330,11 @@ interface IYoloHook {
         address onBehalfOf
     ) external;
 
+    /// @notice Renew position (reset expiry time)
+    /// @param yoloAsset Synthetic asset
+    /// @param collateral Collateral asset
+    function renewPosition(address yoloAsset, address collateral) external;
+
     /// @notice Deposit additional collateral to existing position
     /// @dev Requires existing position - LOOPER_ROLE required when onBehalfOf != msg.sender
     ///      Pulls collateral from msg.sender, credits onBehalfOf
@@ -210,6 +360,13 @@ interface IYoloHook {
         address receiver
     ) external;
 
+    /// @notice Liquidate an undercollateralized position
+    /// @param user Address of the user being liquidated
+    /// @param collateral Collateral asset
+    /// @param yoloAsset Synthetic asset
+    /// @param repayAmount Amount to repay
+    function liquidate(address user, address collateral, address yoloAsset, uint256 repayAmount) external;
+
     /// @notice Get position debt with accrued interest
     /// @param user User address
     /// @param collateral Collateral asset
@@ -226,6 +383,16 @@ interface IYoloHook {
         external
         view
         returns (DataTypes.UserPosition memory position);
+
+    /// @notice Get aggregated user account data
+    /// @param user User address
+    /// @return totalCollateralUSD Total collateral in USD
+    /// @return totalDebtUSD Total debt in USD
+    /// @return ltv Current LTV in basis points
+    function getUserAccountData(address user)
+        external
+        view
+        returns (uint256 totalCollateralUSD, uint256 totalDebtUSD, uint256 ltv);
 
     /// @notice Get pair configuration
     /// @param yoloAsset Synthetic asset
@@ -251,6 +418,19 @@ interface IYoloHook {
         external
         returns (bool success);
 
+    /// @notice Execute batch flash loan
+    /// @param borrower Address to receive the loans
+    /// @param tokens Tokens to borrow
+    /// @param amounts Amounts to borrow
+    /// @param data Arbitrary data passed to borrower
+    /// @return success True if flash loan succeeded
+    function flashLoanBatch(
+        address borrower,
+        address[] calldata tokens,
+        uint256[] calldata amounts,
+        bytes calldata data
+    ) external returns (bool success);
+
     /// @notice Execute privileged flash loan for leverage operations
     /// @dev Only callable by contracts with LOOPER_ROLE, no reentrancy guard
     /// @param borrower Address to receive the loan (the looper)
@@ -261,4 +441,28 @@ interface IYoloHook {
     function leverageFlashLoan(address borrower, address token, uint256 amount, bytes calldata data)
         external
         returns (bool success);
+
+    /// @notice Get maximum flash loan amount for a token
+    /// @param token Token address
+    /// @return maxAmount Maximum flash loan amount
+    function maxFlashLoan(address token) external view returns (uint256 maxAmount);
+
+    /// @notice Preview flash loan fee
+    /// @param token Token to borrow
+    /// @param amount Amount to borrow
+    /// @return fee Fee amount
+    function previewFlashLoanFee(address token, uint256 amount) external view returns (uint256 fee);
+
+    /// @notice Update maximum flash loan amount for a synthetic asset
+    /// @param syntheticToken Synthetic asset address
+    /// @param newMaxFlashLoanAmount New maximum flash loan amount
+    function updateMaxFlashLoanAmount(address syntheticToken, uint256 newMaxFlashLoanAmount) external;
+
+    /// @notice Update flash loan fee
+    /// @param newFeeBps New flash loan fee in basis points (0-10000)
+    function updateFlashLoanFee(uint256 newFeeBps) external;
+
+    /// @notice Toggle privileged liquidator mode
+    /// @param enabled True to restrict liquidations to privileged liquidators only
+    function togglePrivilegedLiquidator(bool enabled) external;
 }
