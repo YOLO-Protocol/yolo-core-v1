@@ -620,8 +620,9 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
         whenNotPaused
         onlyTradeOperator
         nonReentrant
+        returns (uint256 idx, int256 collateralDelta, int256 syntheticDelta)
     {
-        (uint256 idx, int256 collateralDelta, int256 syntheticDelta) = s.updateTradePosition(update, msg.sender);
+        (idx, collateralDelta, syntheticDelta) = s.updateTradePosition(update, msg.sender);
         emit TradePositionUpdated(
             update.user, update.syntheticAsset, update.action, idx, collateralDelta, syntheticDelta
         );
