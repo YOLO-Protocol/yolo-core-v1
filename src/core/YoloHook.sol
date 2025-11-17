@@ -137,6 +137,7 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     error YoloHook__NoPrivilegedLiquidators();
     error YoloHook__InvalidRescue();
     error YoloHook__InvalidFeeSplit();
+    error YoloHook__InvalidTradeIndex();
 
     // ========================
     // INTERNAL ACCESS CONTROL CHECKS
@@ -930,12 +931,33 @@ contract YoloHook is BaseHook, ReentrancyGuard, YoloHookStorage, UUPSUpgradeable
     }
 
     /**
-     * @notice Get all leveraged trades owned by a user
+     * @notice Get a single leveraged trade owned by a user
      * @param user User address
-     * @return Leveraged trade positions (may be empty)
+     * @param index Trade index
+     * @return Trade position struct
      */
-    function getUserTrades(address user) external view returns (DataTypes.TradePosition[] memory) {
-        return s.tradePositions[user];
+    function getUserTrade(address user, uint256 index) external view returns (DataTypes.TradePosition memory) {
+        DataTypes.TradePosition[] storage positions = s.tradePositions[user];
+        if (index >= positions.length) {
+            revert YoloHook__InvalidTradeIndex();
+        }
+        return positions[index];
+    }
+
+    function getUserTrade(address user, uint256 index) external view returns (DataTypes.TradePosition memory) {
+        DataTypes.TradePosition[] storage positions = s.tradePositions[user];
+        if (index >= positions.length) {
+            revert YoloHook__InvalidTradeIndex();
+        }
+        return positions[index];
+    }
+    /**
+     * @notice Get total number of leveraged trades owned by a user
+     * @param user User address
+     * @return Count of trade positions
+     */
+    function getUserTradeCount(address user) external view returns (uint256) {
+        return s.tradePositions[user].length;
     }
 
     /**
