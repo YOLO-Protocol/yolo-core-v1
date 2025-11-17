@@ -703,16 +703,4 @@ contract YLP is
         YLPStorage storage $ = _getYLPStorage();
         return $.withdrawalRequests[requestId];
     }
-
-    // ============================================================
-    // UTILIZATION TRACKING (Phase 3)
-    // ============================================================
-
-    // TODO: Utilization enforcement functions
-
-    // ============================================================
-    // EMERGENCY CONTROLS (Phase 4)
-    // ============================================================
-
-    // TODO: Emergency state machine
 }
