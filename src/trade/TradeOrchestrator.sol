@@ -12,6 +12,7 @@ import {IACLManager} from "../interfaces/IACLManager.sol";
 import {IYoloHook} from "../interfaces/IYoloHook.sol";
 import {IYLPVault} from "../interfaces/IYLPVault.sol";
 import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
+import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
 import {DataTypes} from "../libraries/DataTypes.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
@@ -102,6 +103,14 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         uint16 borrowRateBps;
         uint256 pendingBorrowUsy;
         int256 pendingFundingUsy;
+        uint256 entryPriceIndex;
+    }
+
+    struct PositionScalingContext {
+        uint256 previousIndex;
+        uint256 currentIndex;
+        uint256 scaledSize;
+        uint256 scaledEntryPriceX8;
     }
 
     struct OpenPositionParams {
@@ -356,7 +365,8 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             lastBorrowTimestamp: SafeCast.toUint64(block.timestamp),
             borrowRateBps: config.fixedBorrowBps,
             pendingBorrowUsy: 0,
-            pendingFundingUsy: 0
+            pendingFundingUsy: 0,
+            entryPriceIndex: _getPriceIndex(params.syntheticAsset)
         });
 
         emit TradeOpened(
@@ -374,7 +384,12 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         uint256 tradeCount = yoloHook.getUserTradeCount(msg.sender);
         if (params.index >= tradeCount) revert TradeOrchestrator__PositionNotFound();
         DataTypes.TradePosition memory position = yoloHook.getUserTrade(msg.sender, params.index);
+        uint256 baseSize = position.syntheticAssetPositionSize;
         if (position.syntheticAsset != params.syntheticAsset) revert TradeOrchestrator__PositionNotFound();
+        PositionAccounting storage meta = positionAccounting[msg.sender][params.index];
+        PositionScalingContext memory scaling = _applyCorporateActionScaling(params.syntheticAsset, position, meta);
+        position.syntheticAssetPositionSize = scaling.scaledSize;
+        position.entryPriceX8 = scaling.scaledEntryPriceX8;
 
         usy.safeTransferFrom(msg.sender, address(this), params.collateralDelta);
 
@@ -386,7 +401,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             leverageBps: position.leverageBps,
             index: params.index,
             expectedCollateralUsy: position.collateralUsy,
-            expectedSyntheticSize: position.syntheticAssetPositionSize,
+            expectedSyntheticSize: baseSize,
             collateralDelta: SafeCast.toInt256(params.collateralDelta),
             syntheticDelta: 0,
             executionPriceX8: position.entryPriceX8,
@@ -394,7 +409,6 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         });
 
         (, int256 collateralDelta,) = yoloHook.updateTradePosition(update);
-        PositionAccounting storage meta = positionAccounting[msg.sender][params.index];
         meta.lastPricePublishTime = SafeCast.toUint64(block.timestamp);
 
         emit TradeAdjusted(msg.sender, params.syntheticAsset, params.index, SafeCast.toUint256(collateralDelta));
@@ -412,20 +426,13 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         (priceInfo, feePaid) = _consumePriceUpdate(config, priceUpdateData);
         _enforceDeviation(params.syntheticAsset, config.maxDeviationBps, priceInfo.priceX8);
 
-        uint256 sizeToClose = params.syntheticSize;
-        if (sizeToClose == 0) {
-            uint256 tradeCount = yoloHook.getUserTradeCount(msg.sender);
-            if (params.index >= tradeCount) revert TradeOrchestrator__PositionNotFound();
-            sizeToClose = yoloHook.getUserTrade(msg.sender, params.index).syntheticAssetPositionSize;
-        }
-
         _executeClose(
             CloseExecutionParams({
                 trader: msg.sender,
                 caller: msg.sender,
                 syntheticAsset: params.syntheticAsset,
                 index: params.index,
-                sizeToClose: sizeToClose,
+                sizeToClose: params.syntheticSize,
                 priceInfo: priceInfo,
                 config: config,
                 liquidation: false,
@@ -492,6 +499,10 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         uint256 tradeCount = yoloHook.getUserTradeCount(user);
         if (index >= tradeCount) revert TradeOrchestrator__PositionNotFound();
         DataTypes.TradePosition memory position = yoloHook.getUserTrade(user, index);
+        PositionAccounting storage meta = positionAccounting[user][index];
+        PositionScalingContext memory scaling = _applyCorporateActionScaling(syntheticAsset, position, meta);
+        position.syntheticAssetPositionSize = scaling.scaledSize;
+        position.entryPriceX8 = scaling.scaledEntryPriceX8;
         uint256 currentNotional = _notionalUsd(position.syntheticAssetPositionSize, priceInfo.priceX8);
         if (currentNotional <= targetNotionalUsd) {
             _refundSurplus(feePaid);
@@ -535,26 +546,35 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         DataTypes.TradePosition memory position = yoloHook.getUserTrade(params.trader, params.index);
         if (position.syntheticAsset != params.syntheticAsset) revert TradeOrchestrator__PositionNotFound();
 
-        uint256 sizeToClose = params.sizeToClose == 0 ? position.syntheticAssetPositionSize : params.sizeToClose;
-        if (sizeToClose == 0 || sizeToClose > position.syntheticAssetPositionSize) {
-            revert TradeOrchestrator__InvalidAmount();
-        }
-
         AssetState storage state = assetStates[params.syntheticAsset];
         _applyFundingInternal(params.syntheticAsset, state, params.config);
 
+        uint256 baseSize = position.syntheticAssetPositionSize;
+        PositionAccounting storage meta = positionAccounting[params.trader][params.index];
+        PositionScalingContext memory scaling = _applyCorporateActionScaling(params.syntheticAsset, position, meta);
+        position.syntheticAssetPositionSize = scaling.scaledSize;
+        position.entryPriceX8 = scaling.scaledEntryPriceX8;
+
+        uint256 sizeToCloseScaled = params.sizeToClose == 0 ? position.syntheticAssetPositionSize : params.sizeToClose;
+        if (sizeToCloseScaled == 0 || sizeToCloseScaled > position.syntheticAssetPositionSize) {
+            revert TradeOrchestrator__InvalidAmount();
+        }
+        uint256 sizeToCloseBase;
+        sizeToCloseBase = sizeToCloseScaled == position.syntheticAssetPositionSize
+            ? baseSize
+            : Math.min(_mulDivUp(sizeToCloseScaled, scaling.previousIndex, scaling.currentIndex), baseSize);
+        if (sizeToCloseBase == 0) revert TradeOrchestrator__InvalidAmount();
+
         bool applyLongSpread = position.direction == DataTypes.TradeDirection.SHORT;
         uint256 executionPrice = _applyDirectionalSpread(params.priceInfo.priceX8, params.config, applyLongSpread);
-        uint256 notionalUsd = _notionalUsd(sizeToClose, executionPrice);
-        uint256 entryNotionalUsd = _notionalUsd(sizeToClose, position.entryPriceX8);
-        uint256 collateralPortion = (position.collateralUsy * sizeToClose) / position.syntheticAssetPositionSize;
-        PositionAccounting storage meta = positionAccounting[params.trader][params.index];
+        uint256 entryNotionalUsd = _notionalUsd(sizeToCloseScaled, position.entryPriceX8);
+        uint256 collateralPortion = (position.collateralUsy * sizeToCloseScaled) / position.syntheticAssetPositionSize;
 
         (int256 pnlUsy, uint256 borrowFee, int256 fundingFee) =
-            _computeSettlement(position, meta, state, sizeToClose, executionPrice);
+            _computeSettlement(position, meta, state, sizeToCloseScaled, executionPrice);
 
         DataTypes.TradeUpdateAction action;
-        if (sizeToClose == position.syntheticAssetPositionSize) {
+        if (sizeToCloseScaled == position.syntheticAssetPositionSize) {
             action = params.liquidation ? DataTypes.TradeUpdateAction.LIQUIDATE : DataTypes.TradeUpdateAction.CLOSE;
         } else {
             action = DataTypes.TradeUpdateAction.PARTIAL_CLOSE;
@@ -568,15 +588,15 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             leverageBps: position.leverageBps,
             index: params.index,
             expectedCollateralUsy: position.collateralUsy,
-            expectedSyntheticSize: position.syntheticAssetPositionSize,
+            expectedSyntheticSize: baseSize,
             collateralDelta: -SafeCast.toInt256(collateralPortion),
-            syntheticDelta: -SafeCast.toInt256(sizeToClose),
+            syntheticDelta: -SafeCast.toInt256(sizeToCloseBase),
             executionPriceX8: executionPrice,
             settledAt: SafeCast.toUint64(block.timestamp)
         });
 
         yoloHook.updateTradePosition(update);
-        _postCloseBookkeeping(params.trader, params.syntheticAsset, params.index, tradeCount, action);
+        _postCloseBookkeeping(params.trader, params.index, tradeCount, action);
         _updateExposure(state, position.direction, entryNotionalUsd, false);
 
         int256 netPnl = pnlUsy - SafeCast.toInt256(borrowFee);
@@ -622,7 +642,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             if (collateralPortion > 0) {
                 usy.safeTransfer(params.trader, collateralPortion);
             }
-            emit TradeClosed(params.trader, params.syntheticAsset, params.index, sizeToClose, netPnl, collateralPortion);
+            emit TradeClosed(
+                params.trader, params.syntheticAsset, params.index, sizeToCloseScaled, netPnl, collateralPortion
+            );
         }
 
         yoloHook.settlePnLFromPerps(params.trader, params.syntheticAsset, netPnl);
@@ -645,6 +667,10 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         if (params.index >= tradeCount) revert TradeOrchestrator__PositionNotFound();
         DataTypes.TradePosition memory position = yoloHook.getUserTrade(params.user, params.index);
         if (position.syntheticAsset != params.syntheticAsset) revert TradeOrchestrator__PositionNotFound();
+        PositionAccounting storage meta = positionAccounting[params.user][params.index];
+        PositionScalingContext memory scaling = _applyCorporateActionScaling(params.syntheticAsset, position, meta);
+        position.syntheticAssetPositionSize = scaling.scaledSize;
+        position.entryPriceX8 = scaling.scaledEntryPriceX8;
 
         if (position.syntheticAssetPositionSize == 0 || position.collateralUsy == 0) {
             revert TradeOrchestrator__NotLiquidatable();
@@ -655,7 +681,6 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
 
         uint256 notionalUsd = _notionalUsd(position.syntheticAssetPositionSize, priceInfo.priceX8);
         if (notionalUsd == 0) revert TradeOrchestrator__NotLiquidatable();
-        PositionAccounting storage meta = positionAccounting[params.user][params.index];
         uint256 borrowFee = _previewPendingBorrow(meta, notionalUsd);
         int256 fundingFee = _previewPendingFunding(meta, state, position, notionalUsd);
         int256 equity = SafeCast.toInt256(position.collateralUsy);
@@ -737,6 +762,23 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         if (price.price <= 0) revert TradeOrchestrator__InvalidPrice();
         info.priceX8 = _scalePrice(price);
         info.publishTime = SafeCast.toUint64(price.publishTime);
+    }
+
+    function _applyCorporateActionScaling(
+        address syntheticAsset,
+        DataTypes.TradePosition memory position,
+        PositionAccounting storage meta
+    ) private view returns (PositionScalingContext memory ctx) {
+        ctx.currentIndex = _getPriceIndex(syntheticAsset);
+        uint256 storedIndex = meta.entryPriceIndex == 0 ? ctx.currentIndex : meta.entryPriceIndex;
+        ctx.previousIndex = storedIndex;
+        if (ctx.currentIndex == storedIndex) {
+            ctx.scaledSize = position.syntheticAssetPositionSize;
+            ctx.scaledEntryPriceX8 = position.entryPriceX8;
+        } else {
+            ctx.scaledSize = _mulDivUp(position.syntheticAssetPositionSize, ctx.currentIndex, storedIndex);
+            ctx.scaledEntryPriceX8 = Math.mulDiv(position.entryPriceX8, storedIndex, ctx.currentIndex);
+        }
     }
 
     function _applyDirectionalSpread(uint256 basePriceX8, TradeAssetConfig memory config, bool longExposure)
@@ -982,7 +1024,6 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
 
     function _postCloseBookkeeping(
         address user,
-        address syntheticAsset,
         uint256 index,
         uint256 lengthBefore,
         DataTypes.TradeUpdateAction action
@@ -1026,6 +1067,10 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             result += 1;
         }
         return result;
+    }
+
+    function _getPriceIndex(address syntheticAsset) private view returns (uint256) {
+        return IYoloSyntheticAsset(syntheticAsset).liquidityIndex();
     }
 
     function _getTreasury() private view returns (address) {
