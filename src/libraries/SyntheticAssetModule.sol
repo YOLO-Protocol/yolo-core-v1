@@ -153,9 +153,9 @@ library SyntheticAssetModule {
                 maxLongOpenInterestUsd: 0,
                 maxShortOpenInterestUsd: 0,
                 maxLeverageBpsDay: 0,
-                maxLeverageBpsNight: 0,
-                daySessionStart: 0,
-                daySessionEnd: 0,
+                maxLeverageBpsCarryOvernight: 0,
+                tradeSessionStart: 0,
+                tradeSessionEnd: 0,
                 marketState: DataTypes.TradeMarketState.OFFLINE
             })
         });
@@ -269,12 +269,15 @@ library SyntheticAssetModule {
             revert SyntheticAssetModule__InvalidPerpConfig();
         }
 
-        // Day session timestamps represent seconds since midnight UTC and must be within a 24h window
-        if (config.daySessionStart >= SECONDS_PER_DAY || config.daySessionEnd > SECONDS_PER_DAY) {
+        // Trade session timestamps represent seconds since midnight UTC and must be within a 24h window
+        if (config.tradeSessionStart >= SECONDS_PER_DAY || config.tradeSessionEnd > SECONDS_PER_DAY) {
             revert SyntheticAssetModule__InvalidPerpConfig();
         }
 
-        if (config.daySessionEnd != 0 && config.daySessionStart >= config.daySessionEnd) {
+        if (
+            config.tradeSessionEnd != 0 && config.tradeSessionStart != 0
+                && config.tradeSessionStart == config.tradeSessionEnd
+        ) {
             revert SyntheticAssetModule__InvalidPerpConfig();
         }
 

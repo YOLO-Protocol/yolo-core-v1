@@ -288,23 +288,30 @@ library TradeModule {
     }
 
     function _currentLeverageCap(DataTypes.PerpConfiguration memory config) private view returns (uint32) {
-        if (config.maxLeverageBpsDay == 0 && config.maxLeverageBpsNight == 0) {
+        if (config.maxLeverageBpsDay == 0 && config.maxLeverageBpsCarryOvernight == 0) {
             return 0;
         }
 
+        bool inSession = _isTradeSessionActive(config);
+        if (inSession) {
+            return config.maxLeverageBpsDay != 0 ? config.maxLeverageBpsDay : config.maxLeverageBpsCarryOvernight;
+        }
+        return config.maxLeverageBpsCarryOvernight != 0 ? config.maxLeverageBpsCarryOvernight : config.maxLeverageBpsDay;
+    }
+
+    function _isTradeSessionActive(DataTypes.PerpConfiguration memory config) private view returns (bool) {
+        if (config.tradeSessionStart == 0 && config.tradeSessionEnd == 0) {
+            return true;
+        }
+        if (config.tradeSessionStart == config.tradeSessionEnd) {
+            return true;
+        }
         uint32 secondsToday = uint32(block.timestamp % SECONDS_PER_DAY);
-        bool inDayWindow = (config.daySessionEnd > config.daySessionStart && secondsToday >= config.daySessionStart
-                && secondsToday < config.daySessionEnd);
-
-        if (config.daySessionEnd == 0 && config.daySessionStart == 0) {
-            return config.maxLeverageBpsDay != 0 ? config.maxLeverageBpsDay : config.maxLeverageBpsNight;
+        if (config.tradeSessionEnd > config.tradeSessionStart) {
+            return secondsToday >= config.tradeSessionStart && secondsToday < config.tradeSessionEnd;
         }
-
-        if (inDayWindow) {
-            return config.maxLeverageBpsDay;
-        }
-
-        return config.maxLeverageBpsNight == 0 ? config.maxLeverageBpsDay : config.maxLeverageBpsNight;
+        // Window wraps past midnight
+        return secondsToday >= config.tradeSessionStart || secondsToday < config.tradeSessionEnd;
     }
 
     function _adjustOpenInterest(
