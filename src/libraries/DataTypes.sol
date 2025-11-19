@@ -275,10 +275,10 @@ library DataTypes {
      * @param maxOpenInterestUsd Total OI cap (USD notional)
      * @param maxLongOpenInterestUsd Directional long cap
      * @param maxShortOpenInterestUsd Directional short cap
-     * @param maxLeverageBpsDay Max leverage during day session (basis points)
-     * @param maxLeverageBpsNight Max leverage during night session (basis points)
-     * @param daySessionStart UTC seconds since midnight when day leverage applies
-     * @param daySessionEnd UTC seconds since midnight when day leverage ends
+     * @param maxLeverageBpsDay Max leverage while the main trade session is active (basis points)
+     * @param maxLeverageBpsCarryOvernight Max leverage allowed outside the trade session (basis points)
+     * @param tradeSessionStart UTC seconds since midnight when the active session begins; allow values > tradeSessionEnd to wrap past midnight
+     * @param tradeSessionEnd UTC seconds since midnight when the active session ends; if equal to start the session is treated as 24 hours
      * @param marketState Circuit breaker enum (open / close-only / offline)
      */
     struct PerpConfiguration {
@@ -287,9 +287,10 @@ library DataTypes {
         uint256 maxLongOpenInterestUsd;
         uint256 maxShortOpenInterestUsd;
         uint32 maxLeverageBpsDay;
-        uint32 maxLeverageBpsNight;
-        uint32 daySessionStart;
-        uint32 daySessionEnd;
+        uint32 maxLeverageBpsCarryOvernight;
+        // tradeSessionStart/tradeSessionEnd use UTC seconds since midnight; if end <= start the window wraps to the next day.
+        uint32 tradeSessionStart;
+        uint32 tradeSessionEnd;
         TradeMarketState marketState;
     }
 
