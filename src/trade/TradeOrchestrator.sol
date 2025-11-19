@@ -59,6 +59,8 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
     error TradeOrchestrator__InvalidPrice();
     error TradeOrchestrator__MaxDeviationExceeded();
     error TradeOrchestrator__LeverageTooHigh();
+    error TradeOrchestrator__TradeSessionActive();
+    error TradeOrchestrator__CarryCapUnavailable();
     error TradeOrchestrator__PositionNotFound();
     error TradeOrchestrator__NotLiquidatable();
     error TradeOrchestrator__InsufficientUpdateFee();
@@ -84,6 +86,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         uint16 liquidationRewardBps;
         uint16 openFeeBps;
         uint16 closeFeeBps;
+        uint16 overnightUnwindFeeBps;
         uint256 minCollateralUsy;
         bool feesEnabled;
         bool isActive;
@@ -158,6 +161,8 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         TradeAssetConfig config;
         bool liquidation;
         address rewardReceiver;
+        uint16 unwindFeeBps;
+        address unwindFeeRecipient;
     }
 
     // ============================================================
@@ -191,6 +196,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         uint16 liquidationRewardBps,
         uint16 openFeeBps,
         uint16 closeFeeBps,
+        uint16 overnightUnwindFeeBps,
         uint256 minCollateralUsy,
         bool feesEnabled,
         bool isActive
@@ -215,6 +221,14 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
     );
     event TradeLiquidated(
         address indexed user, address indexed syntheticAsset, uint256 index, address liquidator, int256 pnlUsy
+    );
+    event OvernightUnwound(
+        address indexed user,
+        address indexed syntheticAsset,
+        uint256 index,
+        uint256 sizeReduced,
+        uint256 unwindFeePaid,
+        address keeper
     );
     event FundingApplied(address indexed syntheticAsset, int256 fundingAccumulator, uint64 lastAccrued);
     event AutoDeleveraged(address indexed user, address indexed syntheticAsset, uint256 index, uint256 reducedSize);
@@ -271,6 +285,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         if (config.liquidationRewardBps > BPS_DENOMINATOR) revert TradeOrchestrator__InvalidFee();
         if (config.longSpreadBps > BPS_DENOMINATOR) revert TradeOrchestrator__InvalidFee();
         if (config.shortSpreadBps >= BPS_DENOMINATOR) revert TradeOrchestrator__InvalidFee();
+        if (config.overnightUnwindFeeBps > BPS_DENOMINATOR) revert TradeOrchestrator__InvalidFee();
         tradeAssetConfigs[syntheticAsset] = config;
 
         AssetState storage state = assetStates[syntheticAsset];
@@ -291,6 +306,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             config.liquidationRewardBps,
             config.openFeeBps,
             config.closeFeeBps,
+            config.overnightUnwindFeeBps,
             config.minCollateralUsy,
             config.feesEnabled,
             config.isActive
@@ -436,7 +452,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 priceInfo: priceInfo,
                 config: config,
                 liquidation: false,
-                rewardReceiver: address(0)
+                rewardReceiver: address(0),
+                unwindFeeBps: 0,
+                unwindFeeRecipient: address(0)
             })
         );
         _refundSurplus(feePaid);
@@ -467,7 +485,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 priceInfo: priceInfo,
                 config: config,
                 liquidation: true,
-                rewardReceiver: msg.sender
+                rewardReceiver: msg.sender,
+                unwindFeeBps: 0,
+                unwindFeeRecipient: address(0)
             })
         );
         _refundSurplus(feePaid);
@@ -529,10 +549,106 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 priceInfo: priceInfo,
                 config: config,
                 liquidation: false,
-                rewardReceiver: address(0)
+                rewardReceiver: address(0),
+                unwindFeeBps: 0,
+                unwindFeeRecipient: address(0)
             })
         );
         emit AutoDeleveraged(user, syntheticAsset, index, sizeToClose);
+        _refundSurplus(feePaid);
+    }
+
+    function enforceCarryLeverage(LiquidationParams calldata params, bytes[] calldata priceUpdateData)
+        external
+        payable
+        nonReentrant
+        onlyTradeKeeper
+    {
+        _enforceDeadline(params.deadline);
+        DataTypes.AssetConfiguration memory assetCfg = yoloHook.getAssetConfiguration(params.syntheticAsset);
+        if (_isTradeSessionActive(assetCfg.perpConfig)) {
+            revert TradeOrchestrator__TradeSessionActive();
+        }
+        if (assetCfg.perpConfig.maxLeverageBpsCarryOvernight == 0) {
+            revert TradeOrchestrator__CarryCapUnavailable();
+        }
+
+        TradeAssetConfig memory config = _loadConfig(params.syntheticAsset);
+        PriceInfo memory priceInfo;
+        uint256 feePaid;
+        (priceInfo, feePaid) = _consumePriceUpdate(config, priceUpdateData);
+        _enforceDeviation(params.syntheticAsset, config.maxDeviationBps, priceInfo.priceX8);
+
+        AssetState storage state = assetStates[params.syntheticAsset];
+        _applyFundingInternal(params.syntheticAsset, state, config);
+
+        uint256 tradeCount = yoloHook.getUserTradeCount(params.user);
+        if (params.index >= tradeCount) revert TradeOrchestrator__PositionNotFound();
+        DataTypes.TradePosition memory position = yoloHook.getUserTrade(params.user, params.index);
+        if (position.syntheticAsset != params.syntheticAsset) revert TradeOrchestrator__PositionNotFound();
+        PositionAccounting storage meta = positionAccounting[params.user][params.index];
+        PositionScalingContext memory scaling = _applyCorporateActionScaling(params.syntheticAsset, position, meta);
+        position.syntheticAssetPositionSize = scaling.scaledSize;
+        position.entryPriceX8 = scaling.scaledEntryPriceX8;
+
+        if (position.syntheticAssetPositionSize == 0 || position.collateralUsy == 0) {
+            _refundSurplus(feePaid);
+            return;
+        }
+
+        uint256 notionalUsd = _notionalUsd(position.syntheticAssetPositionSize, priceInfo.priceX8);
+        if (notionalUsd == 0) {
+            _refundSurplus(feePaid);
+            return;
+        }
+
+        uint256 borrowFee = _previewPendingBorrow(meta, notionalUsd);
+        int256 fundingFee = _previewPendingFunding(meta, state, position, notionalUsd);
+        int256 equity = SafeCast.toInt256(position.collateralUsy);
+        equity += _unrealizedPnl(position, priceInfo.priceX8, position.syntheticAssetPositionSize);
+        equity -= SafeCast.toInt256(borrowFee);
+        equity -= fundingFee;
+        if (equity <= 0) {
+            _refundSurplus(feePaid);
+            return;
+        }
+
+        uint256 equityUsd = SafeCast.toUint256(equity);
+        uint256 carryCap = assetCfg.perpConfig.maxLeverageBpsCarryOvernight;
+        uint256 allowedNotional = Math.mulDiv(equityUsd, carryCap, BPS_DENOMINATOR);
+        if (allowedNotional >= notionalUsd) {
+            _refundSurplus(feePaid);
+            return;
+        }
+
+        uint256 reductionNotional = notionalUsd - allowedNotional;
+        uint256 sizeToCloseScaled = _mulDivUp(reductionNotional, position.syntheticAssetPositionSize, notionalUsd);
+        if (sizeToCloseScaled > position.syntheticAssetPositionSize) {
+            sizeToCloseScaled = position.syntheticAssetPositionSize;
+        }
+
+        address unwindRecipient = address(0);
+        if (config.overnightUnwindFeeBps != 0) {
+            unwindRecipient = _getTreasury();
+        }
+
+        (uint256 closedSize, uint256 unwindFeePaid) = _executeClose(
+            CloseExecutionParams({
+                trader: params.user,
+                caller: msg.sender,
+                syntheticAsset: params.syntheticAsset,
+                index: params.index,
+                sizeToClose: sizeToCloseScaled,
+                priceInfo: priceInfo,
+                config: config,
+                liquidation: false,
+                rewardReceiver: address(0),
+                unwindFeeBps: config.overnightUnwindFeeBps,
+                unwindFeeRecipient: unwindRecipient
+            })
+        );
+
+        emit OvernightUnwound(params.user, params.syntheticAsset, params.index, closedSize, unwindFeePaid, msg.sender);
         _refundSurplus(feePaid);
     }
 
@@ -540,7 +656,10 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
     // INTERNAL HELPERS
     // ============================================================
 
-    function _executeClose(CloseExecutionParams memory params) private {
+    function _executeClose(CloseExecutionParams memory params)
+        private
+        returns (uint256 sizeToCloseScaled, uint256 unwindFeePaid)
+    {
         uint256 tradeCount = yoloHook.getUserTradeCount(params.trader);
         if (params.index >= tradeCount) revert TradeOrchestrator__PositionNotFound();
         DataTypes.TradePosition memory position = yoloHook.getUserTrade(params.trader, params.index);
@@ -555,7 +674,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         position.syntheticAssetPositionSize = scaling.scaledSize;
         position.entryPriceX8 = scaling.scaledEntryPriceX8;
 
-        uint256 sizeToCloseScaled = params.sizeToClose == 0 ? position.syntheticAssetPositionSize : params.sizeToClose;
+        sizeToCloseScaled = params.sizeToClose == 0 ? position.syntheticAssetPositionSize : params.sizeToClose;
         if (sizeToCloseScaled == 0 || sizeToCloseScaled > position.syntheticAssetPositionSize) {
             revert TradeOrchestrator__InvalidAmount();
         }
@@ -639,6 +758,17 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                     usy.safeTransfer(_getTreasury(), closeFee);
                 }
             }
+            if (collateralPortion > 0 && params.unwindFeeBps != 0 && params.unwindFeeRecipient != address(0)) {
+                uint256 unwindFee = _mulDivUp(collateralPortion, params.unwindFeeBps, BPS_DENOMINATOR);
+                if (unwindFee > collateralPortion) {
+                    unwindFee = collateralPortion;
+                }
+                if (unwindFee > 0) {
+                    collateralPortion -= unwindFee;
+                    usy.safeTransfer(params.unwindFeeRecipient, unwindFee);
+                    unwindFeePaid = unwindFee;
+                }
+            }
             if (collateralPortion > 0) {
                 usy.safeTransfer(params.trader, collateralPortion);
             }
@@ -648,6 +778,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         }
 
         yoloHook.settlePnLFromPerps(params.trader, params.syntheticAsset, netPnl);
+        return (sizeToCloseScaled, unwindFeePaid);
     }
 
     function _loadConfig(address syntheticAsset) private view returns (TradeAssetConfig memory config) {
@@ -735,18 +866,28 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
     }
 
     function _currentLeverageCap(DataTypes.PerpConfiguration memory config) private view returns (uint32) {
-        if (config.maxLeverageBpsDay == 0 && config.maxLeverageBpsNight == 0) {
+        if (config.maxLeverageBpsDay == 0 && config.maxLeverageBpsCarryOvernight == 0) {
             return 0;
         }
-        uint32 secondsToday = uint32(block.timestamp % 86_400);
-        bool isDay = config.daySessionEnd > config.daySessionStart && secondsToday >= config.daySessionStart
-            && secondsToday < config.daySessionEnd;
-        if (config.daySessionEnd == 0 && config.daySessionStart == 0) {
-            return config.maxLeverageBpsDay != 0 ? config.maxLeverageBpsDay : config.maxLeverageBpsNight;
+        bool inSession = _isTradeSessionActive(config);
+        if (inSession) {
+            return config.maxLeverageBpsDay != 0 ? config.maxLeverageBpsDay : config.maxLeverageBpsCarryOvernight;
         }
-        return isDay
-            ? config.maxLeverageBpsDay
-            : (config.maxLeverageBpsNight == 0 ? config.maxLeverageBpsDay : config.maxLeverageBpsNight);
+        return config.maxLeverageBpsCarryOvernight != 0 ? config.maxLeverageBpsCarryOvernight : config.maxLeverageBpsDay;
+    }
+
+    function _isTradeSessionActive(DataTypes.PerpConfiguration memory config) private view returns (bool) {
+        if (config.tradeSessionStart == 0 && config.tradeSessionEnd == 0) {
+            return true;
+        }
+        if (config.tradeSessionStart == config.tradeSessionEnd) {
+            return true;
+        }
+        uint32 secondsToday = uint32(block.timestamp % 86_400);
+        if (config.tradeSessionEnd > config.tradeSessionStart) {
+            return secondsToday >= config.tradeSessionStart && secondsToday < config.tradeSessionEnd;
+        }
+        return secondsToday >= config.tradeSessionStart || secondsToday < config.tradeSessionEnd;
     }
 
     function _consumePriceUpdate(TradeAssetConfig memory config, bytes[] calldata priceUpdateData)
