@@ -159,6 +159,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         uint256 sizeToClose;
         PriceInfo priceInfo;
         TradeAssetConfig config;
+        bool retainCollateral;
         bool liquidation;
         address rewardReceiver;
         uint16 unwindFeeBps;
@@ -451,6 +452,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 sizeToClose: params.syntheticSize,
                 priceInfo: priceInfo,
                 config: config,
+                retainCollateral: false,
                 liquidation: false,
                 rewardReceiver: address(0),
                 unwindFeeBps: 0,
@@ -484,6 +486,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 sizeToClose: 0,
                 priceInfo: priceInfo,
                 config: config,
+                retainCollateral: false,
                 liquidation: true,
                 rewardReceiver: msg.sender,
                 unwindFeeBps: 0,
@@ -548,6 +551,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 sizeToClose: sizeToClose,
                 priceInfo: priceInfo,
                 config: config,
+                retainCollateral: false,
                 liquidation: false,
                 rewardReceiver: address(0),
                 unwindFeeBps: 0,
@@ -641,6 +645,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 sizeToClose: sizeToCloseScaled,
                 priceInfo: priceInfo,
                 config: config,
+                retainCollateral: true,
                 liquidation: false,
                 rewardReceiver: address(0),
                 unwindFeeBps: config.overnightUnwindFeeBps,
@@ -699,6 +704,74 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             action = DataTypes.TradeUpdateAction.PARTIAL_CLOSE;
         }
 
+        uint256 initialPortion = collateralPortion;
+        uint256 collateralSpent;
+        uint256 rewardPaid;
+        uint256 lossCovered;
+        uint256 shortfall;
+        uint256 payoutToTrader;
+        uint256 closeFeePaid;
+        uint256 unwindFeePaidLocal;
+        uint256 vaultSeizure;
+
+        int256 netPnl = pnlUsy - SafeCast.toInt256(borrowFee);
+        netPnl -= fundingFee;
+
+        if (params.liquidation && params.config.liquidationRewardBps != 0 && params.rewardReceiver != address(0)) {
+            rewardPaid = Math.mulDiv(collateralPortion, params.config.liquidationRewardBps, BPS_DENOMINATOR);
+            if (rewardPaid > collateralPortion) {
+                rewardPaid = collateralPortion;
+            }
+            if (rewardPaid > 0) {
+                collateralPortion -= rewardPaid;
+                collateralSpent += rewardPaid;
+            }
+        }
+
+        if (netPnl < 0) {
+            uint256 loss = SafeCast.toUint256(-netPnl);
+            lossCovered = Math.min(loss, collateralPortion);
+            if (lossCovered > 0) {
+                collateralPortion -= lossCovered;
+                collateralSpent += lossCovered;
+            }
+            shortfall = loss - lossCovered;
+            netPnl = lossCovered == 0 ? int256(0) : -SafeCast.toInt256(lossCovered);
+        }
+
+        if (params.liquidation) {
+            vaultSeizure = collateralPortion;
+            collateralSpent += collateralPortion;
+            collateralPortion = 0;
+        } else {
+            if (collateralPortion > 0 && params.config.feesEnabled && params.config.closeFeeBps != 0) {
+                closeFeePaid = _mulDivUp(collateralPortion, params.config.closeFeeBps, BPS_DENOMINATOR);
+                if (closeFeePaid > collateralPortion) {
+                    closeFeePaid = collateralPortion;
+                }
+                collateralPortion -= closeFeePaid;
+                collateralSpent += closeFeePaid;
+            }
+            if (collateralPortion > 0 && params.unwindFeeBps != 0 && params.unwindFeeRecipient != address(0)) {
+                unwindFeePaidLocal = _mulDivUp(collateralPortion, params.unwindFeeBps, BPS_DENOMINATOR);
+                if (unwindFeePaidLocal > collateralPortion) {
+                    unwindFeePaidLocal = collateralPortion;
+                }
+                collateralPortion -= unwindFeePaidLocal;
+                collateralSpent += unwindFeePaidLocal;
+            }
+            if (!params.retainCollateral && collateralPortion > 0) {
+                payoutToTrader = collateralPortion;
+                collateralSpent += collateralPortion;
+                collateralPortion = 0;
+            }
+        }
+
+        uint256 collateralReduction = params.retainCollateral ? collateralSpent : initialPortion;
+        if (collateralReduction > initialPortion) {
+            collateralReduction = initialPortion;
+        }
+
         DataTypes.TradeUpdate memory update = DataTypes.TradeUpdate({
             user: params.trader,
             syntheticAsset: params.syntheticAsset,
@@ -708,7 +781,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
             index: params.index,
             expectedCollateralUsy: position.collateralUsy,
             expectedSyntheticSize: baseSize,
-            collateralDelta: -SafeCast.toInt256(collateralPortion),
+            collateralDelta: -SafeCast.toInt256(collateralReduction),
             syntheticDelta: -SafeCast.toInt256(sizeToCloseBase),
             executionPriceX8: executionPrice,
             settledAt: SafeCast.toUint64(block.timestamp)
@@ -718,65 +791,36 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         _postCloseBookkeeping(params.trader, params.index, tradeCount, action);
         _updateExposure(state, position.direction, entryNotionalUsd, false);
 
-        int256 netPnl = pnlUsy - SafeCast.toInt256(borrowFee);
-        netPnl -= fundingFee;
-
-        if (netPnl < 0) {
-            uint256 loss = SafeCast.toUint256(-netPnl);
-            uint256 covered = Math.min(loss, collateralPortion);
-            if (covered > 0) {
-                collateralPortion -= covered;
-                usy.safeTransfer(address(ylpVault), covered);
-            }
-            uint256 shortfall = loss - covered;
-            if (shortfall > 0) {
-                emit ShortfallRealized(params.trader, params.syntheticAsset, shortfall);
-            }
-            netPnl = covered == 0 ? int256(0) : -SafeCast.toInt256(covered);
+        if (shortfall > 0) {
+            emit ShortfallRealized(params.trader, params.syntheticAsset, shortfall);
+        }
+        if (rewardPaid > 0 && params.rewardReceiver != address(0)) {
+            usy.safeTransfer(params.rewardReceiver, rewardPaid);
+        }
+        if (lossCovered > 0) {
+            usy.safeTransfer(address(ylpVault), lossCovered);
+        }
+        if (vaultSeizure > 0) {
+            usy.safeTransfer(address(ylpVault), vaultSeizure);
+        }
+        if (closeFeePaid > 0) {
+            usy.safeTransfer(_getTreasury(), closeFeePaid);
+        }
+        if (unwindFeePaidLocal > 0) {
+            usy.safeTransfer(params.unwindFeeRecipient, unwindFeePaidLocal);
+            unwindFeePaid = unwindFeePaidLocal;
+        }
+        if (payoutToTrader > 0) {
+            usy.safeTransfer(params.trader, payoutToTrader);
         }
 
         if (params.liquidation) {
-            uint256 reward = params.config.liquidationRewardBps == 0
-                ? 0
-                : Math.mulDiv(collateralPortion, params.config.liquidationRewardBps, BPS_DENOMINATOR);
-            if (reward > 0 && params.rewardReceiver != address(0)) {
-                usy.safeTransfer(params.rewardReceiver, reward);
-            }
-            uint256 remainder = collateralPortion > reward ? collateralPortion - reward : 0;
-            if (remainder > 0) {
-                usy.safeTransfer(address(ylpVault), remainder);
-            }
             emit TradeLiquidated(params.trader, params.syntheticAsset, params.index, params.caller, netPnl);
         } else {
-            if (collateralPortion > 0 && params.config.feesEnabled && params.config.closeFeeBps != 0) {
-                uint256 closeFee = _mulDivUp(collateralPortion, params.config.closeFeeBps, BPS_DENOMINATOR);
-                if (closeFee > collateralPortion) {
-                    closeFee = collateralPortion;
-                }
-                if (closeFee > 0) {
-                    collateralPortion -= closeFee;
-                    usy.safeTransfer(_getTreasury(), closeFee);
-                }
-            }
-            if (collateralPortion > 0 && params.unwindFeeBps != 0 && params.unwindFeeRecipient != address(0)) {
-                uint256 unwindFee = _mulDivUp(collateralPortion, params.unwindFeeBps, BPS_DENOMINATOR);
-                if (unwindFee > collateralPortion) {
-                    unwindFee = collateralPortion;
-                }
-                if (unwindFee > 0) {
-                    collateralPortion -= unwindFee;
-                    usy.safeTransfer(params.unwindFeeRecipient, unwindFee);
-                    unwindFeePaid = unwindFee;
-                }
-            }
-            if (collateralPortion > 0) {
-                usy.safeTransfer(params.trader, collateralPortion);
-            }
             emit TradeClosed(
-                params.trader, params.syntheticAsset, params.index, sizeToCloseScaled, netPnl, collateralPortion
+                params.trader, params.syntheticAsset, params.index, sizeToCloseScaled, netPnl, payoutToTrader
             );
         }
-
         yoloHook.settlePnLFromPerps(params.trader, params.syntheticAsset, netPnl);
         return (sizeToCloseScaled, unwindFeePaid);
     }
