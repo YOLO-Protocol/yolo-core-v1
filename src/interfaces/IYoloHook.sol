@@ -10,6 +10,10 @@ import {DataTypes} from "../libraries/DataTypes.sol";
  * @notice Interface for YoloHook integration with sUSY and other protocol components
  */
 interface IYoloHook {
+    enum ReferralRewardType {
+        OPEN_CLOSE_FEE,
+        BORROW_FEE
+    }
     /// @notice Get USY token address
     function usy() external view returns (address);
 
@@ -197,6 +201,16 @@ interface IYoloHook {
     /// @param pairId Lending pair ID
     /// @param newBorrowRate New borrow rate in basis points
     function updateBorrowRate(bytes32 pairId, uint256 newBorrowRate) external;
+
+    /// @notice Assign first- and second-tier referrers for a trader
+    /// @dev Callable by TradeOrchestrator when a user supplies a referral code
+    function setUserReferral(address user, bytes32 referralCode) external;
+
+    /// @notice Retrieve cached referral tree for a trader
+    function getUserReferrals(address user) external view returns (address tier1, address tier2);
+
+    /// @notice Credit referral rewards (funds must already be sent to the hook)
+    function creditReferralReward(address referrer, uint256 amount, ReferralRewardType rewardType) external;
 
     /// @notice Update the oracle module
     /// @param _yoloOracle New oracle address
