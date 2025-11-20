@@ -14,7 +14,7 @@ contract TestAction10_TradeOrchestratorPerps is Base04_TradePerpTestEnvironment 
         vm.warp(14 hours); // inside the configured trade session
     }
 
-    function test_Action10_OpenCloseLongProfitable() public {
+    function test_Action10_Case01_OpenCloseLongProfitable() public {
         uint256 traderBalanceBefore = IERC20(usy).balanceOf(perpTrader);
         bytes[] memory openUpdate = _buildPriceUpdate(perpAsset, INITIAL_PRICE);
 
@@ -47,7 +47,7 @@ contract TestAction10_TradeOrchestratorPerps is Base04_TradePerpTestEnvironment 
         assertGt(traderBalanceAfter, traderBalanceBefore - 1e23, "balance should not drop materially");
     }
 
-    function test_Action10_PartialCloseAfterTopUp() public {
+    function test_Action10_Case02_PartialCloseAfterTopUp() public {
         bytes[] memory priceUpdate = _buildPriceUpdate(perpAsset, INITIAL_PRICE);
         TradeOrchestrator.OpenPositionParams memory params = TradeOrchestrator.OpenPositionParams({
             syntheticAsset: perpAsset,
@@ -99,7 +99,7 @@ contract TestAction10_TradeOrchestratorPerps is Base04_TradePerpTestEnvironment 
         assertGt(finalPosition.collateralUsy, 0, "partial close should leave remaining collateral");
     }
 
-    function test_Action10_LiquidateShortPosition() public {
+    function test_Action10_Case03_LiquidateShortPosition() public {
         bytes[] memory openUpdate = _buildPriceUpdate(perpAsset, 1_300e8);
         TradeOrchestrator.OpenPositionParams memory params = TradeOrchestrator.OpenPositionParams({
             syntheticAsset: perpAsset,
@@ -131,7 +131,7 @@ contract TestAction10_TradeOrchestratorPerps is Base04_TradePerpTestEnvironment 
         );
     }
 
-    function test_Action10_EnforceCarryLeverageTrimsPosition() public {
+    function test_Action10_Case04_EnforceCarryLeverageTrimsPosition() public {
         bytes[] memory openUpdate = _buildPriceUpdate(perpAsset, INITIAL_PRICE);
         TradeOrchestrator.OpenPositionParams memory params = TradeOrchestrator.OpenPositionParams({
             syntheticAsset: perpAsset,
