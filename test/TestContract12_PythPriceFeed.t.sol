@@ -13,6 +13,7 @@ contract TestContract12_PythPriceFeed is Test {
     receive() external payable {}
 
     function setUp() public {
+        vm.warp(10000); // Advance time to avoid underflow in stale price tests
         mockPyth = new MockPyth();
         feed = new PythPriceFeed(
             address(mockPyth),
@@ -29,7 +30,7 @@ contract TestContract12_PythPriceFeed is Test {
 
         // Example: $2500.00
         // Pyth might send: 250000 * 10^-2
-        mockPyth.setPrice(250000, -2, block.timestamp);
+        mockPyth.setPrice(PRICE_ID, 250000, -2, block.timestamp);
 
         // Expected: 2500 * 10^8 = 250000000000
         int256 price = feed.latestAnswer();
@@ -40,7 +41,7 @@ contract TestContract12_PythPriceFeed is Test {
     function test_Contract12_Case02_latestAnswerScalingNegativeExpo() public {
         // Example: 0.00012345
         // Pyth: 12345 * 10^-8
-        mockPyth.setPrice(12345, -8, block.timestamp);
+        mockPyth.setPrice(PRICE_ID, 12345, -8, block.timestamp);
 
         // Expected: 0.00012345 * 10^8 = 12345
         int256 price = feed.latestAnswer();
@@ -78,7 +79,7 @@ contract TestContract12_PythPriceFeed is Test {
 
     function test_latestRoundDataReturnsExpectedTuple() public {
         uint256 publishTime = block.timestamp;
-        mockPyth.setPrice(50000, -2, publishTime);
+        mockPyth.setPrice(PRICE_ID, 50000, -2, publishTime);
 
         (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound) =
             feed.latestRoundData();
@@ -91,8 +92,7 @@ contract TestContract12_PythPriceFeed is Test {
     }
 
     function test_latestAnswerRevertsWhenStale() public {
-        vm.warp(1 hours);
-        mockPyth.setPrice(1000, -2, block.timestamp - 120);
+        mockPyth.setPrice(PRICE_ID, 1000, -2, block.timestamp - 120);
         vm.expectRevert(MockPyth.MockPyth__StalePrice.selector);
         feed.latestAnswer();
     }
