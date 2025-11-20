@@ -18,6 +18,11 @@ import {IStabilityTracker} from "../interfaces/IStabilityTracker.sol";
  * @dev Occupies a single storage slot that points to this struct
  *      This avoids conflicts with parent contract storage (BaseHook, ReentrancyGuard, UUPS)
  */
+struct ReferralData {
+    address tier1;
+    address tier2;
+}
+
 struct AppStorage {
     // ============================================================
     // PROTOCOL CONFIGURATION
@@ -87,6 +92,12 @@ struct AppStorage {
     mapping(address => DataTypes.TradePosition[]) tradePositions;
     /// @notice Aggregated open interest stats per synthetic asset
     mapping(address => DataTypes.TradeAssetState) tradeAssetState;
+    /// @notice Referral tree per user (tier1/tier2)
+    mapping(address => ReferralData) referralTree;
+    /// @notice Mapping of referral codes to their owners
+    mapping(bytes32 => address) referralCodeOwner;
+    /// @notice Accrued referral rewards per referrer (held in USY on the hook)
+    mapping(address => uint256) referralRewards;
     // ============================================================
     // POOL REGISTRY
     // ============================================================
