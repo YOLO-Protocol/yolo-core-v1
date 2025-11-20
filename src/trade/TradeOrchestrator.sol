@@ -69,6 +69,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
     error TradeOrchestrator__CollateralTooSmall();
     error TradeOrchestrator__TreasuryNotSet();
     error TradeOrchestrator__InvalidFee();
+    error TradeOrchestrator__InvalidReferralSplit();
 
     // ============================================================
     // STRUCTS
@@ -123,6 +124,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         uint256 syntheticSize;
         uint32 leverageBps;
         uint64 deadline;
+        bytes32 referralCode;
     }
 
     struct AdjustCollateralParams {
@@ -166,6 +168,13 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         address unwindFeeRecipient;
     }
 
+    struct ReferralFeeSplitConfig {
+        uint16 ref1OpenCloseFeeSplitBps;
+        uint16 ref2OpenCloseFeeSplitBps;
+        uint16 ref1BorrowingFeeSplitBps;
+        uint16 ref2BorrowingFeeSplitBps;
+    }
+
     // ============================================================
     // STATE
     // ============================================================
@@ -179,6 +188,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
     mapping(address => TradeAssetConfig) public tradeAssetConfigs;
     mapping(address => AssetState) public assetStates;
     mapping(address => mapping(uint256 => PositionAccounting)) public positionAccounting;
+    ReferralFeeSplitConfig public referralFeeSplitConfig;
 
     // ============================================================
     // EVENTS
@@ -234,6 +244,12 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
     event FundingApplied(address indexed syntheticAsset, int256 fundingAccumulator, uint64 lastAccrued);
     event AutoDeleveraged(address indexed user, address indexed syntheticAsset, uint256 index, uint256 reducedSize);
     event ShortfallRealized(address indexed user, address indexed syntheticAsset, uint256 shortfallUsy);
+    event ReferralFeeSplitConfigUpdated(
+        uint16 ref1OpenCloseFeeSplitBps,
+        uint16 ref2OpenCloseFeeSplitBps,
+        uint16 ref1BorrowingFeeSplitBps,
+        uint16 ref2BorrowingFeeSplitBps
+    );
 
     // ============================================================
     // MODIFIERS
@@ -269,6 +285,12 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         ylpVault = ylpVault_;
         pyth = pyth_;
         usy = IERC20(yoloHook_.usy());
+        referralFeeSplitConfig = ReferralFeeSplitConfig({
+            ref1OpenCloseFeeSplitBps: 1250,
+            ref2OpenCloseFeeSplitBps: 1250,
+            ref1BorrowingFeeSplitBps: 500,
+            ref2BorrowingFeeSplitBps: 500
+        });
         _disableInitializers();
     }
 
@@ -314,6 +336,29 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         );
     }
 
+    function setReferralFeeSplits(
+        uint16 ref1OpenCloseFeeSplitBps,
+        uint16 ref2OpenCloseFeeSplitBps,
+        uint16 ref1BorrowingFeeSplitBps,
+        uint16 ref2BorrowingFeeSplitBps
+    ) external onlyTradeAdmin {
+        if (ref1OpenCloseFeeSplitBps + ref2OpenCloseFeeSplitBps > BPS_DENOMINATOR) {
+            revert TradeOrchestrator__InvalidReferralSplit();
+        }
+        if (ref1BorrowingFeeSplitBps + ref2BorrowingFeeSplitBps > BPS_DENOMINATOR) {
+            revert TradeOrchestrator__InvalidReferralSplit();
+        }
+        referralFeeSplitConfig = ReferralFeeSplitConfig({
+            ref1OpenCloseFeeSplitBps: ref1OpenCloseFeeSplitBps,
+            ref2OpenCloseFeeSplitBps: ref2OpenCloseFeeSplitBps,
+            ref1BorrowingFeeSplitBps: ref1BorrowingFeeSplitBps,
+            ref2BorrowingFeeSplitBps: ref2BorrowingFeeSplitBps
+        });
+        emit ReferralFeeSplitConfigUpdated(
+            ref1OpenCloseFeeSplitBps, ref2OpenCloseFeeSplitBps, ref1BorrowingFeeSplitBps, ref2BorrowingFeeSplitBps
+        );
+    }
+
     // ============================================================
     // USER ACTIONS
     // ============================================================
@@ -337,6 +382,8 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         AssetState storage state = assetStates[params.syntheticAsset];
         _applyFundingInternal(params.syntheticAsset, state, config);
 
+        _maybeSetReferral(msg.sender, params.referralCode);
+
         uint256 executionPrice =
             _applyDirectionalSpread(priceInfo.priceX8, config, params.direction == DataTypes.TradeDirection.LONG);
         priceInfo.priceX8 = executionPrice;
@@ -348,7 +395,10 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
 
         usy.safeTransferFrom(msg.sender, address(this), params.collateralUsy);
         if (openFee > 0) {
-            usy.safeTransfer(_getTreasury(), openFee);
+            uint256 treasuryPortion = _distributeFee(msg.sender, openFee, false);
+            if (treasuryPortion > 0) {
+                usy.safeTransfer(_getTreasury(), treasuryPortion);
+            }
         }
         collateral -= openFee;
         if (config.minCollateralUsy != 0 && collateral < config.minCollateralUsy) {
@@ -715,6 +765,8 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         uint256 vaultSeizure;
         uint256 borrowFeePaid;
         uint256 borrowFeeShortfall;
+        uint256 closeFeeTreasury;
+        uint256 borrowFeeTreasury;
 
         if (borrowFee > 0) {
             borrowFeePaid = Math.min(borrowFee, collateralPortion);
@@ -723,6 +775,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 collateralSpent += borrowFeePaid;
             }
             borrowFeeShortfall = borrowFee - borrowFeePaid;
+            if (borrowFeePaid > 0) {
+                borrowFeeTreasury = _distributeFee(params.trader, borrowFeePaid, true);
+            }
         }
 
         int256 netPnl = pnlUsy;
@@ -762,6 +817,7 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
                 }
                 collateralPortion -= closeFeePaid;
                 collateralSpent += closeFeePaid;
+                closeFeeTreasury = _distributeFee(params.trader, closeFeePaid, false);
             }
             if (collateralPortion > 0 && params.unwindFeeBps != 0 && params.unwindFeeRecipient != address(0)) {
                 unwindFeePaidLocal = _mulDivUp(collateralPortion, params.unwindFeeBps, BPS_DENOMINATOR);
@@ -817,11 +873,11 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         if (vaultSeizure > 0) {
             usy.safeTransfer(address(ylpVault), vaultSeizure);
         }
-        if (closeFeePaid > 0) {
-            usy.safeTransfer(_getTreasury(), closeFeePaid);
+        if (closeFeeTreasury > 0) {
+            usy.safeTransfer(_getTreasury(), closeFeeTreasury);
         }
-        if (borrowFeePaid > 0) {
-            usy.safeTransfer(_getTreasury(), borrowFeePaid);
+        if (borrowFeeTreasury > 0) {
+            usy.safeTransfer(_getTreasury(), borrowFeeTreasury);
         }
         if (unwindFeePaidLocal > 0) {
             usy.safeTransfer(params.unwindFeeRecipient, unwindFeePaidLocal);
@@ -1239,6 +1295,59 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         } else {
             positionAccounting[user][index].lastPricePublishTime = SafeCast.toUint64(block.timestamp);
         }
+    }
+
+    function _maybeSetReferral(address trader, bytes32 referralCode) private {
+        if (referralCode == bytes32(0)) {
+            return;
+        }
+        (address tier1,) = yoloHook.getUserReferrals(trader);
+        if (tier1 != address(0)) {
+            return;
+        }
+        yoloHook.setUserReferral(trader, referralCode);
+    }
+
+    function _distributeFee(address trader, uint256 amount, bool borrowFee) private returns (uint256 treasuryPortion) {
+        if (amount == 0) {
+            return 0;
+        }
+        (address tier1, address tier2) = yoloHook.getUserReferrals(trader);
+        ReferralFeeSplitConfig memory split = referralFeeSplitConfig;
+        treasuryPortion = amount;
+        uint16 ref1Bps = borrowFee ? split.ref1BorrowingFeeSplitBps : split.ref1OpenCloseFeeSplitBps;
+        uint16 ref2Bps = borrowFee ? split.ref2BorrowingFeeSplitBps : split.ref2OpenCloseFeeSplitBps;
+        if (tier1 != address(0) && ref1Bps != 0) {
+            uint256 share = Math.mulDiv(amount, ref1Bps, BPS_DENOMINATOR);
+            if (share > 0) {
+                treasuryPortion -= share;
+                _creditReferral(
+                    tier1,
+                    share,
+                    borrowFee ? IYoloHook.ReferralRewardType.BORROW_FEE : IYoloHook.ReferralRewardType.OPEN_CLOSE_FEE
+                );
+            }
+        }
+        if (tier2 != address(0) && ref2Bps != 0) {
+            uint256 share = Math.mulDiv(amount, ref2Bps, BPS_DENOMINATOR);
+            if (share > 0) {
+                treasuryPortion -= share;
+                _creditReferral(
+                    tier2,
+                    share,
+                    borrowFee ? IYoloHook.ReferralRewardType.BORROW_FEE : IYoloHook.ReferralRewardType.OPEN_CLOSE_FEE
+                );
+            }
+        }
+        return treasuryPortion;
+    }
+
+    function _creditReferral(address referrer, uint256 amount, IYoloHook.ReferralRewardType rewardType) private {
+        if (amount == 0) {
+            return;
+        }
+        usy.safeTransfer(address(yoloHook), amount);
+        yoloHook.creditReferralReward(referrer, amount, rewardType);
     }
 
     function _roundChargeUp(int256 numerator, uint256 denominator) private pure returns (int256) {
