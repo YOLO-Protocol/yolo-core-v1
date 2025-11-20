@@ -11,7 +11,8 @@ import {IYoloOracle} from "../interfaces/IYoloOracle.sol";
 import {IYLPVault} from "../interfaces/IYLPVault.sol";
 import {IYoloSyntheticAsset} from "../interfaces/IYoloSyntheticAsset.sol";
 import {IStabilityTracker} from "../interfaces/IStabilityTracker.sol";
-import {YoloHookStorage, AppStorage} from "./YoloHookStorage.sol";
+import {IYoloHook} from "../interfaces/IYoloHook.sol";
+import {YoloHookStorage, AppStorage, ReferralData} from "./YoloHookStorage.sol";
 import {DataTypes} from "../libraries/DataTypes.sol";
 import {SyntheticAssetModule} from "../libraries/SyntheticAssetModule.sol";
 import {LendingPairModule} from "../libraries/LendingPairModule.sol";
@@ -30,6 +31,8 @@ import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title YoloHook
@@ -55,6 +58,7 @@ contract YoloHook is BaseHook, YoloHookStorage, ReentrancyGuard, UUPSUpgradeable
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
     using CurrencySettler for Currency;
+    using SafeERC20 for IERC20;
     // ========================
     // CONSTANTS
     // ========================
@@ -123,6 +127,10 @@ contract YoloHook is BaseHook, YoloHookStorage, ReentrancyGuard, UUPSUpgradeable
         int256 syntheticDelta
     );
     event ViewImplementationUpdated(address indexed newImplementation);
+    event ReferralCodeRegistered(address indexed referrer, bytes32 code);
+    event ReferralLinked(address indexed trader, address indexed tier1, address indexed tier2);
+    event ReferralRewardAccrued(address indexed referrer, uint256 amount, IYoloHook.ReferralRewardType rewardType);
+    event ReferralRewardsClaimed(address indexed referrer, address indexed to, uint256 amount);
 
     // ========================
     // ERRORS
@@ -141,6 +149,12 @@ contract YoloHook is BaseHook, YoloHookStorage, ReentrancyGuard, UUPSUpgradeable
     error YoloHook__InvalidFeeSplit();
     error YoloHook__InvalidTradeIndex();
     error YoloHook__ViewImplementationNotSet();
+    error YoloHook__ReferralCodeUnavailable();
+    error YoloHook__ReferralCodeUnknown();
+    error YoloHook__ReferralAlreadySet();
+    error YoloHook__ReferralSelf();
+    error YoloHook__ReferralLoop();
+    error YoloHook__NoReferralRewards();
 
     // ========================
     // INTERNAL ACCESS CONTROL CHECKS
@@ -706,6 +720,99 @@ contract YoloHook is BaseHook, YoloHookStorage, ReentrancyGuard, UUPSUpgradeable
     function setViewImplementation(address newImplementation) external onlyDefaultAdmin {
         viewImplementation = newImplementation;
         emit ViewImplementationUpdated(newImplementation);
+    }
+
+    // ========================
+    // REFERRAL PROGRAM
+    // ========================
+
+    /**
+     * @notice Registers an obfuscated referral code derived from caller + salt
+     * @param salt Arbitrary salt used to derive the referral code off-chain
+     * @return code Generated referral code
+     */
+    function registerReferralCode(bytes32 salt) external whenNotPaused returns (bytes32 code) {
+        code = keccak256(abi.encodePacked(msg.sender, salt));
+        if (code == bytes32(0) || s.referralCodeOwner[code] != address(0)) {
+            revert YoloHook__ReferralCodeUnavailable();
+        }
+        s.referralCodeOwner[code] = msg.sender;
+        emit ReferralCodeRegistered(msg.sender, code);
+    }
+
+    /**
+     * @notice Returns the owner of a referral code
+     */
+    function referralCodeOwner(bytes32 code) external view returns (address) {
+        return s.referralCodeOwner[code];
+    }
+
+    /**
+     * @notice Returns the referral tree (tier1/tier2) for a trader
+     */
+    function getUserReferrals(address user) external view returns (address tier1, address tier2) {
+        ReferralData storage data = s.referralTree[user];
+        return (data.tier1, data.tier2);
+    }
+
+    /**
+     * @notice Assign upstream referrals for a trader (callable by orchestrators)
+     * @param user Trader address receiving the referral tree
+     * @param referralCode Registered referral code provided by the trader
+     */
+    function setUserReferral(address user, bytes32 referralCode) external whenNotPaused onlyTradeOperator {
+        if (user == address(0)) revert YoloHook__InvalidAddress();
+        if (referralCode == bytes32(0)) revert YoloHook__ReferralCodeUnknown();
+        ReferralData storage existing = s.referralTree[user];
+        if (existing.tier1 != address(0)) revert YoloHook__ReferralAlreadySet();
+
+        address tier1 = s.referralCodeOwner[referralCode];
+        if (tier1 == address(0)) revert YoloHook__ReferralCodeUnknown();
+        if (tier1 == user) revert YoloHook__ReferralSelf();
+
+        ReferralData storage tier1Data = s.referralTree[tier1];
+        address tier2 = tier1Data.tier1;
+        if (tier2 == user) revert YoloHook__ReferralLoop();
+
+        s.referralTree[user] = ReferralData({tier1: tier1, tier2: tier2});
+        emit ReferralLinked(user, tier1, tier2);
+    }
+
+    /**
+     * @notice Credits referral rewards for a referrer
+     * @dev TradeOrchestrator must transfer funds before invoking this
+     */
+    function creditReferralReward(address referrer, uint256 amount, IYoloHook.ReferralRewardType rewardType)
+        external
+        whenNotPaused
+        onlyTradeOperator
+    {
+        if (referrer == address(0) || amount == 0) {
+            return;
+        }
+        s.referralRewards[referrer] += amount;
+        emit ReferralRewardAccrued(referrer, amount, rewardType);
+    }
+
+    /**
+     * @notice View function for accrued referral rewards
+     */
+    function referralRewards(address referrer) external view returns (uint256) {
+        return s.referralRewards[referrer];
+    }
+
+    /**
+     * @notice Claim accumulated referral rewards
+     * @param to Recipient for claimed USY (defaults to msg.sender if zero)
+     * @return amount Amount transferred
+     */
+    function claimReferralRewards(address to) external whenNotPaused nonReentrant returns (uint256 amount) {
+        amount = s.referralRewards[msg.sender];
+        if (amount == 0) revert YoloHook__NoReferralRewards();
+        s.referralRewards[msg.sender] = 0;
+        address receiver = to == address(0) ? msg.sender : to;
+        IERC20(s.usy).safeTransfer(receiver, amount);
+        emit ReferralRewardsClaimed(msg.sender, receiver, amount);
     }
 
     /**
