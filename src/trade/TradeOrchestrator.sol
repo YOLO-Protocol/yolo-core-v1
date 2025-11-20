@@ -713,8 +713,19 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         uint256 closeFeePaid;
         uint256 unwindFeePaidLocal;
         uint256 vaultSeizure;
+        uint256 borrowFeePaid;
+        uint256 borrowFeeShortfall;
 
-        int256 netPnl = pnlUsy - SafeCast.toInt256(borrowFee);
+        if (borrowFee > 0) {
+            borrowFeePaid = Math.min(borrowFee, collateralPortion);
+            if (borrowFeePaid > 0) {
+                collateralPortion -= borrowFeePaid;
+                collateralSpent += borrowFeePaid;
+            }
+            borrowFeeShortfall = borrowFee - borrowFeePaid;
+        }
+
+        int256 netPnl = pnlUsy;
         netPnl -= fundingFee;
 
         if (params.liquidation && params.config.liquidationRewardBps != 0 && params.rewardReceiver != address(0)) {
@@ -791,6 +802,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         _postCloseBookkeeping(params.trader, params.index, tradeCount, action);
         _updateExposure(state, position.direction, entryNotionalUsd, false);
 
+        if (borrowFeeShortfall > 0) {
+            emit ShortfallRealized(params.trader, params.syntheticAsset, borrowFeeShortfall);
+        }
         if (shortfall > 0) {
             emit ShortfallRealized(params.trader, params.syntheticAsset, shortfall);
         }
@@ -805,6 +819,9 @@ contract TradeOrchestrator is ReentrancyGuard, UUPSUpgradeable {
         }
         if (closeFeePaid > 0) {
             usy.safeTransfer(_getTreasury(), closeFeePaid);
+        }
+        if (borrowFeePaid > 0) {
+            usy.safeTransfer(_getTreasury(), borrowFeePaid);
         }
         if (unwindFeePaidLocal > 0) {
             usy.safeTransfer(params.unwindFeeRecipient, unwindFeePaidLocal);
