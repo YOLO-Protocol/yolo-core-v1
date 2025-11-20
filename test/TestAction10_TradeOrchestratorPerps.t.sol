@@ -5,9 +5,13 @@ import {Base04_TradePerpTestEnvironment} from "./base/Base04_TradePerpTestEnviro
 import {DataTypes} from "../src/libraries/DataTypes.sol";
 import {TradeOrchestrator} from "../src/trade/TradeOrchestrator.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract TestAction10_TradeOrchestratorPerps is Base04_TradePerpTestEnvironment {
     uint256 internal constant INITIAL_PRICE = 1_350e8;
+    uint256 private constant PRICE_DECIMALS = 1e8;
+    uint256 private constant BPS_DENOMINATOR = 10_000;
+    uint256 private constant SECONDS_PER_YEAR = 365 days;
 
     function setUp() public override {
         super.setUp();
@@ -113,22 +117,23 @@ contract TestAction10_TradeOrchestratorPerps is Base04_TradePerpTestEnvironment 
         tradeOrchestrator.openPosition(params, openUpdate);
         assertEq(yoloHook.getUserTradeCount(perpTrader), 1);
         DataTypes.TradePosition memory openedPosition = yoloHook.getUserTrade(perpTrader, 0);
+        uint256 openTimestamp = block.timestamp;
 
         vm.warp(block.timestamp + 1);
 
-        bytes[] memory liquidationUpdate = _buildPriceUpdate(perpAsset, 3_500e8); // massive move against shorts
+        uint256 liquidationPrice = 3_500e8;
+        bytes[] memory liquidationUpdate = _buildPriceUpdate(perpAsset, liquidationPrice); // massive move against shorts
         TradeOrchestrator.LiquidationParams memory liq =
             TradeOrchestrator.LiquidationParams({user: perpTrader, syntheticAsset: perpAsset, index: 0, deadline: 0});
 
         uint256 keeperBalanceBefore = IERC20(usy).balanceOf(perpKeeper);
+        uint256 expectedReward = _expectedLiquidationReward(openedPosition, openTimestamp, liquidationPrice);
         vm.prank(perpKeeper);
         tradeOrchestrator.liquidatePosition(liq, liquidationUpdate);
 
         assertEq(yoloHook.getUserTradeCount(perpTrader), 0, "position should be gone after liquidation");
-        uint256 expectedReward = (openedPosition.collateralUsy * 500) / 10_000;
-        assertEq(
-            IERC20(usy).balanceOf(perpKeeper) - keeperBalanceBefore, expectedReward, "keeper earns liquidation reward"
-        );
+        uint256 actualReward = IERC20(usy).balanceOf(perpKeeper) - keeperBalanceBefore;
+        assertApproxEqAbs(actualReward, expectedReward, 1e15, "keeper earns liquidation reward");
     }
 
     function test_Action10_Case04_EnforceCarryLeverageTrimsPosition() public {
@@ -160,5 +165,68 @@ contract TestAction10_TradeOrchestratorPerps is Base04_TradePerpTestEnvironment 
             afterEnforce.syntheticAssetPositionSize, beforeEnforce.syntheticAssetPositionSize, "size should shrink"
         );
         assertGt(IERC20(usy).balanceOf(treasury), treasuryBalanceBefore, "treasury collects unwind fee");
+    }
+
+    function _expectedLiquidationReward(
+        DataTypes.TradePosition memory position,
+        uint256 openTimestamp,
+        uint256 oraclePriceX8
+    ) internal view returns (uint256) {
+        TradeOrchestrator.TradeAssetConfig memory cfg;
+        (
+            cfg.pythPriceId,
+            cfg.maxPriceAgeSec,
+            cfg.maxDeviationBps,
+            cfg.longSpreadBps,
+            cfg.shortSpreadBps,
+            cfg.fundingFactorPerHour,
+            cfg.fixedBorrowBps,
+            cfg.liquidationThresholdBps,
+            cfg.liquidationRewardBps,
+            cfg.openFeeBps,
+            cfg.closeFeeBps,
+            cfg.overnightUnwindFeeBps,
+            cfg.minCollateralUsy,
+            cfg.feesEnabled,
+            cfg.isActive
+        ) = tradeOrchestrator.tradeAssetConfigs(perpAsset);
+        uint256 executionPrice = _applyDirectionalSpread(oraclePriceX8, cfg, true);
+        uint256 notionalUsd = _notionalUsd(position.syntheticAssetPositionSize, executionPrice);
+        uint256 borrowFee = 0;
+        if (notionalUsd != 0 && cfg.fixedBorrowBps != 0 && block.timestamp > openTimestamp) {
+            uint256 elapsed = block.timestamp - openTimestamp;
+            uint256 annualized = _mulDivUp(notionalUsd, cfg.fixedBorrowBps, BPS_DENOMINATOR);
+            borrowFee = _mulDivUp(annualized, elapsed, SECONDS_PER_YEAR);
+        }
+        uint256 collateralAfterBorrow = position.collateralUsy > borrowFee ? position.collateralUsy - borrowFee : 0;
+        return Math.mulDiv(collateralAfterBorrow, cfg.liquidationRewardBps, BPS_DENOMINATOR);
+    }
+
+    function _applyDirectionalSpread(
+        uint256 basePriceX8,
+        TradeOrchestrator.TradeAssetConfig memory cfg,
+        bool longExposure
+    ) internal pure returns (uint256) {
+        if (longExposure) {
+            if (cfg.longSpreadBps == 0) return basePriceX8;
+            return Math.mulDiv(basePriceX8, BPS_DENOMINATOR + cfg.longSpreadBps, BPS_DENOMINATOR);
+        }
+        if (cfg.shortSpreadBps == 0) return basePriceX8;
+        return Math.mulDiv(basePriceX8, BPS_DENOMINATOR - cfg.shortSpreadBps, BPS_DENOMINATOR);
+    }
+
+    function _notionalUsd(uint256 size, uint256 priceX8) internal pure returns (uint256) {
+        return Math.mulDiv(size, priceX8, PRICE_DECIMALS);
+    }
+
+    function _mulDivUp(uint256 a, uint256 b, uint256 denominator) internal pure returns (uint256) {
+        if (a == 0 || b == 0) {
+            return 0;
+        }
+        uint256 result = Math.mulDiv(a, b, denominator);
+        if (mulmod(a, b, denominator) != 0) {
+            result += 1;
+        }
+        return result;
     }
 }
