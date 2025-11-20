@@ -574,4 +574,12 @@ contract MockYoloHook is IYoloHook {
     function ylpVault() external pure returns (address) {
         return address(0);
     }
+
+    function setUserReferral(address, bytes32) external pure {}
+
+    function getUserReferrals(address) external pure returns (address, address) {
+        return (address(0), address(0));
+    }
+
+    function creditReferralReward(address, uint256, ReferralRewardType) external pure {}
 }
