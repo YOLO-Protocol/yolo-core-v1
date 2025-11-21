@@ -33,8 +33,8 @@ contract DeployTask_FullProtocol is Script {
     struct DeploymentAddresses {
         // Layer 1: Uniswap V4
         address poolManager;
-        address swapRouter;
-        address modifyLiquidityRouter;
+        address universalRouter;
+        address positionsManager;
         // Layer 2: Core YOLO
         address aclManager;
         address treasury;
@@ -65,6 +65,9 @@ contract DeployTask_FullProtocol is Script {
 
     // Manually configure USDC address for your chain
     address constant USDC_ADDRESS = 0xF32B34Dfc110BF618a0Ff148afBAd8C3915c45aB; // FILL IN: USDC address on target network
+    address constant POOL_MANAGER_ADDRESS = 0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408; // FILL IN: PoolManager address on target network
+    address constant UNIVERSAL_ROUTER_ADDRESS = 0x492E6456D9528771018DeB9E87ef7750EF184104; // FILL IN: UniverswalRouter address on target network
+    address constant POSITIONS_MANAGER_ADDRESS = 0x4B2C77d209D3405F41a037Ec6c77F7F5b8e2ca80; // FILL IN: ModifyLiquidityRouter address on target network
 
     uint256 constant ANCHOR_A = 100; // StableSwap amplification coefficient: similar to A in curve math
     uint256 constant ANCHOR_FEE_BPS = 10; // 100 = 1% swap fee
@@ -78,9 +81,9 @@ contract DeployTask_FullProtocol is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
 
-        console2.log("=".repeat(60));
+        console2.log("============================================================");
         console2.log("YOLO Protocol V1 - Full Testnet Deployment");
-        console2.log("=".repeat(60));
+        console2.log("============================================================");
         console2.log("Deployer:", deployer);
         console2.log("Chain ID:", block.chainid);
         console2.log("");
@@ -89,12 +92,11 @@ contract DeployTask_FullProtocol is Script {
         require(USDC_ADDRESS != address(0), "USDC_ADDRESS not configured");
         deployed.usdc = USDC_ADDRESS;
         console2.log("Using USDC at:", USDC_ADDRESS);
-        console2.log("");
 
         vm.startBroadcast(deployerPrivateKey);
 
         // Layer 1: Uniswap V4 (use existing deployment or deploy fresh)
-        _deployUniswapV4Infrastructure();
+        _setupUniswapV4Infrastructure();
 
         // Layer 2: Core YOLO components
         _deployCoreYOLOComponents();
@@ -114,16 +116,16 @@ contract DeployTask_FullProtocol is Script {
         _saveDeployment();
 
         console2.log("");
-        console2.log("=".repeat(60));
+        console2.log("============================================================");
         console2.log("Deployment Complete!");
-        console2.log("=".repeat(60));
+        console2.log("============================================================");
     }
 
     // ========================
     // LAYER 1: UNISWAP V4
     // ========================
 
-    function _deployUniswapV4Infrastructure() internal {
+    function _setupUniswapV4Infrastructure() internal {
         console2.log("[Layer 1] Deploying Uniswap V4 Infrastructure...");
 
         // TODO: Check if canonical V4 deployment exists on this chain
@@ -132,11 +134,9 @@ contract DeployTask_FullProtocol is Script {
         console2.log("  TODO: Configure poolManager address for", block.chainid);
 
         // Base Sepolia canonical addresses (example)
-        if (block.chainid == 84532) {
-            deployed.poolManager = address(0); // FILL IN: Canonical PoolManager
-            deployed.swapRouter = address(0); // FILL IN: SwapRouter
-            deployed.modifyLiquidityRouter = address(0); // FILL IN: ModifyLiquidityRouter
-        }
+        deployed.poolManager = POOL_MANAGER_ADDRESS; // FILL IN: Canonical PoolManager
+        deployed.universalRouter = UNIVERSAL_ROUTER_ADDRESS; // FILL IN: SwapRouter
+        deployed.positionsManager = POSITIONS_MANAGER_ADDRESS; // FILL IN: ModifyLiquidityRouter
 
         require(deployed.poolManager != address(0), "PoolManager not configured for this chain");
         console2.log("  PoolManager:", deployed.poolManager);
@@ -203,7 +203,7 @@ contract DeployTask_FullProtocol is Script {
 
         // Layer 1: Uniswap V4
         vm.serializeAddress(json, "poolManager", deployed.poolManager);
-        vm.serializeAddress(json, "swapRouter", deployed.swapRouter);
+        vm.serializeAddress(json, "universol", deployed.swapRouter);
         vm.serializeAddress(json, "modifyLiquidityRouter", deployed.modifyLiquidityRouter);
 
         // Layer 2: Core YOLO
