@@ -8,7 +8,6 @@ import {YoloHook} from "../src/core/YoloHook.sol";
 import {YoloSyntheticAsset} from "../src/tokenization/YoloSyntheticAsset.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {console} from "forge-std/console.sol";
 
 contract TestAction10_TradeOrchestratorPerps is Base04_TradePerpTestEnvironment {
     uint256 internal constant INITIAL_PRICE = 1_350e8;
