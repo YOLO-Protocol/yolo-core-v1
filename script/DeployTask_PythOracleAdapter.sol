@@ -390,14 +390,6 @@ contract DeployTask_PythOracleAdapter is Script {
                 })
             );
 
-            oracleConfigs.push(
-                OracleConfig({
-                    assetSymbol: "UVXY / USD",
-                    priceId: 0x7d9c04b949c64bef946910c9cdf4390737731fca2c5356aa5fe36844bab1cb16,
-                    maxAllowedPriceLag: 120
-                })
-            );
-
             /****************************************
              * CURRENCIES
              ****************************************/
