@@ -18,7 +18,7 @@ contract TestContract03_MintableIncentivizedERC20Upgradeable is Test {
 
     function setUp() public {
         // Deploy ACLManager
-        aclManager = new ACLManager(yoloHook);
+        aclManager = new ACLManager();
 
         // Setup roles
         aclManager.createRole("INCENTIVES_ADMIN", 0x00);

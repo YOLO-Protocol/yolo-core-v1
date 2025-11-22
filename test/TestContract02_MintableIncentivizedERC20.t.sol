@@ -39,7 +39,7 @@ contract TestContract02_MintableIncentivizedERC20 is Test {
         incentivesAdmin = makeAddr("IncentivesAdmin");
 
         // Deploy ACLManager
-        aclManager = new ACLManager(yoloHook);
+        aclManager = new ACLManager();
 
         // Create and grant INCENTIVES_ADMIN role
         aclManager.createRole("INCENTIVES_ADMIN", bytes32(0));

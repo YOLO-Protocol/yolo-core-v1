@@ -42,7 +42,7 @@ contract TestContract07_TreasuryForwarder is Base01_DeployUniswapV4Pool {
         recipient3 = makeAddr("recipient3");
 
         // Deploy ACLManager
-        aclManager = new ACLManager(address(this));
+        aclManager = new ACLManager();
 
         // Create and grant REWARDS_ADMIN role
         aclManager.createRole("REWARDS_ADMIN", 0x00);

@@ -48,13 +48,9 @@ contract ACLManager is AccessControl {
     event DefaultAdminProposalCanceled(address indexed canceledAdmin);
 
     /**
-     * @dev Constructor sets msg.sender as DEFAULT_ADMIN_ROLE and stores YoloHook address
-     * @param yoloHook The address of the YoloHook contract
+     * @dev Constructor sets msg.sender as DEFAULT_ADMIN_ROLE
      */
-    constructor(address yoloHook) {
-        if (yoloHook == address(0)) revert ACL__ZeroAddress();
-        YOLO_HOOK = yoloHook;
-
+    constructor() {
         // Track DEFAULT_ADMIN_ROLE and grant it to deployer
         _allRoles.add(DEFAULT_ADMIN_ROLE);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);

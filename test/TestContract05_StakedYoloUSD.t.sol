@@ -38,7 +38,7 @@ contract TestContract05_StakedYoloUSD is Test {
 
     function setUp() public {
         // Deploy ACL Manager (test contract becomes DEFAULT_ADMIN)
-        aclManager = new ACLManager(address(this));
+        aclManager = new ACLManager();
 
         // Setup roles (called from test contract which has DEFAULT_ADMIN)
         aclManager.createRole("ASSETS_ADMIN", bytes32(0));

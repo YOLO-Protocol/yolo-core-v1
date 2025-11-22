@@ -107,7 +107,7 @@ contract TestContract10_YoloIncentivesController is Test {
         userC = makeAddr("userC");
 
         // Deploy ACLManager (test contract is admin)
-        aclManager = new ACLManager(address(this));
+        aclManager = new ACLManager();
         aclManager.createRole("REWARDS_ADMIN", 0x00);
         aclManager.grantRole(REWARDS_ADMIN, rewardsAdmin);
 

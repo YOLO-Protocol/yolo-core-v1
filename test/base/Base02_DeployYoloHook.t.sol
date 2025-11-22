@@ -55,7 +55,7 @@ contract Base02_DeployYoloHook is Base01_DeployUniswapV4Pool {
 
         // Deploy ACL Manager
         address aclAdmin = _getACLAdmin();
-        aclManager = new ACLManager(aclAdmin);
+        aclManager = new ACLManager();
 
         // Deploy implementations
         usyImpl = new YoloSyntheticAsset();

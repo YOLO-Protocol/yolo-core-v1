@@ -30,7 +30,7 @@ contract TestContract04_YoloSyntheticAsset is Test {
 
     function setUp() public {
         // Deploy ACLManager
-        aclManager = new ACLManager(yoloHook);
+        aclManager = new ACLManager();
 
         // Setup roles
         aclManager.createRole("RISK_ADMIN", 0x00);

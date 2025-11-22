@@ -39,7 +39,7 @@ contract TestContract01_ACLManager is Test {
         mockYoloHook = address(0xbeef);
 
         // Deploy ACLManager with mock YoloHook address
-        aclManager = new ACLManager(mockYoloHook);
+        aclManager = new ACLManager();
 
         console.log("ACLManager deployed at:", address(aclManager));
         console.log("Admin address:", admin);
@@ -50,9 +50,6 @@ contract TestContract01_ACLManager is Test {
      * @dev Test initial deployment state
      */
     function test_Contract01_Case01_deploymentState() public {
-        // Verify YoloHook is set correctly
-        assertEq(aclManager.YOLO_HOOK(), mockYoloHook, "YoloHook should be set correctly");
-
         // Verify deployer has DEFAULT_ADMIN_ROLE
         assertTrue(
             aclManager.hasRole(aclManager.DEFAULT_ADMIN_ROLE(), admin), "Deployer should have DEFAULT_ADMIN_ROLE"
@@ -477,12 +474,34 @@ contract TestContract01_ACLManager is Test {
     }
 
     /**
-     * @dev Test zero address validation
+     * @dev Test role enumeration and tracking
      */
-    function test_Contract01_Case17_zeroAddressValidation() public {
-        // Try to deploy with zero address YoloHook - should fail
-        vm.expectRevert(ACLManager.ACL__ZeroAddress.selector);
-        new ACLManager(address(0));
+    function test_Contract01_Case17_roleEnumeration() public {
+        // Initially should have only DEFAULT_ADMIN_ROLE
+        bytes32[] memory roles = aclManager.getAllRoles();
+        assertEq(roles.length, 1, "Should have 1 role initially");
+        assertEq(roles[0], aclManager.DEFAULT_ADMIN_ROLE(), "Should be DEFAULT_ADMIN_ROLE");
+
+        // Create multiple roles
+        bytes32 role1 = aclManager.createRole("ROLE_ONE", bytes32(0));
+        bytes32 role2 = aclManager.createRole("ROLE_TWO", bytes32(0));
+        bytes32 role3 = aclManager.createRole("ROLE_THREE", bytes32(0));
+
+        // Verify all roles are tracked
+        roles = aclManager.getAllRoles();
+        assertEq(roles.length, 4, "Should have 4 roles after creation");
+
+        // Verify each role exists
+        assertTrue(aclManager.roleExists(role1), "ROLE_ONE should exist");
+        assertTrue(aclManager.roleExists(role2), "ROLE_TWO should exist");
+        assertTrue(aclManager.roleExists(role3), "ROLE_THREE should exist");
+
+        // Grant roles to users and verify member tracking
+        aclManager.grantRole(role1, user1);
+        aclManager.grantRole(role1, user2);
+
+        address[] memory members = aclManager.getRoleMembers(role1);
+        assertEq(members.length, 2, "Should have 2 members for ROLE_ONE");
     }
 
     /**

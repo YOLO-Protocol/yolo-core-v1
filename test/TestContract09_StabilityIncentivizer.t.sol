@@ -93,7 +93,7 @@ contract TestContract09_StabilityIncentivizer is Test {
         trader3 = makeAddr("trader3");
 
         // Deploy ACLManager
-        aclManager = new ACLManager(address(this));
+        aclManager = new ACLManager();
         aclManager.createRole("REWARDS_ADMIN", 0x00);
         aclManager.grantRole(REWARDS_ADMIN, rewardsAdmin);
 
