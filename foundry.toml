@@ -7,6 +7,10 @@ cache_path = "cache"
 broadcast = "broadcast"
 script = "script"
 fs_permissions = [{ access = "read-write", path = "./deployments" }]
+# Increase memory limit to ~4GB (default is much lower) - For Hook Mining
+memory_limit = 500_000_000 
+# Increase gas limit to max - For Hook Mining
+gas_limit = 500_000_000
 
 # Solidity configuration
 solc = "0.8.26"
@@ -22,7 +26,7 @@ cbor_metadata = false
 
 # Gas reporting and testing
 gas_reports = ["*"]
-gas_limit = 100000000
+# gas_limit = 100000000
 
 # Fuzzing configuration
 fuzz = { runs = 1000, max_test_rejects = 65536 }
