@@ -1,0 +1,289 @@
+{
+  "AAPL / USD": {
+    "address": "0x037A2C629Bbb421c1E3229b64749e5319e39d29e",
+    "assetSymbol": "AAPL / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688"
+  },
+  "AMD / USD": {
+    "address": "0x71BC651205C68ed5DFBF1DCe35361C32dddCFF88",
+    "assetSymbol": "AMD / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x3622e381dbca2efd1859253763b1adc63f7f9abb8e76da1aa8e638a57ccde93e"
+  },
+  "AMZN / USD": {
+    "address": "0x77E6E6d57bfbB789E5A5119AcB5AB9378AAa0B58",
+    "assetSymbol": "AMZN / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xb5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a"
+  },
+  "BA / USD": {
+    "address": "0x11b422db5E687217DcFDFF03eF5B5Ba6cDd94ded",
+    "assetSymbol": "BA / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x8419416ba640c8bbbcf2d464561ed7dd860db1e38e51cec9baf1e34c4be839ae"
+  },
+  "BABA / USD": {
+    "address": "0x8e0F9257CeBA1E2d9caf70a4Ca6E0A898A977F0f",
+    "assetSymbol": "BABA / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x72bc23b1d0afb1f8edef20b7fb60982298993161bc0fd749587d6f60cd1ee9a3"
+  },
+  "BAC / USD": {
+    "address": "0x76Bb06BFCB5FdB7197bD6c9785b4ccA11CF0bF8C",
+    "assetSymbol": "BAC / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x21debc1718a4b76ff74dadf801c261d76c46afaafb74d9645b65e00b80f5ee3e"
+  },
+  "BRENT / USD": {
+    "address": "0x5cb83399FbD90cdD4A3673aD1617A02E1F11Dd5F",
+    "assetSymbol": "BRENT / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x27f0d5e09a830083e5491795cac9ca521399c8f7fd56240d09484b14e614d57a"
+  },
+  "BTC / USD": {
+    "address": "0x2f09E672459cCF2B20A4C621aFA756CC0b9D3B8D",
+    "assetSymbol": "BTC / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43"
+  },
+  "COIN / USD": {
+    "address": "0x2e5662a3aAD5cD595A1FCc10bD5DAF40198f70F7",
+    "assetSymbol": "COIN / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xfee33f2a978bf32dd6b662b65ba8083c6773b494f8401194ec1870c640860245"
+  },
+  "DIA / USD": {
+    "address": "0x4AB167bFf65CFa03958dc9633353c414F4460a05",
+    "assetSymbol": "DIA / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x57cff3a9a4d4c87b595a2d1bd1bac0240400a84677366d632ab838bbbe56f763"
+  },
+  "DIS / USD": {
+    "address": "0xE0846158b10DBd1Dcf5c9f61b0Da3b375eCb2E21",
+    "assetSymbol": "DIS / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x703e36203020ae6761e6298975764e266fb869210db9b35dd4e4225fa68217d0"
+  },
+  "ETH / USD": {
+    "address": "0xE3d179F77A6c514C374A8De1B3AabB1CCC8E3140",
+    "assetSymbol": "ETH / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace"
+  },
+  "EUR / USD": {
+    "address": "0x4289027b3885EFdF8603A0e8867D78b8CDAE0838",
+    "assetSymbol": "EUR / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xa995d00bb36a63cef7fd2c287dc105fc8f3d93779f062f09551b0af3e81ec30b"
+  },
+  "GOOGL / USD": {
+    "address": "0xe44242B70Fa76ddE2aCf63685a3f10079772f643",
+    "assetSymbol": "GOOGL / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x5a48c03e9b9cb337801073ed9d166817473697efff0d138874e0f6a33d6d5aa6"
+  },
+  "GS / USD": {
+    "address": "0x522Ed762874cF498F651bC254B2d95568a0553B3",
+    "assetSymbol": "GS / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x9c68c0c6999765cf6e27adf75ed551b34403126d3b0d5b686a2addb147ed4554"
+  },
+  "HOOD / USD": {
+    "address": "0x51208ae242f03B3134F505e33B7f725BCB7F7966",
+    "assetSymbol": "HOOD / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x306736a4035846ba15a3496eed57225b64cc19230a50d14f3ed20fd7219b7849"
+  },
+  "INTC / USD": {
+    "address": "0x537DA8502940B8f1Ef734d04f85b8D4Dc0434C5f",
+    "assetSymbol": "INTC / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xc1751e085ee292b8b3b9dd122a135614485a201c35dfc653553f0e28c1baf3ff"
+  },
+  "IWM / USD": {
+    "address": "0x3b19Ef929Af16e55b551a4A379884c373cE53A12",
+    "assetSymbol": "IWM / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xeff690a187797aa225723345d4612abec0bf0cec1ae62347c0e7b1905d730879"
+  },
+  "JPM / USD": {
+    "address": "0x4A19f360aA922704B785ca0719bb540456DAb4E7",
+    "assetSymbol": "JPM / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x7f4f157e57bfcccd934c566df536f34933e74338fe241a5425ce561acdab164e"
+  },
+  "META / USD": {
+    "address": "0xB105dcBD614bBF3d0B30D55CCA5600dC3a3e8683",
+    "assetSymbol": "META / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x78a3e3b8e676a8f73c439f5d749737034b139bbbe899ba5775216fba596607fe"
+  },
+  "MSFT / USD": {
+    "address": "0x2104df60FacEd7f3A0fcF4550f01D0b08e1f9DF8",
+    "assetSymbol": "MSFT / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xd0ca23c1cc005e004ccf1db5bf76aeb6a49218f43dac3d4b275e92de12ded4d1"
+  },
+  "NFLX / USD": {
+    "address": "0x43290B6Fb1A8cDc09FDaCB8F7c9F68886ECfaf11",
+    "assetSymbol": "NFLX / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x8376cfd7ca8bcdf372ced05307b24dced1f15b1afafdeff715664598f15a3dd2"
+  },
+  "NVDA / USD": {
+    "address": "0xd604AAC32CcF7a0cFB65e3b2B5014b9DC9a43E9E",
+    "assetSymbol": "NVDA / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xb1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593"
+  },
+  "PLTR / USD": {
+    "address": "0x04bFA450C7e4CE6a12cC59Afbd58C5A2251D514D",
+    "assetSymbol": "PLTR / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x11a70634863ddffb71f2b11f2cff29f73f3db8f6d0b78c49f2b5f4ad36e885f0"
+  },
+  "QQQ / USD": {
+    "address": "0x9cc48DBb04EDBb48B0196874E605b698fCB50f9B",
+    "assetSymbol": "QQQ / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x9695e2b96ea7b3859da9ed25b7a46a920a776e2fdae19a7bcfdf2b219230452d"
+  },
+  "SOL / USD": {
+    "address": "0x41De0a331EA729F23F1c428F88e4c1Ac2d313De4",
+    "assetSymbol": "SOL / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d"
+  },
+  "SPY / USD": {
+    "address": "0x5A5B99FFAFe7A0b6209A06CB4eE998E6aE3507A0",
+    "assetSymbol": "SPY / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x19e09bb805456ada3979a7d1cbb4b6d63babc3a0f8e8a9509f68afa5c4c11cd5"
+  },
+  "TSLA / USD": {
+    "address": "0xc3EC36F93657AD8039191259F4768F2FD937f64d",
+    "assetSymbol": "TSLA / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1"
+  },
+  "UVXY / USD": {
+    "address": "0xb92Fe8Bbc66997228fF2B8d70EF5C07f529ab973",
+    "assetSymbol": "UVXY / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x7d9c04b949c64bef946910c9cdf4390737731fca2c5356aa5fe36844bab1cb16"
+  },
+  "V / USD": {
+    "address": "0xF2dc034fbceCaA18424B0345E4f7Ce41E4Cda8fF",
+    "assetSymbol": "V / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xc719eb7bab9b2bc060167f1d1680eb34a29c490919072513b545b9785b73ee90"
+  },
+  "WTI / USD": {
+    "address": "0xDBFdF3C8BDc6011D411134Da30504d40A7426fE9",
+    "assetSymbol": "WTI / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x925ca92ff005ae943c158e3563f59698ce7e75c5a8c8dd43303a0a154887b3e6"
+  },
+  "XAG / USD": {
+    "address": "0x5121ac7B01DF7A997BD272b3D57C6a14f9f54070",
+    "assetSymbol": "XAG / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0xf2fb02c32b055c805e7238d628e5e9dadef274376114eb1f012337cabe93871e"
+  },
+  "XAU / USD": {
+    "address": "0xC45052955cb49f66eB55502B9f1A82fc1e9C9d5C",
+    "assetSymbol": "XAU / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2"
+  },
+  "XPD / USD": {
+    "address": "0x1D6115BA17A4EEd3fAb981dA8511e70C703A6Dd4",
+    "assetSymbol": "XPD / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x80367e9664197f37d89a07a804dffd2101c479c7c4e8490501bc9d9e1e7f9021"
+  },
+  "XPT / USD": {
+    "address": "0x2EB33bD83Ece44C42337D04cC1271d67317a67cC",
+    "assetSymbol": "XPT / USD",
+    "maxAllowedPriceLag": 120,
+    "priceId": "0x398e4bbc7cbf89d6648c21e08019d878967677753b3096799595c78f805a34e5"
+  },
+  "allAddresses": [
+    "0x2f09E672459cCF2B20A4C621aFA756CC0b9D3B8D",
+    "0xE3d179F77A6c514C374A8De1B3AabB1CCC8E3140",
+    "0x41De0a331EA729F23F1c428F88e4c1Ac2d313De4",
+    "0x037A2C629Bbb421c1E3229b64749e5319e39d29e",
+    "0xe44242B70Fa76ddE2aCf63685a3f10079772f643",
+    "0xd604AAC32CcF7a0cFB65e3b2B5014b9DC9a43E9E",
+    "0xB105dcBD614bBF3d0B30D55CCA5600dC3a3e8683",
+    "0x2104df60FacEd7f3A0fcF4550f01D0b08e1f9DF8",
+    "0x71BC651205C68ed5DFBF1DCe35361C32dddCFF88",
+    "0x43290B6Fb1A8cDc09FDaCB8F7c9F68886ECfaf11",
+    "0x537DA8502940B8f1Ef734d04f85b8D4Dc0434C5f",
+    "0x2e5662a3aAD5cD595A1FCc10bD5DAF40198f70F7",
+    "0x51208ae242f03B3134F505e33B7f725BCB7F7966",
+    "0x4A19f360aA922704B785ca0719bb540456DAb4E7",
+    "0x76Bb06BFCB5FdB7197bD6c9785b4ccA11CF0bF8C",
+    "0x522Ed762874cF498F651bC254B2d95568a0553B3",
+    "0xF2dc034fbceCaA18424B0345E4f7Ce41E4Cda8fF",
+    "0xc3EC36F93657AD8039191259F4768F2FD937f64d",
+    "0x77E6E6d57bfbB789E5A5119AcB5AB9378AAa0B58",
+    "0xE0846158b10DBd1Dcf5c9f61b0Da3b375eCb2E21",
+    "0x11b422db5E687217DcFDFF03eF5B5Ba6cDd94ded",
+    "0x8e0F9257CeBA1E2d9caf70a4Ca6E0A898A977F0f",
+    "0x04bFA450C7e4CE6a12cC59Afbd58C5A2251D514D",
+    "0x9cc48DBb04EDBb48B0196874E605b698fCB50f9B",
+    "0x5A5B99FFAFe7A0b6209A06CB4eE998E6aE3507A0",
+    "0x4AB167bFf65CFa03958dc9633353c414F4460a05",
+    "0x3b19Ef929Af16e55b551a4A379884c373cE53A12",
+    "0xb92Fe8Bbc66997228fF2B8d70EF5C07f529ab973",
+    "0x4289027b3885EFdF8603A0e8867D78b8CDAE0838",
+    "0x5cb83399FbD90cdD4A3673aD1617A02E1F11Dd5F",
+    "0xDBFdF3C8BDc6011D411134Da30504d40A7426fE9",
+    "0xC45052955cb49f66eB55502B9f1A82fc1e9C9d5C",
+    "0x5121ac7B01DF7A997BD272b3D57C6a14f9f54070",
+    "0x2EB33bD83Ece44C42337D04cC1271d67317a67cC",
+    "0x1D6115BA17A4EEd3fAb981dA8511e70C703A6Dd4"
+  ],
+  "allSymbols": [
+    "BTC / USD",
+    "ETH / USD",
+    "SOL / USD",
+    "AAPL / USD",
+    "GOOGL / USD",
+    "NVDA / USD",
+    "META / USD",
+    "MSFT / USD",
+    "AMD / USD",
+    "NFLX / USD",
+    "INTC / USD",
+    "COIN / USD",
+    "HOOD / USD",
+    "JPM / USD",
+    "BAC / USD",
+    "GS / USD",
+    "V / USD",
+    "TSLA / USD",
+    "AMZN / USD",
+    "DIS / USD",
+    "BA / USD",
+    "BABA / USD",
+    "PLTR / USD",
+    "QQQ / USD",
+    "SPY / USD",
+    "DIA / USD",
+    "IWM / USD",
+    "UVXY / USD",
+    "EUR / USD",
+    "BRENT / USD",
+    "WTI / USD",
+    "XAU / USD",
+    "XAG / USD",
+    "XPT / USD",
+    "XPD / USD"
+  ],
+  "chainId": 84532,
+  "pythAddress": "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
+  "timestamp": 1763715550
+}

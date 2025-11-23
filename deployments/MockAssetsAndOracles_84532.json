@@ -1,0 +1,55 @@
+{
+  "SOL": {
+    "assetAddress": "0xDf4c4332937528E955B79E2117bc51A1E99BaA8C",
+    "decimals": 18,
+    "initialPrice": 12634881081,
+    "name": "Solana",
+    "oracleAddress": "0x41De0a331EA729F23F1c428F88e4c1Ac2d313De4",
+    "symbol": "SOL"
+  },
+  "WBTC": {
+    "assetAddress": "0x47A94537Cd5169dD0D7E8B86B65372794C9Ff8e8",
+    "decimals": 8,
+    "initialPrice": 8415380372409,
+    "name": "Wrapped Bitcoin",
+    "oracleAddress": "0x2f09E672459cCF2B20A4C621aFA756CC0b9D3B8D",
+    "symbol": "WBTC"
+  },
+  "WETH": {
+    "assetAddress": "0x119000192D6C783d355aC50320670F8140D051d0",
+    "decimals": 18,
+    "initialPrice": 273311020583,
+    "name": "Wrapped Ether",
+    "oracleAddress": "0xE3d179F77A6c514C374A8De1B3AabB1CCC8E3140",
+    "symbol": "WETH"
+  },
+  "allAssetAddresses": [
+    "0x119000192D6C783d355aC50320670F8140D051d0",
+    "0x47A94537Cd5169dD0D7E8B86B65372794C9Ff8e8",
+    "0xDf4c4332937528E955B79E2117bc51A1E99BaA8C",
+    "0x9aFE68A4A330e8eA3ebB997Fe4B27aa802b7F076"
+  ],
+  "allOracleAddresses": [
+    "0xE3d179F77A6c514C374A8De1B3AabB1CCC8E3140",
+    "0x2f09E672459cCF2B20A4C621aFA756CC0b9D3B8D",
+    "0x41De0a331EA729F23F1c428F88e4c1Ac2d313De4",
+    "0x1C58fE2eE4531461d2FEead1bF1511Ed0cAaC662"
+  ],
+  "allSymbols": [
+    "WETH",
+    "WBTC",
+    "SOL",
+    "sUSDe"
+  ],
+  "assetCount": 4,
+  "chainId": 84532,
+  "sUSDe": {
+    "assetAddress": "0x9aFE68A4A330e8eA3ebB997Fe4B27aa802b7F076",
+    "decimals": 18,
+    "initialPrice": 120000000,
+    "name": "Staked USDe",
+    "oracleAddress": "0x1C58fE2eE4531461d2FEead1bF1511Ed0cAaC662",
+    "symbol": "sUSDe"
+  },
+  "timestamp": 1763804066
+}
