@@ -368,6 +368,10 @@ contract MockYoloHook is IYoloHook {
         return new address[](0);
     }
 
+    function getAllAssetConfigurations() external pure returns (DataTypes.AssetConfiguration[] memory configs) {
+        configs = new DataTypes.AssetConfiguration[](0);
+    }
+
     function createSyntheticAsset(string calldata, string calldata, uint8, address, address, uint256, uint256)
         external
         pure
