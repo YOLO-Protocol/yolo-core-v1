@@ -10,7 +10,7 @@ import {MockERC20} from "@yolo/core-v1/mocks/MockERC20.sol";
  * @author alvin@yolo.wtf
  * @notice Deployment script for MockUSDC token with automatic address recording
  * @dev Usage:
- *      1. Run: forge script script/DeployTask_DeployMockUSDC.sol:DeployTask_DeployMockUSDC --rpc-url <RPC_URL> --broadcast
+ *      1. Run: forge script script/DeployTask_DeployMockUSDC.s.sol:DeployTask_DeployMockUSDC --rpc-url <RPC_URL> --broadcast
  *      2. Deployed address is saved to deployments/MockUSDC_{chainId}.json
  */
 contract DeployTask_DeployMockUSDC is Script {

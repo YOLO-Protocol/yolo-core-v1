@@ -11,7 +11,7 @@ import {PythPriceFeed} from "@yolo/core-v1/oracles/PythPriceFeed.sol";
  * @notice Deployment script for Pyth oracle adapters with automatic address recording
  * @dev Usage:
  *      1. Configure oracle parameters in the `_configureOracles()` function
- *      2. Run: forge script script/DeployTask_PythOracleAdapter.sol:DeployTask_PythOracleAdapter --rpc-url <RPC_URL> --broadcast
+ *      2. Run: forge script script/DeployTask_PythOracleAdapter.s.sol:DeployTask_PythOracleAdapter --rpc-url <RPC_URL> --broadcast
  *      3. Deployed addresses are saved to deployments/PythOracleAdapters.json
  */
 contract DeployTask_PythOracleAdapter is Script {

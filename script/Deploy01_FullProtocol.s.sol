@@ -30,7 +30,7 @@ import {IYoloOracle} from "@yolo/core-v1/interfaces/IYoloOracle.sol";
  *      4. Trade Infrastructure (TradeOrchestrator, perp config)
  *
  * Usage:
- *   forge script script/DeployTask_FullProtocol.sol:DeployTask_FullProtocol \
+ *   forge script script/Deploy01_FullProtocol.s.sol:Deploy01_FullProtocolCore \
  *     --rpc-url $RPC_URL --broadcast -vvv
  *
  * Prerequisites:

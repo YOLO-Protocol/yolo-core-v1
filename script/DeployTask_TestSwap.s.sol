@@ -42,7 +42,7 @@ library Commands {
  *   - Configure addresses below for your target network
  *
  * Usage:
- *   forge script script/DeployTask_TestSwap.sol:DeployTask_TestSwap \
+ *   forge script script/DeployTask_TestSwap.s.sol:DeployTask_TestSwap \
  *     --rpc-url $BASE_SEPOLIA_RPC_URL --broadcast -vvv
  */
 contract DeployTask_TestSwap is Script {

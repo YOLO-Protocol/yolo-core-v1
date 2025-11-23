@@ -31,7 +31,7 @@ interface IYoloHookPerp is IYoloHook {
  *
  * Usage:
  *   TRADE_ADMIN=0xYourAdmin TRADE_KEEPERS=0xKeeper1,0xKeeper2 \
- *   forge script script/Deploy03_ConfigurePerpTrading.sol:Deploy03_ConfigurePerpTrading \
+ *   forge script script/Deploy03_ConfigurePerpTrading.s.sol:Deploy03_ConfigurePerpTrading \
  *     --rpc-url $RPC_URL --broadcast -vvv
  */
 contract Deploy03_ConfigurePerpTrading is Script {

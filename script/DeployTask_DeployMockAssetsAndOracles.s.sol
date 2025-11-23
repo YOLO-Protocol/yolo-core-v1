@@ -12,7 +12,7 @@ import {MockPriceOracle} from "@yolo/core-v1/mocks/MockPriceOracle.sol";
  * @notice Deployment script for mock collateral assets and their price oracles
  * @dev Usage:
  *      1. Configure asset parameters in _configureAssets()
- *      2. Run: forge script script/DeployTask_DeployMockAssetsAndOracles.sol:DeployTask_DeployMockAssetsAndOracles --rpc-url $RPC_URL --broadcast
+ *      2. Run: forge script script/DeployTask_DeployMockAssetsAndOracles.s.sol:DeployTask_DeployMockAssetsAndOracles --rpc-url $RPC_URL --broadcast
  *      3. Deployed addresses are saved to deployments/MockAssetsAndOracles_{chainId}.json
  *
  * Note: If oracleAddress is provided (non-zero), oracle deployment is skipped

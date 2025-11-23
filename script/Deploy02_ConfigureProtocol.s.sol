@@ -21,7 +21,7 @@ import {MockERC20} from "@yolo/core-v1/mocks/MockERC20.sol";
  *   - DeployTask_DeployMockAssetsAndOracles must be completed (collateral assets deployed)
  *
  * Usage:
- *   forge script script/Deploy02_ConfigureProtocol.sol:Deploy02_ConfigureProtocol \
+ *   forge script script/Deploy02_ConfigureProtocol.s.sol:Deploy02_ConfigureProtocol \
  *     --rpc-url $RPC_URL --broadcast -vvv
  *
  * Output:
@@ -32,13 +32,13 @@ contract Deploy02_ConfigureProtocol is Script {
     // CONFIGURATION - DEPLOYED ADDRESSES
     // ========================
 
-    // From Deploy01_FullProtocol.sol deployment
+    // From Deploy01_FullProtocol.s.sol deployment
     address constant YOLO_HOOK_PROXY = 0x033ea50dEaa8b064958fC40E34F994C154D27FFf; // FILL IN: YoloHook proxy address
     address constant YOLO_ORACLE = 0x3ae085e154dB66bAC6721E062Ce30625b6F78D92; // FILL IN: YoloOracle address
     address constant ACL_MANAGER = 0x778A78699a6F03Bb9b6123580A32A5800E53FF1A; // FILL IN: ACLManager address
     address constant SYNTHETIC_ASSET_IMPL = 0x8f1263d705D3EB4A05c32e2247Fb179e9DfC6A4c; // FILL IN: YoloSyntheticAsset implementation
 
-    // From DeployTask_DeployMockUSDC.sol
+    // From DeployTask_DeployMockUSDC.s.sol
     address constant USDC = 0xF32B34Dfc110BF618a0Ff148afBAd8C3915c45aB; // FILL IN: USDC address
 
     // USY address (retrieve from YoloHook)
