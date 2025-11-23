@@ -479,4 +479,8 @@ interface IYoloHook {
     /// @notice Toggle privileged liquidator mode
     /// @param enabled True to restrict liquidations to privileged liquidators only
     function togglePrivilegedLiquidator(bool enabled) external;
+
+    /// @notice Get configuration objects for every synthetic asset
+    /// @dev Mirrors getAllSyntheticAssets but returns the stored DataTypes.AssetConfiguration entries
+    function getAllAssetConfigurations() external view returns (DataTypes.AssetConfiguration[] memory);
 }

@@ -70,6 +70,14 @@ contract YoloHookViews is YoloHookStorage {
         return s._yoloAssets;
     }
 
+    function getAllAssetConfigurations() external view returns (DataTypes.AssetConfiguration[] memory configs) {
+        address[] memory assets = s._yoloAssets;
+        configs = new DataTypes.AssetConfiguration[](assets.length);
+        for (uint256 i = 0; i < assets.length; i++) {
+            configs[i] = s._assetConfigs[assets[i]];
+        }
+    }
+
     function getAllWhitelistedCollaterals() external view returns (address[] memory) {
         return s._whitelistedCollaterals;
     }
