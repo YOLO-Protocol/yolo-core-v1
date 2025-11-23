@@ -11,6 +11,18 @@ importers:
       '@openzeppelin/contracts-upgradeable':
         specifier: ^5.0.0
         version: 5.4.0(@openzeppelin/contracts@5.4.0)
+      '@uniswap/permit2':
+        specifier: github:uniswap/permit2
+        version: https://codeload.github.com/uniswap/permit2/tar.gz/cc56ad0f3439c502c246fc5cfcc3db92bb8b7219
+      '@uniswap/universal-router':
+        specifier: github:uniswap/universal-router
+        version: https://codeload.github.com/uniswap/universal-router/tar.gz/67553d8b067249dd7841d9d1b0eb2997b19d4bf9
+      '@uniswap/v2-core':
+        specifier: github:uniswap/v2-core
+        version: https://codeload.github.com/uniswap/v2-core/tar.gz/ee547b17853e71ed4e0101ccfd52e70d5acded58
+      '@uniswap/v3-core':
+        specifier: github:uniswap/v3-core
+        version: https://codeload.github.com/uniswap/v3-core/tar.gz/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb
     devDependencies:
       '@openzeppelin/contracts':
         specifier: ^5.3.0
@@ -35,12 +47,42 @@ packages:
     peerDependencies:
       '@openzeppelin/contracts': 5.4.0
 
+  '@openzeppelin/contracts@5.0.2':
+    resolution: {integrity: sha512-ytPc6eLGcHHnapAZ9S+5qsdomhjo6QBHTDRRBFfTxXIpsicMhVPouPgmUPebZZZGX7vt9USA+Z+0M0dSVtSUEA==}
+
   '@openzeppelin/contracts@5.4.0':
     resolution: {integrity: sha512-eCYgWnLg6WO+X52I16TZt8uEjbtdkgLC0SUX/xnAksjjrQI4Xfn4iBRoI5j55dmlOhDv1Y7BoR3cU7e3WWhC6A==}
 
   '@pythnetwork/pyth-sdk-solidity@4.3.1':
     resolution: {integrity: sha512-dAzsVDSKXS/Tbhik5Hp2kix3vDp98SlCXmputDIOkVyF4SKKnhXmIn+iGVmSQdrlF9jCFtvjBj7XYP+9wwpA4A==}
     engines: {node: '>=22.14.0'}
+
+  '@uniswap/permit2@https://codeload.github.com/uniswap/permit2/tar.gz/cc56ad0f3439c502c246fc5cfcc3db92bb8b7219':
+    resolution: {tarball: https://codeload.github.com/uniswap/permit2/tar.gz/cc56ad0f3439c502c246fc5cfcc3db92bb8b7219}
+    version: 1.0.0
+
+  '@uniswap/universal-router@https://codeload.github.com/uniswap/universal-router/tar.gz/67553d8b067249dd7841d9d1b0eb2997b19d4bf9':
+    resolution: {tarball: https://codeload.github.com/uniswap/universal-router/tar.gz/67553d8b067249dd7841d9d1b0eb2997b19d4bf9}
+    version: 2.1.0
+    engines: {node: '>=14'}
+
+  '@uniswap/v2-core@1.0.1':
+    resolution: {integrity: sha512-MtybtkUPSyysqLY2U210NBDeCHX+ltHt3oADGdjqoThZaFRDKwM6k1Nb3F0A3hk5hwuQvytFWhrWHOEq6nVJ8Q==}
+    engines: {node: '>=10'}
+
+  '@uniswap/v2-core@https://codeload.github.com/uniswap/v2-core/tar.gz/ee547b17853e71ed4e0101ccfd52e70d5acded58':
+    resolution: {tarball: https://codeload.github.com/uniswap/v2-core/tar.gz/ee547b17853e71ed4e0101ccfd52e70d5acded58}
+    version: 1.0.1
+    engines: {node: '>=10'}
+
+  '@uniswap/v3-core@1.0.0':
+    resolution: {integrity: sha512-kSC4djMGKMHj7sLMYVnn61k9nu+lHjMIxgg9CDQT+s2QYLoA56GbSK9Oxr+qJXzzygbkrmuY6cwgP6cW2JXPFA==}
+    engines: {node: '>=10'}
+
+  '@uniswap/v3-core@https://codeload.github.com/uniswap/v3-core/tar.gz/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb':
+    resolution: {tarball: https://codeload.github.com/uniswap/v3-core/tar.gz/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb}
+    version: 1.0.1
+    engines: {node: '>=10'}
 
   '@uniswap/v4-core@1.0.2':
     resolution: {integrity: sha512-X15Tm2wWd+USAzEExMbo+g9naA6QN6mPgWm0MzDwRNlOfaNlepfUpSyt9RSrUfEODspwbyWbcLg6t5nwc/e7lg==}
@@ -57,9 +99,27 @@ snapshots:
     dependencies:
       '@openzeppelin/contracts': 5.4.0
 
+  '@openzeppelin/contracts@5.0.2': {}
+
   '@openzeppelin/contracts@5.4.0': {}
 
   '@pythnetwork/pyth-sdk-solidity@4.3.1': {}
+
+  '@uniswap/permit2@https://codeload.github.com/uniswap/permit2/tar.gz/cc56ad0f3439c502c246fc5cfcc3db92bb8b7219': {}
+
+  '@uniswap/universal-router@https://codeload.github.com/uniswap/universal-router/tar.gz/67553d8b067249dd7841d9d1b0eb2997b19d4bf9':
+    dependencies:
+      '@openzeppelin/contracts': 5.0.2
+      '@uniswap/v2-core': 1.0.1
+      '@uniswap/v3-core': 1.0.0
+
+  '@uniswap/v2-core@1.0.1': {}
+
+  '@uniswap/v2-core@https://codeload.github.com/uniswap/v2-core/tar.gz/ee547b17853e71ed4e0101ccfd52e70d5acded58': {}
+
+  '@uniswap/v3-core@1.0.0': {}
+
+  '@uniswap/v3-core@https://codeload.github.com/uniswap/v3-core/tar.gz/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb': {}
 
   '@uniswap/v4-core@1.0.2': {}
 

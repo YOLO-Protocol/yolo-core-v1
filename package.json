@@ -44,6 +44,10 @@
     "solmate": "^6.8.0"
   },
   "dependencies": {
-    "@openzeppelin/contracts-upgradeable": "^5.0.0"
+    "@openzeppelin/contracts-upgradeable": "^5.0.0",
+    "@uniswap/permit2": "github:uniswap/permit2",
+    "@uniswap/universal-router": "github:uniswap/universal-router",
+    "@uniswap/v2-core": "github:uniswap/v2-core",
+    "@uniswap/v3-core": "github:uniswap/v3-core"
   }
 }
