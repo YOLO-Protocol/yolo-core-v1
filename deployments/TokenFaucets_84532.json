@@ -1,0 +1,39 @@
+{
+  "chainId": 84532,
+  "faucet_USDC": {
+    "dispensePerDay": 1000000000,
+    "faucet": "0xC3f61721d4A0Bc5984f1392c9D7ebB32B1cE4f37",
+    "initialFunding": 100000000000000,
+    "label": "USDC",
+    "token": "0xF32B34Dfc110BF618a0Ff148afBAd8C3915c45aB"
+  },
+  "faucet_USY": {
+    "dispensePerDay": "1000000000000000000000",
+    "faucet": "0x105E4786b5c3816Ddf5F132D0c07E6b73756E654",
+    "initialFunding": "5000000000000000000000000",
+    "label": "USY",
+    "token": "0x50108c7CCdfDf341baEC1c1f4A94B42A764628EF"
+  },
+  "faucet_WBTC": {
+    "dispensePerDay": 1000000,
+    "faucet": "0xc8ee210C8c925B921cBE6114a8e0A5432C1024C1",
+    "initialFunding": 50000000000,
+    "label": "WBTC",
+    "token": "0x47A94537Cd5169dD0D7E8B86B65372794C9Ff8e8"
+  },
+  "faucet_WETH": {
+    "dispensePerDay": 100000000000000000,
+    "faucet": "0x25883610d91ABeDAC216f4531594a74FC4c3d96a",
+    "initialFunding": "10000000000000000000000",
+    "label": "WETH",
+    "token": "0x119000192D6C783d355aC50320670F8140D051d0"
+  },
+  "faucet_sUSDe": {
+    "dispensePerDay": "500000000000000000000",
+    "faucet": "0xA385996739E9D048e05CC91B66F1E18b92d7Ae33",
+    "initialFunding": "10000000000000000000000000",
+    "label": "sUSDe",
+    "token": "0x9aFE68A4A330e8eA3ebB997Fe4B27aa802b7F076"
+  },
+  "timestamp": 1763946406
+}
