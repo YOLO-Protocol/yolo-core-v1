@@ -26,7 +26,7 @@ contract TokenFaucet is Ownable {
     event TokenClaimed(address indexed claimer, uint256 amount);
     event TokensDeposited(address indexed from, uint256 amount);
 
-    constructor(address token, uint256 amountPerDay) {
+    constructor(address token, uint256 amountPerDay) Ownable(msg.sender) {
         if (token == address(0)) revert TokenFaucet__InvalidAddress();
         if (amountPerDay == 0) revert TokenFaucet__InvalidAmount();
         underlying = IERC20(token);
