@@ -1,0 +1,214 @@
+{
+  "cap_yAAPL": {
+    "newMaxSupply": "15000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yAAPL",
+    "synthetic": "0x24Aab2A5c9aB642162E230f29b2057f66a24C03a"
+  },
+  "cap_yAMD": {
+    "newMaxSupply": "24000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yAMD",
+    "synthetic": "0x733b737320F0bd3fE347F02257F77E7A7807bC3E"
+  },
+  "cap_yAMZN": {
+    "newMaxSupply": "23000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yAMZN",
+    "synthetic": "0x39D9D2593f8Bb52Bfe12Bd3733c87e4978F242Be"
+  },
+  "cap_yBA": {
+    "newMaxSupply": "20000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yBA",
+    "synthetic": "0xDaBD1E1E6A6b772Fa424f5F72E49Cb89aA47DD14"
+  },
+  "cap_yBABA": {
+    "newMaxSupply": "50000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yBABA",
+    "synthetic": "0x6f6BA9a74160BB02F2EA43F58A24bD90CCd30f2F"
+  },
+  "cap_yBAC": {
+    "newMaxSupply": "100000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yBAC",
+    "synthetic": "0xDef987Ab8663288e4D50124781Bf2aD12681db50"
+  },
+  "cap_yBRENT": {
+    "newMaxSupply": "50000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yBRENT",
+    "synthetic": "0x37d32890F63D6aeC1F6C2Bfc4885A1B905C147D0"
+  },
+  "cap_yBTC": {
+    "newMaxSupply": "50000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yBTC",
+    "synthetic": "0x430Ad0BF065d3c677D833646e629d69EB99b7AfA"
+  },
+  "cap_yCOIN": {
+    "newMaxSupply": "16000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yCOIN",
+    "synthetic": "0xbA9aa9fDBAE1040D9D74612A899dF2455957aA22"
+  },
+  "cap_yDIA": {
+    "newMaxSupply": "11000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yDIA",
+    "synthetic": "0x058aB338562B32A6bcc40641208C487Bb323B570"
+  },
+  "cap_yDIS": {
+    "newMaxSupply": "40000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yDIS",
+    "synthetic": "0x556edf4dE518210219d6c978f30aaFb55eb6906D"
+  },
+  "cap_yETH": {
+    "newMaxSupply": "1500000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yETH",
+    "synthetic": "0x4f24bdFE9f375E8BA9aCA6247DAAa8624cc4A02E"
+  },
+  "cap_yEUR": {
+    "newMaxSupply": "3740000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yEUR",
+    "synthetic": "0x3C335e06063f6c02f31132b1f8a651C0bDE8218D"
+  },
+  "cap_yGOOGL": {
+    "newMaxSupply": "14000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yGOOGL",
+    "synthetic": "0x4972567d733dC15419FDe35c81a2a6cbbA21436d"
+  },
+  "cap_yGS": {
+    "newMaxSupply": "8600000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yGS",
+    "synthetic": "0x5fe0Ed58e69A16A897943ebad7C88C3aA65D6bFc"
+  },
+  "cap_yHOOD": {
+    "newMaxSupply": "200000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yHOOD",
+    "synthetic": "0x84D82024e8B7D504Ca33f237C64B7f218eee607f"
+  },
+  "cap_yINTC": {
+    "newMaxSupply": "89000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yINTC",
+    "synthetic": "0x8Db4f2aD2c4B07a6c5D5bBe0784Df5DB0E072706"
+  },
+  "cap_yIWM": {
+    "newMaxSupply": "20000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yIWM",
+    "synthetic": "0x06d9c5F15433934810b8632F034b66Fe823B9d75"
+  },
+  "cap_yJPM": {
+    "newMaxSupply": "20000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yJPM",
+    "synthetic": "0x1317BD6371749e911c96F01d0305A9E23Ef3ABfe"
+  },
+  "cap_yMETA": {
+    "newMaxSupply": "8000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yMETA",
+    "synthetic": "0x21743096381b0469e9Ed414F1fBb71014e122145"
+  },
+  "cap_yMSFT": {
+    "newMaxSupply": "9600000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yMSFT",
+    "synthetic": "0xce8b6EBe3636BAEb14e4d0295C8Cd0C21e84685B"
+  },
+  "cap_yNFLX": {
+    "newMaxSupply": "6400000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yNFLX",
+    "synthetic": "0xa185A6f1Dc798a57D42c9CD13b93e72718682321"
+  },
+  "cap_yNVDA": {
+    "newMaxSupply": "3400000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yNVDA",
+    "synthetic": "0x9093Fb36F7f9d29D295a2E83CCC113AA5065a52F"
+  },
+  "cap_yPLTR": {
+    "newMaxSupply": "160000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yPLTR",
+    "synthetic": "0x57d086092eCD0F5653a9956019C0E0fA584A246A"
+  },
+  "cap_yQQQ": {
+    "newMaxSupply": "9100000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yQQQ",
+    "synthetic": "0x36ee8B10Caed9AfC24654b8a082A8A8Eb081F8B4"
+  },
+  "cap_ySOL": {
+    "newMaxSupply": "31000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "ySOL",
+    "synthetic": "0x6bDe934737AbD8E5cbBF37d2aDb726CeF6cd7a22"
+  },
+  "cap_ySPY": {
+    "newMaxSupply": "7700000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "ySPY",
+    "synthetic": "0x57475ec3590A24A0B791372545280252610f254B"
+  },
+  "cap_yTSLA": {
+    "newMaxSupply": "23000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yTSLA",
+    "synthetic": "0x2f677b84AebE104D5F559e3f2A4D6463C4A14B36"
+  },
+  "cap_yUVXY": {
+    "newMaxSupply": "445000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yUVXY",
+    "synthetic": "0x8013f8c8dC7b73CC49eA5D36A45FCAacAd42a634"
+  },
+  "cap_yV": {
+    "newMaxSupply": "16000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yV",
+    "synthetic": "0xA8411Ea314e74AFCB6e2B990e7c708E28Ad585Ea"
+  },
+  "cap_yWTI": {
+    "newMaxSupply": "54000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yWTI",
+    "synthetic": "0x3D5f5004ef3Bd1bcB03F578784757a5a67795F29"
+  },
+  "cap_yXAG": {
+    "newMaxSupply": "135000000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yXAG",
+    "synthetic": "0x27fAA3E80f9D791eE3dA9D6A8F5407Fa1BD2D28f"
+  },
+  "cap_yXAU": {
+    "newMaxSupply": "1800000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yXAU",
+    "synthetic": "0x114ED53a68230fFf4F1F4277e3d946eef90A0334"
+  },
+  "cap_yXPD": {
+    "newMaxSupply": "3900000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yXPD",
+    "synthetic": "0xb9936ac3eE6b30C82587dAf7F2fF417758aaCe78"
+  },
+  "cap_yXPT": {
+    "newMaxSupply": "4400000000000000000000",
+    "oldMaxSupply": 0,
+    "symbol": "yXPT",
+    "synthetic": "0x2bA7c85A45767443f44274331f20299755B17C2f"
+  },
+  "chainId": 84532,
+  "timestamp": 1763988676
+}

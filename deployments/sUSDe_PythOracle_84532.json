@@ -1,0 +1,10 @@
+{
+  "chainId": 84532,
+  "maxLag": 300,
+  "priceFeed": "0xefe14E89f60306d490924d35f77a7B770C555Ce2",
+  "priceId": "0xca3ba9a619a4b3755c10ac7d5e760275aa95e9823d38a84fedd416856cdba37c",
+  "pyth": "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
+  "timestamp": 1763957566,
+  "token": "0x9aFE68A4A330e8eA3ebB997Fe4B27aa802b7F076",
+  "yoloOracle": "0x3ae085e154dB66bAC6721E062Ce30625b6F78D92"
+}
